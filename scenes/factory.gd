@@ -9,7 +9,8 @@ const ERPWindow = preload("res://ui/erp_window.gd")
 const SaveGame = preload("res://erp/save_game.gd")
 const GridView = preload("res://world/grid_view.gd")
 const Layout = Line.Layout
-const NO_CELL := Vector2i(-1, -1)
+const Editor = preload("res://layout/layout_editor.gd")
+const NO_CELL := Vector2i(-2147483648, -2147483648)
 
 @export var building_cells := Vector2i.ZERO
 @export var erp_enabled := true
@@ -19,6 +20,18 @@ var terminal: ERPWindow
 
 var line: Line
 var grid_view: GridView
+var editor: Editor
+var _build_mode := false
+var _drag_armed := false
+var _dragging := false
+var _press_point := Vector2.INF
+var _pointer := Vector2.INF
+var _release_point := Vector2.INF
+var _release_over_ui := false
+var _grab_offset := Vector2.ZERO
+var _cursor_screen := Vector2.INF
+var _cursor_camera := Transform3D.IDENTITY
+var _cursor_offset := 0.0
 var _pending_pick := false
 var _pick_origin := Vector3.ZERO
 var _pick_direction := Vector3.ZERO
@@ -37,7 +50,8 @@ var _layout_refitted := false
 
 
 func _ready() -> void:
-	if "--fresh-shift" in OS.get_cmdline_user_args():
+	var fresh_shift := "--fresh-shift" in OS.get_cmdline_user_args()
+	if fresh_shift:
 		resume_saved = false
 	line = Line.new(Layout.new(building_cells))
 	if erp_enabled:
@@ -60,6 +74,10 @@ func _ready() -> void:
 		set_physics_process(false)
 		set_process_unhandled_key_input(false)
 		return
+	editor = Editor.new(line)
+	var layout_note := ""
+	if (resume_saved or fresh_shift) and FileAccess.file_exists(Editor.PATH):
+		layout_note = editor.load_layout(Editor.PATH, true)
 	_rebuild_world()
 	if erp_enabled:
 		terminal = ERPWindow.new()
@@ -92,6 +110,11 @@ func _ready() -> void:
 	hud.home_requested.connect(camera.home)
 	hud.grid_requested.connect(_toggle_grid)
 	hud.placement_requested.connect(_toggle_placement)
+	hud.build_requested.connect(_toggle_build)
+	hud.build_panel.action_requested.connect(_build_action)
+	get_window().focus_exited.connect(_cancel_drag_on_focus_loss)
+	if not layout_note.is_empty() and _save_load_error.is_empty():
+		hud.set_hint("Saved layout pending · " + layout_note)
 	_refresh()
 	floor_view.animate(line, 0.0)
 
@@ -106,7 +129,13 @@ func _process(delta: float) -> void:
 		if _selected != &"" and not line.layout.objects.has(_selected) and not Layout.LINKS.has(_selected):
 			_update_selection_grid()
 	if terminal == null or not terminal.is_open():
-		_update_cursor(get_viewport().get_mouse_position())
+		var point := _pointer if _dragging else get_viewport().get_mouse_position()
+		var pose := camera.global_transform
+		if point != _cursor_screen or pose != _cursor_camera or camera.h_offset != _cursor_offset:
+			_cursor_screen = point
+			_cursor_camera = pose
+			_cursor_offset = camera.h_offset
+			_update_cursor(point)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -116,7 +145,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE:
 			terminal.close()
 		return
+	if _build_mode and event.is_command_or_control_pressed() and event.keycode == KEY_Z:
+		_build_action("redo" if event.shift_pressed else "undo")
+		get_viewport().set_input_as_handled()
+		return
 	match event.keycode:
+		KEY_B:
+			_toggle_build()
 		KEY_E:
 			_open_erp()
 		KEY_SPACE:
@@ -124,6 +159,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			if _placing:
 				_toggle_placement()
+			elif _build_mode:
+				_set_build_mode(false)
 			else:
 				_select(&"")
 		KEY_HOME:
@@ -131,10 +168,19 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_G:
 			_toggle_grid(not _show_grid)
 		KEY_R:
-			if _placing:
-				_turns = (_turns + 1) % 4
-				_preview_cell = NO_CELL
-				_update_cursor(get_viewport().get_mouse_position())
+			_rotate_placement(-1 if event.shift_pressed else 1)
+
+
+func _input(event: InputEvent) -> void:
+	if not _build_mode or _press_point == Vector2.INF:
+		return
+	if event is InputEventMouseMotion:
+		_pointer = event.position
+		_start_drag_if_needed()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_pointer = event.position
+		_release_point = event.position
+		_release_over_ui = get_viewport().gui_get_hovered_control() != null
 
 
 func _pick(point: Vector2) -> void:
@@ -142,6 +188,9 @@ func _pick(point: Vector2) -> void:
 	_pick_origin = camera.project_ray_origin(point)
 	_pick_direction = camera.project_ray_normal(point)
 	_pending_pick = true
+	if _build_mode:
+		_press_point = point
+		_pointer = point
 
 
 func _physics_process(_delta: float) -> void:
@@ -151,68 +200,264 @@ func _physics_process(_delta: float) -> void:
 			_commit_at(_pick_origin, _pick_direction)
 		else:
 			_select(floor_view.equipment_at(_pick_origin, _pick_origin + _pick_direction * camera.far))
+			if _build_mode:
+				_arm_drag()
+				_start_drag_if_needed()
+	if _release_point != Vector2.INF:
+		if _dragging:
+			var cell := _placement_cell(camera.project_ray_origin(_release_point), camera.project_ray_normal(_release_point))
+			if _release_over_ui or cell == NO_CELL or not _commit_cell(cell):
+				_end_placement()
+		_clear_drag()
 
 
 func _select(id: StringName) -> void:
 	if _placing:
-		_toggle_placement()
+		_end_placement()
 	_selected = id
-	hud.inspector.select(id, line)
-	if not hud.inspector.visible:
-		_selected = &""
+	if _build_mode:
+		hud.inspector.hide()
+		if line.layout.definition(id) == null:
+			_selected = &""
+	else:
+		hud.inspector.select(id, line)
+		if not hud.inspector.visible:
+			_selected = &""
 	floor_view.select(_selected)
-	camera.set_inspector_open(_selected != &"")
+	camera.set_inspector_open(_build_mode or _selected != &"")
 	_update_selection_grid()
 
 
 func _toggle_grid(enabled: bool) -> void:
 	_show_grid = enabled
 	hud.set_grid_button(enabled)
-	grid_view.set_grid_visible(enabled or _placing)
+	grid_view.set_grid_visible(enabled or _placing or _build_mode)
 
 
 func _toggle_placement() -> void:
 	if _placing:
 		_end_placement()
 		hud.set_hint("Placement cancelled.")
-		return
-	var item := line.layout.definition(_selected)
-	if item == null or not item.movable or line.playing or line.elapsed_ticks != 0:
-		return
-	_placing = true
-	_turns = item.turns
-	_preview_cell = NO_CELL
-	_preview_reason = ""
-	grid_view.set_grid_visible(true)
-	grid_view.clear_selection()
-	hud.set_hint("Click to place  ·  R rotates  ·  Esc cancels")
-	_update_selection_grid()
+	else:
+		_begin_placement()
 
 
 func _end_placement() -> void:
 	_placing = false
+	_preview_cell = NO_CELL
+	_clear_drag()
 	grid_view.clear_preview()
-	grid_view.set_grid_visible(_show_grid)
+	grid_view.set_grid_visible(_show_grid or _build_mode)
 	hud.set_cursor("")
+	_cursor_screen = Vector2.INF
 	_update_selection_grid()
 
 
+func _placement_cell(origin: Vector3, direction: Vector3) -> Vector2i:
+	var item: Layout.Placement = line.layout.objects[_selected]
+	var hit := grid_view.project_ray(origin, direction, item.elevation, not _build_mode)
+	if hit == Vector3.INF:
+		return NO_CELL
+	var grid := line.layout.grid
+	if not _dragging:
+		return grid.cell_at(hit)
+	var size := item.size if _turns % 2 == 0 else Vector2i(item.size.y, item.size.x)
+	var offset := _grab_offset.rotated((_turns - item.turns) * PI * 0.5)
+	return Vector2i((grid.coordinates(hit) - offset - Vector2(size) * 0.5).round())
+
+
 func _commit_at(origin: Vector3, direction: Vector3) -> void:
-	var hit := grid_view.project_ray(origin, direction)
+	var cell := _placement_cell(origin, direction)
+	if cell != NO_CELL:
+		_commit_cell(cell)
+
+
+func _toggle_build() -> void:
+	_set_build_mode(not _build_mode)
+
+
+func _set_build_mode(enabled: bool) -> void:
+	if _placing:
+		_end_placement()
+	_build_mode = enabled
+	_clear_drag()
+	_pending_pick = false
+	if enabled:
+		line.set_playing(false)
+		editor.invalidate_preview()
+	hud.set_build_active(enabled)
+	grid_view.set_grid_visible(_show_grid or enabled)
+	grid_view.show_build_areas(enabled, line.layout.objects.values(), line.layout.reserved)
+	_select(_selected)
+	_cursor_screen = Vector2.INF
+	if enabled:
+		hud.set_hint("Build Mode · Shift paused · Select or drag a station")
+	else:
+		hud.set_hint("Shift paused · Use Save Layout to reuse your edits." if editor.dirty()
+			else "Shift paused. Press Play to resume.")
+	_refresh()
+
+
+func _build_action(action: String) -> void:
+	if not _build_mode:
+		return
+	match action:
+		"move":
+			_toggle_placement()
+		"rotate":
+			_rotate_placement(1)
+		"cancel":
+			_end_placement()
+			hud.set_hint("Placement cancelled.")
+		"save":
+			var reason := editor.save()
+			hud.set_hint("Layout saved to factory_layout.json." if reason.is_empty() else reason)
+			_update_build_panel()
+		"undo", "redo", "load", "default":
+			if _placing:
+				_end_placement()
+			var reason := ""
+			match action:
+				"undo": reason = editor.undo()
+				"redo": reason = editor.redo()
+				"load": reason = editor.load_layout()
+				"default": reason = editor.reset_default()
+			if reason.is_empty():
+				_refresh_layout_views()
+			hud.set_hint("Layout updated." if reason.is_empty() else reason)
+			_update_build_panel()
+
+
+func _update_build_panel() -> void:
+	if not _build_mode:
+		return
+	var panel = hud.build_panel
+	panel.update_history(editor.dirty(), editor.can_undo(), editor.can_redo())
+	var item := line.layout.definition(_selected)
+	if item == null:
+		panel.update_selection("Select equipment", "Click a station, then drag or use Move.",
+			line.layout_edit_problem(), GridView.INVALID, false, false)
+		return
+	var center := line.erp.catalog.center_at(item.id) if line.erp != null else {}
+	var title := String(center.get("description", {
+		&"Hopper": "Ingredient hopper", &"Warehouse": "Finished goods warehouse",
+		&"PackagingWIP": "Packaging WIP", &"Palletizer": "Palletizing bays"
+	}.get(item.id, String(item.id).capitalize())))
+	var footprint := item.footprint()
+	var details := "ID %s%s\nCell (%d, %d) · %d × %d cells · %d°\nElevation %.1f m · Height %.2f m" % [
+		item.id, " · " + String(center.id) if not center.is_empty() else "",
+		item.cell.x, item.cell.y, footprint.size.x, footprint.size.y, item.turns * 90, item.elevation, item.height]
+	var group := line.layout.group_for(item.id)
+	if group.size() > 1:
+		details += "\nLinked equipment moves together."
+	var reason := line.layout_edit_problem(group) if item.movable else "Fixed equipment."
+	var status := "Ready to move" if reason.is_empty() else reason
+	var tint := GridView.VALID if reason.is_empty() else GridView.INVALID
+	if _placing and _preview_cell != NO_CELL:
+		status = "Ready to place" if _preview_reason.is_empty() else _preview_reason
+		tint = GridView.VALID if _preview_reason.is_empty() else GridView.INVALID
+	panel.update_selection(title, details, status, tint, reason.is_empty(), _placing)
+
+
+func _rotate_placement(delta: int) -> void:
+	if not _placing:
+		if not _build_mode or not _begin_placement():
+			return
+		var item: Layout.Placement = line.layout.objects[_selected]
+		var center := Vector2(item.cell) + Vector2(item.footprint().size) * 0.5
+		_turns = posmod(item.turns + delta, 4)
+		var size := item.size if _turns % 2 == 0 else Vector2i(item.size.y, item.size.x)
+		var cell := Vector2i((center - Vector2(size) * 0.5).round())
+		_commit_cell(cell)
+		return
+	_turns = posmod(_turns + delta, 4)
+	_preview_cell = NO_CELL
+	_cursor_screen = Vector2.INF
+	_update_cursor(_pointer if _dragging else get_viewport().get_mouse_position())
+
+
+func _begin_placement() -> bool:
+	var item := line.layout.definition(_selected)
+	if item == null or not item.movable:
+		return false
+	var reason := line.layout_edit_problem(line.layout.group_for(_selected))
+	if not reason.is_empty():
+		hud.set_hint(reason)
+		return false
+	_placing = true
+	_turns = item.turns
+	_preview_cell = NO_CELL
+	_preview_reason = ""
+	_cursor_screen = Vector2.INF
+	editor.invalidate_preview()
+	grid_view.set_grid_visible(true)
+	grid_view.clear_selection()
+	hud.set_hint("Place on the grid · R / Shift+R rotates · Esc cancels")
+	_update_selection_grid()
+	return true
+
+
+func _clear_drag() -> void:
+	_drag_armed = false
+	_dragging = false
+	_press_point = Vector2.INF
+	_release_point = Vector2.INF
+	_grab_offset = Vector2.ZERO
+	camera.set_build_drag(false)
+
+
+func _cancel_drag_on_focus_loss() -> void:
+	if _dragging:
+		_end_placement()
+	elif _drag_armed:
+		_clear_drag()
+
+
+func _arm_drag() -> void:
+	var item := line.layout.definition(_selected)
+	if item == null or not item.movable or not line.layout_edit_problem(line.layout.group_for(_selected)).is_empty():
+		return
+	var hit := grid_view.project_ray(_pick_origin, _pick_direction, item.elevation, false)
 	if hit == Vector3.INF:
 		return
-	var cell := line.layout.grid.cell_at(hit)
-	var reason := line.layout.move(_selected, cell, _turns)
+	var half := Vector2(item.footprint().size) * 0.5
+	var offset := line.layout.grid.coordinates(hit) - Vector2(item.cell) - half
+	_grab_offset = offset.clamp(-half, half)
+	_drag_armed = true
+
+
+func _start_drag_if_needed() -> void:
+	if not _drag_armed or _dragging or _press_point.distance_squared_to(_pointer) < 36.0:
+		return
+	_dragging = _begin_placement()
+	camera.set_build_drag(_dragging)
+	_drag_armed = false
+
+
+func _commit_cell(cell: Vector2i) -> bool:
+	var result := editor.preview(_selected, cell, _turns)
+	var reason: String = result.reason
+	if reason.is_empty():
+		reason = editor.apply(result.changes)
 	if not reason.is_empty():
 		_show_preview(cell)
-		return
+		hud.set_hint(reason)
+		return false
 	_end_placement()
+	_refresh_layout_views()
+	hud.set_hint("%s placed at (%d, %d)." % [_selected, cell.x, cell.y])
+	return true
+
+
+func _refresh_layout_views() -> void:
+	if _build_mode:
+		grid_view.show_build_areas(true, line.layout.objects.values(), line.layout.reserved)
 	floor_view.configure(line.layout, erp_enabled)
 	if erp_enabled and not _highlighted_order.is_empty():
 		floor_view.show_route(line.erp.orders.get(_highlighted_order, {}))
 	floor_view.select(_selected)
 	floor_view.animate(line, 0.0)
-	hud.set_hint("%s placed at (%d, %d)." % [_selected, cell.x, cell.y])
+	_cursor_screen = Vector2.INF
 	_refresh()
 
 
@@ -221,6 +466,13 @@ func _update_cursor(point: Vector2) -> void:
 		_clear_cursor()
 		return
 	var grid := line.layout.grid
+	if _placing:
+		var cell := _placement_cell(camera.project_ray_origin(point), camera.project_ray_normal(point))
+		if cell != NO_CELL:
+			_show_preview(cell)
+		else:
+			_clear_cursor()
+		return
 	var elevation := 0.0
 	var hit := grid_view.project(camera, point)
 	if not _placing:
@@ -234,10 +486,7 @@ func _update_cursor(point: Vector2) -> void:
 		return
 	var cell := grid.cell_at(hit)
 	grid_view.hover(cell, elevation)
-	if _placing:
-		_show_preview(cell)
-	else:
-		hud.set_cursor("X %02d   Z %02d   Y %.1f m" % [cell.x, cell.y, elevation])
+	hud.set_cursor("X %02d   Z %02d   Y %.1f m" % [cell.x, cell.y, elevation])
 
 
 func _clear_cursor() -> void:
@@ -251,10 +500,12 @@ func _clear_cursor() -> void:
 func _show_preview(cell: Vector2i) -> void:
 	if _preview_cell != cell:
 		_preview_cell = cell
-		var preview: Layout.Placement = line.layout.objects[_selected].at(cell, _turns)
-		_preview_reason = line.layout.validate_move(_selected, cell, _turns)
-		grid_view.preview(preview, _preview_reason.is_empty())
-	var caption := "X %02d   Z %02d   %d°" % [cell.x, cell.y, _turns * 90]
+		var result := editor.preview(_selected, cell, _turns)
+		_preview_reason = result.reason
+		grid_view.preview_group(result.changes.values(), _preview_reason.is_empty(), result.conflicts)
+		_update_build_panel()
+	var item: Layout.Placement = line.layout.objects[_selected]
+	var caption := "X %02d   Z %02d   Y %.1f m   %d°" % [cell.x, cell.y, item.elevation, _turns * 90]
 	if _preview_reason.is_empty():
 		hud.set_cursor(caption + "  ·  Ready to place", GridView.VALID)
 	else:
@@ -262,6 +513,7 @@ func _show_preview(cell: Vector2i) -> void:
 
 
 func _update_selection_grid() -> void:
+	_update_build_panel()
 	if _selected == &"":
 		grid_view.clear_selection()
 		return
@@ -272,7 +524,7 @@ func _update_selection_grid() -> void:
 			item.cell.x, item.cell.y, footprint.size.x, footprint.size.y, item.elevation, item.turns * 90]
 		var notes := "%s · %s · %.2f m high" % [item.id, item.kind, item.height]
 		hud.inspector.set_layout_info(caption, notes, item.movable,
-			not line.playing and line.elapsed_ticks == 0, _placing)
+			line.layout_edit_problem(line.layout.group_for(item.id)).is_empty(), _placing)
 		if not _placing:
 			grid_view.selection(footprint, item.required_area(), item.elevation)
 		return
@@ -289,6 +541,9 @@ func _update_selection_grid() -> void:
 
 
 func _set_playing(enabled: bool) -> void:
+	if enabled and _build_mode:
+		hud.set_hint("Exit Build Mode with B, then press Play.")
+		return
 	if _placing:
 		_end_placement()
 	line.set_playing(enabled)
@@ -357,13 +612,15 @@ func _rebuild_world() -> void:
 	grid_view = GridView.new()
 	add_child(grid_view)
 	grid_view.configure(layout.grid, layout.objects[&"Platform"])
-	grid_view.set_grid_visible(_show_grid)
+	grid_view.set_grid_visible(_show_grid or _build_mode)
 	camera.fit_factory(layout.grid.to_world(Vector2(layout.grid.size) * 0.5), layout.grid.size)
 
 
 func _open_erp(page: int = -1, filter: String = "") -> void:
 	if terminal == null:
 		return
+	if _build_mode:
+		_set_build_mode(false)
 	if _placing:
 		_end_placement()
 	_clear_cursor()
@@ -414,6 +671,7 @@ func _load_shift() -> void:
 		return
 	_select(&"")
 	line = saved.line
+	editor = Editor.new(line)
 	_save_load_error = ""
 	_highlighted_order = ""
 	_rebuild_world()

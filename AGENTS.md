@@ -62,3 +62,8 @@ The goal is to combine realistic industrial production behavior with an accessib
 - Keep demonstration definitions in `master_data/` and validate references, machine capabilities, and physical ports before starting a shift.
 - Preserve released routing and BOM snapshots. Keep work-center commitments and cart ownership tied to production order IDs.
 - Run the alternative routing integration test when changing dispatch, transport, eligibility, or save migration.
+
+## Layout Editing
+- Validate the entire proposed plan before confirming moves, including linked equipment, clearances, and all logistics approaches.
+- Apply edits only while production and transport are idle. Resolve future tasks against the current ports and keep order and work center IDs stable.
+- Keep standalone layout files limited to placements. Run the layout editor test when changing drag input, layout validation, persistence, or navigation after a move.

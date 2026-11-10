@@ -29,7 +29,10 @@ The game defaults to a 30 FPS rendering cap and redraws the view as needed. The 
 | ERP laptop or E | Open ChocoERP |
 | Esc while ERP is open | Return to the factory |
 | Grid button or G | Show or hide the 1 m grid |
-| R in placement mode | Rotate the footprint and its connections by 90° |
+| Build Mode or B | Pause and open or close the layout editor |
+| Left drag in Build Mode | Move equipment and release to place |
+| R / Shift+R in Build Mode | Rotate clockwise / counterclockwise by 90° |
+| Cmd+Z / Cmd+Shift+Z | Undo / redo a layout change on macOS. Use Ctrl on other systems. |
 | Esc or × | Cancel placement or close the inspector |
 
 Use an inspector slider, or type a number and press **Enter**. **Reset** pauses an ERP shift and applies crew and cart pool changes between orders. Documents and inventory are preserved. Product packaging comes from the order's frozen specification. The optional sandbox scene mode retains the original reset behavior.
@@ -38,7 +41,18 @@ Use an inspector slider, or type a number and press **Enter**. **Reset** pauses 
 
 Hover over the floor or mezzanine to read the cell's X and Z coordinates and elevation. Select an object to see its occupied area. For fixed equipment, the solid outline marks the footprint and the dashed outline marks any additional operating clearance.
 
-Before starting a shift, select the oven, coater, or packaging machine and click **Place**. Move the pointer to the cell that should become the front-left corner of the rotated footprint. Press **R** to rotate, click to accept a green preview, or press **Esc** to cancel. A red preview explains the conflict. The warehouse, mezzanine assembly, and staging areas are fixed. Keep cart docks accessible. Packaging must keep its outbound carton belt aligned with palletizing. Layout edits carry across **Reset** and are included in the ERP save.
+### Build Mode
+
+1. Click **Build Mode** or press **B**. This pauses the shift and shows the grid, occupied footprints, and reserved aisles.
+2. Select and drag a station. Release on a green preview to place it. A red preview explains what blocks placement. You can also click **Move** and then click a destination. **R** rotates clockwise, **Shift+R** rotates counterclockwise, and **Esc** cancels the preview.
+3. Use **Undo** or **Redo** to revisit the last 32 confirmed edits. Click **Save Layout** to reuse the arrangement. **Load Layout** reads that file, and **Default** restores the master-data positions.
+4. Exit with **B**, then press **Play** to resume.
+
+The editor waits for active production and transport jobs to finish. An occupied finished-goods warehouse can move after dispatch. The extruder moves with the elevated hopper under the fixed mezzanine. Packaging, Packaging WIP, and palletizing move together to retain their connections. The raw warehouse, mezzanine structure, and parking bays are fixed.
+
+Equipment can move along both floor axes. Workers, carts, and the supply shuttle can take short detours from their main aisles to reach docks. On the default floor plan, move **Coater 02** to **X 35, Z 24** to place it directly behind **Coater 01**.
+
+**Save Layout** writes only IDs, grid cells, and orientations to `user://factory_layout.json`. On macOS this is `~/Library/Application Support/Godot/app_userdata/Chocolate Works/factory_layout.json`. A new shift uses the saved layout if it validates. An existing shift keeps its own placements unless there is a newer saved layout and the shift is safe to edit. Otherwise **Load Layout** can apply it once the shift is idle. The ERP **Save** button also includes the current placements in the operational save.
 
 ### Defining a floor plan
 
@@ -142,6 +156,7 @@ godot --headless --path . --script res://tests/factory_scene_test.gd
 godot --headless --path . --script res://tests/erp_integration_test.gd
 godot --headless --path . --script res://tests/erp_scene_test.gd
 godot --headless --path . --script res://tests/routing_integration_test.gd
+godot --headless --path . --script res://tests/layout_editor_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

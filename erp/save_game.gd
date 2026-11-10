@@ -4,7 +4,7 @@ extends RefCounted
 const Line = preload("res://simulation/production_line.gd")
 const PATH := "user://chocolate-works-erp.save"
 const VERSION := 3
-const LINE_FIELDS := ["elapsed_ticks", "multiplier", "ingredients_taken", "dispatched_kg",
+const LINE_FIELDS := ["elapsed_ticks", "multiplier", "layout_file_stamp", "ingredients_taken", "dispatched_kg",
 	"dispatched_pallets", "boxes_completed", "raw_deliveries", "cooked_deliveries", "forklift_deliveries",
 	"hopper_reserved", "warehouse_reserved_slot", "box_progress", "box_target", "_pending_seconds",
 	"_cart_route_owner", "_lift_phase", "_lift_pickup_slot"]
@@ -252,7 +252,7 @@ static func _restore_execution(line: Line, data: Dictionary, refit: bool) -> Str
 		if not id.is_empty() and not line.runs.has(id):
 			return "Saved commitment points to missing route " + id
 	for task in line.floor_assignments.values():
-		if not line.runs.has(task.run) or task.cart == null:
+		if (not task.run.is_empty() and not line.runs.has(task.run)) or task.cart == null:
 			return "Saved cart task points to missing route or cart."
 	if line.runs.has(line.erp.active_id):
 		line._open_run(line.erp.active_id)

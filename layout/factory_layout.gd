@@ -12,6 +12,7 @@ const ORIGIN := Vector3(-32, 0, 13)
 const PLATFORM_HEIGHT := 3.5
 const CART_LANE := 11.2
 const WALK_LANE := 9.45
+const SUPPLY_LANE := 2.15
 const LIFT_LANE := 5.8
 const REAR_LANE := 17.4
 const PALLET_BAYS := 3
@@ -26,12 +27,16 @@ const LINKS := {
 	&"CartonBelt": [&"Packer", &"belt_out", &"Palletizer", &"belt_in"]
 }
 
+const LINKED_GROUPS := [[&"Extruder", &"Hopper"], [&"Packer", &"PackagingWIP", &"Palletizer"]]
 const SUPPLY_STATIONS := {"COAT-IN": &"Coater", "COAT-IN-02": &"Coater02", "PACK-IN": &"Packer"}
 
 var error := ""
 var grid: Grid
 var objects: Dictionary[StringName, Placement] = {}
 var reserved: Array[Rect2i] = []
+var _route_obstacles := {}
+var _cart_blockers := {}
+var _approaches := {}
 
 
 func _init(dimensions: Vector2i = Vector2i.ZERO, directory: String = "", snapshot: Dictionary = {}) -> void:
@@ -65,9 +70,12 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 				return "factory_layout.json [%s].ports.%s: expected three finite coordinates." % [row.id, key]
 			ports[StringName(key)] = Vector3(point[0], point[1], point[2])
 		var x := int(row.cell[0]) + (width - configured.x if row.id == "Warehouse" else 0)
+		var movable: bool = row.movable
+		if not snapshot.is_empty() and not snapshot.has("placement_revision"):
+			movable = movable or StringName(row.id) in [&"Extruder", &"Hopper", &"PackagingWIP", &"Palletizer", &"Warehouse"]
 		_define(Placement.new(StringName(row.id), StringName(row.kind), Vector2i(x, int(row.cell[1])),
 			Vector2i(int(row.size[0]), int(row.size[1])), row.height, row.elevation, int(row.turns),
-			Vector4i(int(row.clearance[0]), int(row.clearance[1]), int(row.clearance[2]), int(row.clearance[3])), ports, row.movable))
+			Vector4i(int(row.clearance[0]), int(row.clearance[1]), int(row.clearance[2]), int(row.clearance[3])), ports, movable))
 	var required := {&"Platform":[&"pick_0", &"pick_1"], &"Stairs":[], &"Hopper":[&"drop_0", &"drop_1", &"outlet"],
 		&"Extruder":[&"feed", &"raw_dock"], &"Oven":[&"raw_dock", &"cooked_dock"], &"Oven02":[&"raw_dock", &"cooked_dock"],
 		&"Coater":[&"cooked_dock", &"coated_dock", &"supply"], &"Coater02":[&"cooked_dock", &"coated_dock", &"supply"],
@@ -79,7 +87,7 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 		for port_id in required.get(key, []):
 			if not objects[key].ports.has(port_id):
 				return "factory_layout.json [%s].ports.%s: required dock." % [key, port_id]
-	var cart_end := objects[&"Palletizer"].cell.x
+	var cart_end := cart_aisle_end()
 	var lift_start := cart_end - 2
 	reserved = [Rect2i(0, 0, width, 2), Rect2i(0, 8, cart_end, 2),
 		Rect2i(0, 10, cart_end, 2), Rect2i(lift_start, 4, width - lift_start, 3)]
@@ -97,7 +105,7 @@ func snapshot() -> Dictionary:
 			"size": [item.size.x, item.size.y], "height": item.height, "elevation": item.elevation,
 			"turns": item.turns, "clearance": [item.clearance.x, item.clearance.y, item.clearance.z, item.clearance.w],
 			"ports": ports, "movable": item.movable})
-	return {"size": [grid.size.x, grid.size.y], "objects": rows}
+	return {"size": [grid.size.x, grid.size.y], "objects": rows, "placement_revision": 1}
 
 
 func _numbers(values: Variant, count: int, whole: bool, low: float = 0.0) -> bool:
@@ -114,11 +122,11 @@ func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 		return grid.to_world(Vector2(1.0, 10.0))
 	if SUPPLY_STATIONS.has(location):
 		return port(SUPPLY_STATIONS[location], &"supply", plan)
-	return grid.to_world(Vector2(10.0, 2.15))
+	return grid.to_world(Vector2(10.0, SUPPLY_LANE))
 
 
 func supply_route(from: Vector3, target: Vector3) -> Array[Vector3]:
-	return route(from, target, 2.15)
+	return _floor_route(from, target, SUPPLY_LANE, 0.75)
 
 
 func _define(item: Placement) -> void:
@@ -126,8 +134,8 @@ func _define(item: Placement) -> void:
 	objects[item.id] = item
 
 
-func center(id: StringName) -> Vector3:
-	return objects[id].center(grid)
+func center(id: StringName, plan: Dictionary = objects) -> Vector3:
+	return plan[id].center(grid)
 
 
 func port(id: StringName, name: StringName, plan: Dictionary = objects) -> Vector3:
@@ -161,25 +169,37 @@ func coated_cart_home(index: int) -> Vector3:
 	return objects[&"CoatedParking"].local_point(grid, Vector3(-3.5 + index * 2.0, 0, -0.1))
 
 
-func pallet_position(index: int) -> Vector3:
-	return objects[&"Palletizer"].local_point(grid, Vector3(-2.65 + index * 2.65, 0, -2.35))
+func cart_heading(point: Vector3) -> float:
+	return 0.0 if point.z > lane_z(CART_LANE) else PI
 
 
-func pallet_approach(index: int) -> Vector3:
-	return pallet_position(index) + Vector3(0, 0, 1.65)
+func cart_body_center(point: Vector3) -> Vector3:
+	return point + CART_OFFSET.rotated(Vector3.UP, cart_heading(point))
 
 
-func warehouse_slot(index: int) -> Vector3:
-	return objects[&"Warehouse"].local_point(grid, Vector3(-3.60 + (index % 4) * 2.2,
+func pallet_position(index: int, plan: Dictionary = objects) -> Vector3:
+	return plan[&"Palletizer"].local_point(grid, Vector3(-2.65 + index * 2.65, 0, -2.35))
+
+
+func pallet_approach(index: int, plan: Dictionary = objects) -> Vector3:
+	return pallet_position(index, plan) + Vector3(0, 0, 1.65).rotated(Vector3.UP, plan[&"Palletizer"].yaw())
+
+
+func warehouse_slot(index: int, plan: Dictionary = objects) -> Vector3:
+	return plan[&"Warehouse"].local_point(grid, Vector3(-3.60 + (index % 4) * 2.2,
 		0, -2.55 + floori(index / 4.0) * 5.2))
 
 
-func warehouse_approach(index: int) -> Vector3:
-	return warehouse_slot(index) + Vector3(0, 0, 1.65)
+func warehouse_approach(index: int, plan: Dictionary = objects) -> Vector3:
+	return warehouse_slot(index, plan) + Vector3(0, 0, 1.65).rotated(Vector3.UP, plan[&"Warehouse"].yaw())
+
+
+func cart_aisle_end() -> int:
+	return grid.size.x - 23
 
 
 func lift_home() -> Vector3:
-	return grid.to_world(Vector2(objects[&"Palletizer"].cell.x + 8.6, LIFT_LANE))
+	return grid.to_world(Vector2(cart_aisle_end() + 8.6, LIFT_LANE))
 
 
 func lift_side_x() -> float:
@@ -187,6 +207,8 @@ func lift_side_x() -> float:
 
 
 func route(from: Vector3, to: Vector3, lane: float) -> Array[Vector3]:
+	if lane == CART_LANE or lane == WALK_LANE:
+		return _floor_route(from, to, lane, 0.34 if lane == CART_LANE else 0.22)
 	if from.is_equal_approx(to):
 		return []
 	if is_equal_approx(from.x, to.x):
@@ -195,8 +217,8 @@ func route(from: Vector3, to: Vector3, lane: float) -> Array[Vector3]:
 	return [Vector3(from.x, from.y, z), Vector3(to.x, to.y, z), to]
 
 
-func lift_to_slot(from: Vector3, index: int) -> Array[Vector3]:
-	var target := warehouse_approach(index)
+func lift_to_slot(from: Vector3, index: int, plan: Dictionary = objects) -> Array[Vector3]:
+	var target := warehouse_approach(index, plan)
 	if index < 4:
 		return route(from, target, LIFT_LANE)
 	var rear := lane_z(REAR_LANE)
@@ -204,8 +226,8 @@ func lift_to_slot(from: Vector3, index: int) -> Array[Vector3]:
 		Vector3(lift_side_x(), 0, rear), Vector3(target.x, 0, rear), target]
 
 
-func lift_from_slot(index: int) -> Array[Vector3]:
-	var from := warehouse_approach(index)
+func lift_from_slot(index: int, plan: Dictionary = objects) -> Array[Vector3]:
+	var from := warehouse_approach(index, plan)
 	if index < 4:
 		return route(from, lift_home(), LIFT_LANE)
 	var rear := lane_z(REAR_LANE)
@@ -230,11 +252,49 @@ func definition(id: StringName) -> Placement:
 	return Placement.new(id, &"conveyor", first, last - first, span[0].y + 0.20)
 
 
+func group_for(id: StringName) -> Array:
+	for group in LINKED_GROUPS:
+		if id in group:
+			return group
+	return [id]
+
+
+func proposal(id: StringName, cell: Vector2i, turns: int) -> Dictionary:
+	var source: Placement = objects[id]
+	var footprint := source.footprint()
+	var center_cell := Vector2(source.cell) + Vector2(footprint.size) * 0.5
+	var target := source.at(cell, turns) as Placement
+	var new_center := Vector2(cell) + Vector2(target.footprint().size) * 0.5
+	var delta := posmod(turns - source.turns, 4)
+	var result := {}
+	for member: StringName in group_for(id):
+		var item: Placement = objects[member]
+		var moved := item.at(item.cell, item.turns + delta) as Placement
+		var local := Vector2(item.cell) + Vector2(item.footprint().size) * 0.5 - center_cell
+		var origin := new_center + local.rotated(delta * PI * 0.5) - Vector2(moved.footprint().size) * 0.5
+		moved.cell = Vector2i(origin.round())
+		result[member] = moved
+	return result
+
+
+func validate_changes(changes: Dictionary) -> String:
+	var plan := objects.duplicate()
+	plan.merge(changes, true)
+	for id in changes:
+		var item: Placement = changes[id]
+		if not objects.has(id) or not objects[id].movable:
+			return "This assembly has a fixed location."
+		var reason := _validate_footprint(item, plan)
+		if not reason.is_empty():
+			return reason
+	return _validate_connections(plan)
+
+
 func validate_move(id: StringName, anchor: Vector2i, orientation: int) -> String:
 	if not objects.has(id) or not objects[id].movable:
 		return "This assembly has a fixed location."
 	var item: Placement = objects[id].at(anchor, orientation)
-	var reason := Rules.validate(grid, item, objects, reserved)
+	var reason := _validate_footprint(item, objects)
 	if not reason.is_empty():
 		return reason
 	var plan := objects.duplicate()
@@ -246,6 +306,7 @@ func move(id: StringName, anchor: Vector2i, orientation: int) -> String:
 	var reason := validate_move(id, anchor, orientation)
 	if reason.is_empty():
 		objects[id] = objects[id].at(anchor, orientation)
+		invalidate_routes()
 	return reason
 
 
@@ -253,11 +314,32 @@ func validate() -> String:
 	if not error.is_empty():
 		return error
 	for item: Placement in objects.values():
-		var reason := Rules.validate(grid, item, objects, reserved)
+		var reason := _validate_footprint(item, objects)
 		if not reason.is_empty():
 			return "factory_layout.json [%s]: %s" % [item.id, reason]
 	var problem := _validate_connections(objects)
 	return "factory_layout.json: " + problem if not problem.is_empty() else ""
+
+
+func _validate_footprint(item: Placement, plan: Dictionary) -> String:
+	var reason := Rules.validate(grid, item, plan, reserved)
+	if not reason.is_empty():
+		return reason
+	if is_zero_approx(item.elevation) and item.kind in [&"machine", &"storage"]:
+		for leg: Rect2 in _platform_supports(plan):
+			if Rect2(item.footprint()).intersects(leg):
+				return "Footprint overlaps a mezzanine support."
+	return ""
+
+
+func _platform_supports(plan: Dictionary) -> Array[Rect2]:
+	var deck: Placement = plan[&"Platform"]
+	var result: Array[Rect2] = []
+	for x in [-1.0, 1.0]:
+		for z in [-1.0, 1.0]:
+			var offset := Vector3(x * (deck.size.x * 0.5 - 0.23), 0, z * (deck.size.y * 0.5 - 0.23))
+			result.append(_local_area(deck, offset, Vector2(0.53, 0.55)))
+	return result
 
 
 func _validate_connections(plan: Dictionary) -> String:
@@ -266,44 +348,49 @@ func _validate_connections(plan: Dictionary) -> String:
 	var deck: Placement = plan[&"Platform"]
 	var hopper: Placement = plan[&"Hopper"]
 	var walking_area := Rect2(deck.footprint()).grow(-0.2)
+	var sacks := _local_area(deck, Vector3(-2.3, 0, 2.4), Vector2(4.65, 1.0))
+	if Rect2(hopper.footprint()).intersects(sacks):
+		return "The hopper would overlap the ingredient sacks."
 	for index in 2:
 		var pick := grid.coordinates(port(&"Platform", StringName("pick_%d" % index), plan))
 		var drop := grid.coordinates(port(&"Hopper", StringName("drop_%d" % index), plan))
 		if not walking_area.has_point(pick) or not walking_area.has_point(drop) \
-				or _segment_hits(pick, drop, Rect2(hopper.footprint()).grow(0.18)):
+				or _segment_hits(pick, drop, Rect2(hopper.footprint()).grow(0.18)) \
+				or _segment_hits(pick, drop, sacks):
 			return "A platform worker would lose access to the hopper."
 	var obstacles := _obstacles(plan)
-	var docks: Array[Vector3] = [
-		port(&"Extruder", &"raw_dock", plan), port(&"Oven", &"raw_dock", plan),
-		port(&"Oven", &"cooked_dock", plan), port(&"Coater", &"cooked_dock", plan),
-		port(&"Oven02", &"raw_dock", plan), port(&"Oven02", &"cooked_dock", plan), port(&"Coater02", &"cooked_dock", plan),
-		port(&"Coater", &"coated_dock", plan), port(&"Coater02", &"coated_dock", plan), port(&"PackagingWIP", &"coated_dock", plan)
-	]
-	for index in MAX_CARTS:
-		docks.append(cart_home(index, true))
-		docks.append(cart_home(index, false))
-		docks.append(coated_cart_home(index))
+	var docks := _dock_points(plan)
+	var areas := _dock_areas(docks)
+	if areas.size() != docks.size():
+		return "Two carts would share the same dock."
+	for index in docks.size():
+		for other in range(index):
+			if areas[docks[index]].intersects(areas[docks[other]]):
+				return "Two cart docks would overlap."
+	var blockers := obstacles.duplicate()
+	blockers.merge(areas)
 	var destinations := docks.duplicate()
 	for index in MAX_CREW:
 		destinations.append(crew_home(index))
-	if not _lane_clear(docks, CART_LANE, 0.34, obstacles, docks):
+	if not _lane_clear(docks, CART_LANE, 0.34, blockers):
 		return "A cart dock or cart route would be obstructed."
-	if not _lane_clear(destinations, WALK_LANE, 0.22, obstacles, docks):
+	if not _lane_clear(destinations, WALK_LANE, 0.22, blockers):
 		return "A worker would lose access to a cart or dock."
 	for index in PALLET_BAYS:
-		var approach := pallet_approach(index)
+		var approach := pallet_approach(index, plan)
 		if not _path_clear(lift_home(), route(lift_home(), approach, LIFT_LANE), 0.88, obstacles):
 			return "A forklift pickup route would be obstructed."
 		for slot in WAREHOUSE_SLOTS:
-			if not _path_clear(approach, lift_to_slot(approach, slot), 0.88, obstacles):
+			if not _path_clear(approach, lift_to_slot(approach, slot, plan), 0.88, obstacles):
 				return "A forklift delivery route would be obstructed."
 	for slot in WAREHOUSE_SLOTS:
-		if not _path_clear(warehouse_approach(slot), lift_from_slot(slot), 0.88, obstacles):
+		if not _path_clear(warehouse_approach(slot, plan), lift_from_slot(slot, plan), 0.88, obstacles):
 			return "A forklift return route would be obstructed."
-	var supply_home := supply_point("RM-WH", plan)
-	for location in ["RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN"]:
-		if not _path_clear(supply_home, supply_route(supply_home, supply_point(location, plan)), 0.75, obstacles):
-			return "A supply shuttle route to %s would be obstructed." % location
+	var supply_stops: Array[Vector3] = [supply_point("RM-WH", plan), supply_point("RM-STAGE", plan)]
+	for location in SUPPLY_STATIONS:
+		supply_stops.append(supply_point(location, plan))
+	if not _lane_clear(supply_stops, SUPPLY_LANE, 0.75, obstacles):
+		return "A supply shuttle route would be obstructed."
 	for key: StringName in LINKS:
 		var endpoints := belt(key, plan)
 		var link: Array = LINKS[key]
@@ -320,39 +407,141 @@ func _validate_connections(plan: Dictionary) -> String:
 	return ""
 
 
-func _lane_clear(
-	points: Array[Vector3], lane: float, radius: float, obstacles: Dictionary, parked_carts: Array[Vector3]
-) -> bool:
+func _dock_points(plan: Dictionary) -> Array[Vector3]:
+	var points: Array[Vector3] = [
+		port(&"Extruder", &"raw_dock", plan), port(&"Oven", &"raw_dock", plan),
+		port(&"Oven", &"cooked_dock", plan), port(&"Coater", &"cooked_dock", plan),
+		port(&"Oven02", &"raw_dock", plan), port(&"Oven02", &"cooked_dock", plan),
+		port(&"Coater02", &"cooked_dock", plan), port(&"Coater", &"coated_dock", plan),
+		port(&"Coater02", &"coated_dock", plan), port(&"PackagingWIP", &"coated_dock", plan)
+	]
+	for index in MAX_CARTS:
+		points.append(cart_home(index, true))
+		points.append(cart_home(index, false))
+		points.append(coated_cart_home(index))
+	return points
+
+
+func _dock_areas(points: Array[Vector3]) -> Dictionary:
+	var areas := {}
+	for point in points:
+		areas[point] = _area(cart_body_center(point), Vector2(CART_BODY.x, CART_BODY.z))
+	return areas
+
+
+func _lane_clear(points: Array[Vector3], lane: float, radius: float, blockers: Dictionary) -> bool:
 	var z := lane_z(lane)
 	var low := INF
 	var high := -INF
-	var blockers := obstacles.duplicate()
-	for index in parked_carts.size():
-		var key := StringName("CartStop%d" % index)
-		blockers[key] = _area(parked_carts[index] - CART_OFFSET, Vector2(CART_BODY.x, CART_BODY.z))
 	for point in points:
-		var junction := Vector3(point.x, 0, z)
-		var own := parked_carts.find(point)
-		var ignored := [StringName("CartStop%d" % own)] if own >= 0 else []
-		if not _path_clear(point, [junction], radius, blockers, ignored):
+		var approach := _aisle_approach(point, lane, radius, blockers)
+		if approach.is_empty():
 			return false
-		low = minf(low, point.x)
-		high = maxf(high, point.x)
+		var junction: Vector3 = approach.back()
+		low = minf(low, junction.x)
+		high = maxf(high, junction.x)
 	return _path_clear(Vector3(low, 0, z), [Vector3(high, 0, z)], radius, blockers)
 
 
-func _obstacles(plan: Dictionary) -> Dictionary[StringName, Rect2]:
-	var result: Dictionary[StringName, Rect2] = {}
+func _aisle_approach(point: Vector3, lane: float, radius: float, blockers: Dictionary) -> Array[Vector3]:
+	var aisle_z := lane_z(lane)
+	var junction := Vector3(point.x, point.y, aisle_z)
+	# Cart stops are keyed by their world coordinates. A cart can enter its own stop.
+	var ignore := [point] if blockers.has(point) else []
+	if _path_clear(point, [junction], radius, blockers, ignore):
+		return [junction]
+	if not _path_clear(point, [], radius, blockers, ignore):
+		return []
+
+	var cell := grid.coordinates(point)
+	var toward := signf(lane - cell.y)
+	var nearest := absf(lane - cell.y)
+	var sides: Array[float] = []
+	for id in blockers:
+		if id in ignore:
+			continue
+		var area: Rect2 = blockers[id].grow(radius)
+		if not _segment_hits(cell, Vector2(cell.x, lane), area):
+			continue
+		var edge := area.position.y if toward > 0 else area.end.y
+		nearest = minf(nearest, absf(edge - cell.y) - 0.08)
+		sides.append(area.position.x - 0.30)
+		sides.append(area.end.x + 0.30)
+	if nearest < 0.20:
+		return []
+	sides.sort_custom(func(a: float, b: float) -> bool:
+		var left := absf(a - cell.x)
+		var right := absf(b - cell.x)
+		return a < b if left == right else left < right)
+	for side in sides:
+		for progress: float in [nearest, minf(0.65, nearest)]:
+			var turn := grid.to_world(cell + Vector2(0, progress * toward), point.y)
+			var bypass := grid.to_world(Vector2(side, cell.y + progress * toward), point.y)
+			var join := Vector3(bypass.x, point.y, aisle_z)
+			if _path_clear(point, [turn, bypass, join], radius, blockers, ignore):
+				return [turn, bypass, join]
+	return []
+
+
+func invalidate_routes() -> void:
+	_route_obstacles.clear()
+	_cart_blockers.clear()
+	_approaches.clear()
+
+
+func _floor_route(from: Vector3, to: Vector3, lane: float, radius: float) -> Array[Vector3]:
+	if from.is_equal_approx(to):
+		return []
+	if _route_obstacles.is_empty():
+		_route_obstacles = _obstacles(objects)
+		_cart_blockers = _route_obstacles.duplicate()
+		_cart_blockers.merge(_dock_areas(_dock_points(objects)))
+	var blockers := _route_obstacles if lane == SUPPLY_LANE else _cart_blockers
+	if from.x == to.x and (lane != CART_LANE or ((from.z > to.z) == (to.z < lane_z(lane)))) 			and _path_clear(from, [to], radius, blockers, [from, to]):
+		return [to]
+	var departure := _cached_approach(from, lane, radius, blockers)
+	var arrival := _cached_approach(to, lane, radius, blockers)
+	if departure.is_empty() or arrival.is_empty():
+		return []
+	var result := departure.duplicate()
+	for index in range(arrival.size() - 1, -1, -1):
+		result.append(arrival[index])
+	result.append(to)
+	return result
+
+
+func _cached_approach(point: Vector3, lane: float, radius: float, blockers: Dictionary) -> Array[Vector3]:
+	if not _approaches.has(lane):
+		_approaches[lane] = {}
+	var points: Dictionary = _approaches[lane]
+	if not points.has(point):
+		points[point] = _aisle_approach(point, lane, radius, blockers)
+	return points[point]
+
+
+func _obstacles(plan: Dictionary) -> Dictionary:
+	var result := {}
 	for item: Placement in plan.values():
 		if is_zero_approx(item.elevation) and (item.kind in [&"machine", &"access"] or item.id == &"RawWarehouse"):
 			result[item.id] = Rect2(item.footprint())
-	result[&"PackagingWIP"] = _area(center(&"PackagingWIP") + Vector3(1.05, 0, -0.35), Vector2(3.4, 1.25))
-	result[&"Palletizer"] = _area(center(&"Palletizer") + Vector3(-0.66, 0, -2.0), Vector2(6.7, 1.5))
+	var supports := _platform_supports(plan)
+	for index in supports.size():
+		result[StringName("PlatformSupport%d" % index)] = supports[index]
+	result[&"PackagingWIP"] = _local_area(plan[&"PackagingWIP"], Vector3(1.05, 0, 0.35), Vector2(3.4, 1.25))
+	result[&"Palletizer"] = _local_area(plan[&"Palletizer"], Vector3(-0.66, 0, 2.0), Vector2(6.7, 1.5))
 	for index in PALLET_BAYS:
-		result[StringName("PalletBay%d" % index)] = _area(pallet_position(index), Vector2(1.70, 1.36))
+		result[StringName("PalletBay%d" % index)] = _area(pallet_position(index, plan), _rotated_size(Vector2(1.70, 1.36), plan[&"Palletizer"]))
 	for index in WAREHOUSE_SLOTS:
-		result[StringName("WarehouseSlot%d" % index)] = _area(warehouse_slot(index), Vector2(1.70, 1.36))
+		result[StringName("WarehouseSlot%d" % index)] = _area(warehouse_slot(index, plan), _rotated_size(Vector2(1.70, 1.36), plan[&"Warehouse"]))
 	return result
+
+
+func _rotated_size(size: Vector2, item: Placement) -> Vector2:
+	return size if item.turns % 2 == 0 else Vector2(size.y, size.x)
+
+
+func _local_area(item: Placement, local: Vector3, size: Vector2) -> Rect2:
+	return _area(item.local_point(grid, local), _rotated_size(size, item))
 
 
 func _area(at: Vector3, size: Vector2) -> Rect2:
@@ -381,6 +570,13 @@ func _path_clear(
 
 
 func _segment_hits(from: Vector2, to: Vector2, rect: Rect2) -> bool:
+	# Aisle and dock approaches are axis-aligned. Check their spans without building edge arrays.
+	if from.x == to.x:
+		return from.x >= rect.position.x and from.x <= rect.end.x \
+			and maxf(from.y, to.y) >= rect.position.y and minf(from.y, to.y) <= rect.end.y
+	if from.y == to.y:
+		return from.y >= rect.position.y and from.y <= rect.end.y \
+			and maxf(from.x, to.x) >= rect.position.x and minf(from.x, to.x) <= rect.end.x
 	if rect.has_point(from) or rect.has_point(to):
 		return true
 	var corners := [rect.position, Vector2(rect.end.x, rect.position.y),

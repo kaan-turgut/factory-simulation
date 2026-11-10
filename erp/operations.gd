@@ -155,7 +155,7 @@ func _planned_pickups(code: String, location: String) -> float:
 	for task in manual_shipments:
 		if task.source == location:
 			amount += float(task.items.get(code, 0.0))
-	if not shipment.is_empty() and shipment.phase == 0 and shipment.source == location:
+	if not shipment.is_empty() and shipment.phase <= 0 and shipment.source == location:
 		amount += float(shipment.items.get(code, 0.0))
 	return amount
 
@@ -473,9 +473,14 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 					break
 		if shipment.is_empty():
 			return
+		shipment.phase = -1
+	if shipment.phase == -1:
+		var pickup: Vector3 = layout.supply_point(shipment.source)
+		var path: Array[Vector3] = layout.supply_route(shuttle.position, pickup)
+		if path.is_empty() and not shuttle.position.is_equal_approx(pickup):
+			return
 		shipment.phase = 0
-		shuttle.travel(layout.supply_route(shuttle.position, layout.supply_point(shipment.source)),
-			Operator.State.DRIVING, "Collect supplies", catalog.locations[shipment.source])
+		shuttle.travel(path, Operator.State.DRIVING, "Collect supplies", catalog.locations[shipment.source])
 	elif shipment.phase == 0:
 		for code in shipment.items:
 			# Recheck the source before creating in-transit stock.
@@ -487,11 +492,14 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 				shuttle.idle()
 				changed()
 				return
+		var destination: Vector3 = layout.supply_point(shipment.target)
+		var path: Array[Vector3] = layout.supply_route(shuttle.position, destination)
+		if path.is_empty() and not shuttle.position.is_equal_approx(destination):
+			return
 		for code in shipment.items:
 			_post(code, shipment.items[code], shipment.source, "TRANSIT", "Transfer", shipment.order, "Shuttle pickup")
 		shipment.phase = 1
-		shuttle.travel(layout.supply_route(shuttle.position, layout.supply_point(shipment.target)),
-			Operator.State.DRIVING, "Deliver supplies", catalog.locations[shipment.target])
+		shuttle.travel(path, Operator.State.DRIVING, "Deliver supplies", catalog.locations[shipment.target])
 	elif shipment.phase == 1:
 		shipment.phase = 2
 		shuttle.work(5.0 if shipment.target == "RM-STAGE" else 2.0, Operator.State.UNLOADING)

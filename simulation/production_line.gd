@@ -41,6 +41,7 @@ class FloorJob:
 
 
 var layout: Layout
+var layout_file_stamp := 0.0
 var erp: ERP
 var validation_error := ""
 var ovens: Dictionary[StringName, Oven] = {}
@@ -129,6 +130,12 @@ func enable_erp() -> void:
 				coaters[id] = coater if id == &"Coater" else Machine.new(center.technical.rate)
 				coater_inputs[id] = cooked_input if id == &"Coater" else Storage.new(center.technical.input_kg)
 	_create_coated_carts()
+	if elapsed_ticks == 0 and raw_at_extruder != null and raw_at_extruder.stock.quantity <= EPSILON:
+		raw_at_extruder.site = Cart.Site.PARKING
+		raw_at_extruder.position = raw_at_extruder.home
+		raw_at_extruder.previous_position = raw_at_extruder.home
+		raw_at_extruder.heading = layout.cart_heading(raw_at_extruder.home)
+		raw_at_extruder = null
 	coated_input = pack_wip
 	erp.initialize_supply(layout)
 
@@ -145,6 +152,27 @@ func _equipment_implements(id: StringName, operation: String) -> bool:
 		"coat":
 			return definition.ports.has(&"cooked_dock") and definition.ports.has(&"coated_dock")
 	return false
+
+
+func layout_edit_problem(moving: Array = []) -> String:
+	if playing:
+		return "Pause the shift before moving equipment."
+	if not runs.is_empty():
+		return "An order is using the line. Finish production before editing."
+	if not floor_assignments.is_empty() or _lift_phase != LiftPhase.WAIT 			or (erp != null and not erp.shipment.is_empty()):
+		return "A transport task is active. Let the crew finish before editing."
+	if hopper.quantity > EPSILON or hopper_reserved > EPSILON or oven.stock.quantity > EPSILON 			or cooked_input.quantity > EPSILON or coated_input.quantity > EPSILON or box_progress > EPSILON:
+		return "Production equipment contains work in progress."
+	for cart in carts:
+		if cart.stock.quantity > EPSILON:
+			return "A cart contains work in progress."
+	if &"Extruder" in moving and raw_at_extruder != null:
+		return "A raw cart is attached to the extruder. Let the crew park it first."
+	if &"Warehouse" in moving and warehouse_count() > 0:
+		return "Dispatch the warehouse stock before moving the warehouse."
+	if &"Palletizer" in moving and _pallet_mass(staged_pallets) > EPSILON:
+		return "Clear the staged pallets before moving the packaging area."
+	return ""
 
 
 func elapsed_seconds() -> float:
@@ -358,23 +386,28 @@ func _configure_crews_and_carts() -> void:
 	_create_carts(false, int(settings[&"cooked_count"]), settings[&"cooked_capacity"])
 	if erp != null:
 		_create_coated_carts()
-	raw_at_extruder = carts[0]
-	raw_at_extruder.site = Cart.Site.EXTRUDER
-	raw_at_extruder.position = layout.port(&"Extruder", &"raw_dock")
-	raw_at_extruder.previous_position = layout.port(&"Extruder", &"raw_dock")
+	if erp == null:
+		raw_at_extruder = carts[0]
+		raw_at_extruder.site = Cart.Site.EXTRUDER
+		raw_at_extruder.position = layout.port(&"Extruder", &"raw_dock")
+		raw_at_extruder.previous_position = raw_at_extruder.position
 
 
 func _create_carts(raw: bool, count: int, capacity: float) -> void:
 	var prefix := "Raw" if raw else "Cooked"
 	for index in count:
-		carts.append(Cart.new(StringName("%s%d" % [prefix, index + 1]), raw,
-			capacity, layout.cart_home(index, raw)))
+		var home := layout.cart_home(index, raw)
+		var cart := Cart.new(StringName("%s%d" % [prefix, index + 1]), raw, capacity, home)
+		cart.heading = layout.cart_heading(home)
+		carts.append(cart)
 
 
 func _create_coated_carts() -> void:
 	for index in int(settings[&"coated_cart_count"]):
-		carts.append(Cart.new(StringName("Coated%d" % (index + 1)), false,
-			settings[&"coated_cart_capacity"], layout.coated_cart_home(index), true))
+		var home := layout.coated_cart_home(index)
+		var cart := Cart.new(StringName("Coated%d" % (index + 1)), false, settings[&"coated_cart_capacity"], home, true)
+		cart.heading = layout.cart_heading(home)
+		carts.append(cart)
 
 
 func advance(real_seconds: float) -> void:
@@ -594,7 +627,7 @@ func _close_run() -> void:
 
 func _step_extrusion() -> void:
 	var output: Storage
-	if raw_at_extruder != null and raw_at_extruder.site == Cart.Site.EXTRUDER:
+	if _available(raw_at_extruder, Cart.Site.EXTRUDER):
 		output = raw_at_extruder.stock
 	_transfer(extruder, hopper, output)
 	if extruder.actual_rate > EPSILON:
@@ -791,10 +824,10 @@ func _advance_floor() -> void:
 			job.cart.position = worker.position
 			job.cart.heading = worker.heading
 		if worker.finished():
-			if erp != null:
+			if not job.run.is_empty():
 				_open_run(job.run)
 			_continue_job(worker, job)
-			if erp != null:
+			if not job.run.is_empty():
 				_close_run()
 	_assign_floor_jobs()
 	pending_jobs = _eligible_jobs()
@@ -818,10 +851,10 @@ func _assign_floor_jobs() -> void:
 			if worker.position.distance_squared_to(next.cart.position) \
 					< closest.position.distance_squared_to(next.cart.position):
 				closest = worker
-		if erp != null:
+		if not next.run.is_empty():
 			_open_run(next.run)
 		_claim_job(closest, next)
-		if erp != null:
+		if not next.run.is_empty():
 			_close_run()
 		idle.erase(closest)
 
@@ -830,6 +863,8 @@ func _eligible_jobs() -> Array[FloorJob]:
 	if erp == null:
 		return _floor_jobs()
 	var result: Array[FloorJob] = []
+	if runs.is_empty() and _available(raw_at_extruder, Cart.Site.EXTRUDER) and raw_at_extruder.stock.quantity <= EPSILON:
+		result.append(_move(raw_at_extruder, Cart.Site.PARKING, raw_at_extruder.home, "Park idle extruder cart"))
 	for id in runs:
 		_open_run(id)
 		for job in _floor_jobs():
@@ -944,6 +979,9 @@ func _handling(kind: JobKind, cart: Cart, title: String) -> FloorJob:
 
 
 func _claim_job(worker: Operator, job: FloorJob) -> void:
+	var path := layout.route(worker.position, job.cart.position, Layout.WALK_LANE)
+	if path.is_empty() and not worker.position.is_equal_approx(job.cart.position):
+		return
 	floor_assignments[worker.id] = job
 	job.cart.owner = worker.id
 	if job.kind == JobKind.MOVE_CART:
@@ -951,18 +989,19 @@ func _claim_job(worker: Operator, job: FloorJob) -> void:
 		_set_berth(job.site, job.cart)
 	elif job.kind in [JobKind.LOAD_OVEN, JobKind.UNLOAD_OVEN]:
 		oven.owner = worker.id
-	worker.travel(layout.route(worker.position, job.cart.position, Layout.WALK_LANE),
-		Operator.State.WALKING, job.title, _job_destination(job.cart.site))
+	worker.travel(path, Operator.State.WALKING, job.title, _job_destination(job.cart.site))
 
 
 func _continue_job(worker: Operator, job: FloorJob) -> void:
 	var cart := job.cart
 	if worker.state == Operator.State.WALKING:
 		if job.kind == JobKind.MOVE_CART:
+			var path := layout.route(worker.position, job.point, Layout.CART_LANE)
+			if path.is_empty() and not worker.position.is_equal_approx(job.point):
+				return
 			_set_berth(cart.site, null)
 			cart.site = Cart.Site.TRANSIT
-			worker.travel(layout.route(worker.position, job.point, Layout.CART_LANE),
-				Operator.State.PUSHING, job.title, _job_destination(job.site))
+			worker.travel(path, Operator.State.PUSHING, job.title, _job_destination(job.site))
 		else:
 			if job.kind == JobKind.LOAD_OVEN:
 				oven.state = Oven.State.LOADING

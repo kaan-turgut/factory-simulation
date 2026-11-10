@@ -130,7 +130,7 @@ func set_layout_info(copy: String, description: String, movable: bool, available
 	_place.visible = movable
 	_place.disabled = not available
 	_place.text = "Cancel" if placing else "Place"
-	_place.tooltip_text = "Reposition and rotate this station" if available else "Reset before moving a station"
+	_place.tooltip_text = "Reposition and rotate this station" if available else "Finish production and park vehicles before moving a station"
 
 
 func feedback(message: String) -> void:

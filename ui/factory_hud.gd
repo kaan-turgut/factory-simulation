@@ -17,6 +17,7 @@ signal dispatch_requested(all_stock: bool)
 signal home_requested
 signal grid_requested(enabled: bool)
 signal placement_requested
+signal build_requested
 signal erp_requested(page: int, filter: String)
 
 var inspector: Inspector
@@ -33,6 +34,9 @@ var _pause: Button
 var _hint: Label
 var _cursor: Label
 var _grid_button: Button
+var _build_button: Button
+var build_panel: Control
+var _build_active := false
 var _laptop: Button
 
 
@@ -47,6 +51,7 @@ func _ready() -> void:
 	_build_overview()
 	_build_controls()
 	_build_inspector()
+	_build_editor_panel()
 
 
 func enable_erp(enabled: bool) -> void:
@@ -61,7 +66,7 @@ func refresh(line: Line) -> void:
 	_mode.modulate = Style.ACCENT if line.playing else Palette.BLOCKED
 	_crew_status.text = "%d / %d floor crew busy   ·   %d queued    " % [
 		line.floor_assignments.size(), line.floor_crew.size(), line.pending_jobs.size()]
-	_play.disabled = line.playing
+	_play.disabled = line.playing or _build_active
 	_pause.disabled = not line.playing
 	for speed in _speed_buttons:
 		_speed_buttons[speed].set_pressed_no_signal(speed == line.multiplier)
@@ -98,6 +103,14 @@ func set_cursor(copy: String, color: Color = Style.MUTED) -> void:
 
 func set_grid_button(enabled: bool) -> void:
 	_grid_button.set_pressed_no_signal(enabled)
+
+
+func set_build_active(active: bool) -> void:
+	_build_active = active
+	_build_button.set_pressed_no_signal(active)
+	build_panel.visible = active
+	if active:
+		inspector.hide()
 
 
 func _machine_card(id: StringName, machine: Line.Machine) -> void:
@@ -236,8 +249,11 @@ func _build_controls() -> void:
 		_speed_buttons[speed] = button
 
 	_spacer(controls)
-	controls.add_child(_label("WASD Move   •   RMB Orbit   •   MMB Pan   •   Scroll Zoom",
+	controls.add_child(_label("WASD · RMB Orbit · MMB Pan · Scroll",
 		13, Style.MUTED))
+	_build_button = _button(controls, "Build Mode", func() -> void: build_requested.emit())
+	_build_button.toggle_mode = true
+	_build_button.tooltip_text = "Edit factory layout (B)"
 	_grid_button = _button(controls, "Grid", func() -> void: grid_requested.emit(_grid_button.button_pressed))
 	_grid_button.toggle_mode = true
 	_grid_button.tooltip_text = "Toggle the 1 m grid (G)"
@@ -266,6 +282,16 @@ func _build_inspector() -> void:
 	inspector.closed.connect(func() -> void: selection_requested.emit(&""))
 	inspector.setting_requested.connect(func(key: StringName, value: float) -> void: setting_requested.emit(key, value))
 	inspector.dispatch_requested.connect(func(all_stock: bool) -> void: dispatch_requested.emit(all_stock))
+
+
+func _build_editor_panel() -> void:
+	build_panel = preload("res://ui/build_panel.gd").new()
+	_root.add_child(build_panel)
+	build_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	build_panel.offset_left = -337
+	build_panel.offset_right = -22
+	build_panel.offset_top = 181
+	build_panel.offset_bottom = 181
 
 
 func _label(copy: String, size: int, color: Color, bold: bool = false) -> Label:

@@ -26,6 +26,7 @@ var _layout_zoom := 1.0
 var _inspector_open := false
 var _rotating := false
 var _panning := false
+var _build_drag := false
 
 
 func _ready() -> void:
@@ -36,6 +37,8 @@ func _process(delta: float) -> void:
 	if not get_window().has_focus():
 		_rotating = false
 		_panning = false
+	if _build_drag:
+		return
 	var edit := get_viewport().gui_get_focus_owner() as LineEdit
 	if edit == null or not edit.is_editing():
 		_keyboard_pan(delta)
@@ -54,6 +57,13 @@ func _process(delta: float) -> void:
 	_layout_zoom = lerpf(_layout_zoom, layout_zoom, weight)
 	h_offset = lerpf(h_offset, _units_per_pixel() * shift, weight)
 	_update_transform()
+
+
+func set_build_drag(active: bool) -> void:
+	_build_drag = active
+	if active:
+		_rotating = false
+		_panning = false
 
 
 func set_inspector_open(open: bool) -> void:
@@ -132,6 +142,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _build_drag:
+		return
 	if event is InputEventMouseButton and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:

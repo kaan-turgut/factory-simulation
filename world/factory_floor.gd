@@ -257,7 +257,7 @@ func _build_hall() -> void:
 		_draw.box(self, grid.to_world(Vector2(x, middle.y), 1.36), Vector3(0.42, 0.14, length), METAL)
 		for z in range(3, length, 6):
 			_draw.box(self, grid.to_world(Vector2(x, z), 0.7), Vector3(0.44, 1.56, 0.36), INK)
-	var aisle_end := layout.objects[&"Palletizer"].cell.x
+	var aisle_end := layout.cart_aisle_end()
 	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end, layout.lane_z(Layout.CART_LANE),
 		1.65, Color("#637b7d"))
 	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end - 1.0, layout.lane_z(Layout.WALK_LANE),
@@ -288,11 +288,11 @@ func _build_hall() -> void:
 		_floor_text(layout.center(&"CoatedParking") + Vector3(0, 0.04, 1.15), "COATED CARTS", Color("#e0b3ee"), 0.014)
 	for index in Layout.MAX_CARTS:
 		if _erp_enabled:
-			_bay(layout.coated_cart_home(index) + Vector3(0, 0.024, -0.65),
+			_bay(layout.cart_body_center(layout.coated_cart_home(index)) + Vector3.UP * 0.024,
 				Vector2(1.41, 1.35), Color("#b88bc7"))
-		_bay(layout.cart_home(index, true) + Vector3(0, 0.024, -0.65),
+		_bay(layout.cart_body_center(layout.cart_home(index, true)) + Vector3.UP * 0.024,
 			Vector2(1.41, 1.35), Color("#9ebec0"))
-		_bay(layout.cart_home(index, false) + Vector3(0, 0.024, -0.65),
+		_bay(layout.cart_body_center(layout.cart_home(index, false)) + Vector3.UP * 0.024,
 			Vector2(1.41, 1.35), Color("#bfa57d"))
 	# The service bank is decorative and sits against the rear wall.
 	for x: float in [19, 25, 34, 40, 46, width - 6]:
@@ -328,8 +328,7 @@ func _build_platform() -> void:
 	hopper.offset_readout(Vector3(-2.35, 0.35, -2.75))
 	_rail(Vector3(left, y, rear), Vector3(right, y, rear))
 	_rail(Vector3(left, y, rear), Vector3(left, y, front))
-	_rail(Vector3(left, y, front), Vector3(hopper.position.x - 1.15, y, front))
-	_rail(Vector3(hopper.position.x + 1.15, y, front), Vector3(right, y, front))
+	_rail(Vector3(left, y, front), Vector3(right, y, front))
 	var stairs := _station(&"Stairs", "", SAFETY, false, false)
 	var stair_plan := layout.objects[&"Stairs"]
 	var stair_width := stair_plan.size.x - 0.26
@@ -367,7 +366,8 @@ func _build_extruder() -> void:
 	node.offset_readout(Vector3(0, -0.66, 1.25))
 	_base(node)
 	_draw.box(node, Vector3(-0.2, 0.80, 0), Vector3(4.19, 1.02, 2.38), TEAL)
-	var feed := layout.port(&"Extruder", &"feed") - node.position
+	var feed: Vector3 = layout.objects[&"Extruder"].ports[&"feed"]
+	feed.z = -feed.z
 	var feed_top := feed.y - 0.025
 	_draw.cylinder(node, Vector3(feed.x, (1.77 + feed_top) * 0.5, feed.z), 0.31, feed_top - 1.77, METAL)
 	_draw.cylinder(node, Vector3(feed.x, 2.02, feed.z), 0.48, 0.16, PALE)
@@ -383,7 +383,7 @@ func _build_extruder() -> void:
 	_draw.box(node, Vector3(1.85, 0.93, 0.84), Vector3(1.1, 0.24, 1.77), METAL)
 	_console(node, Vector3(-1.17, 1.10, 1.22), Color("#81e6d4"))
 	_beacon(node, Vector3(-1.68, 1.69, 0.3))
-	_bay(layout.port(&"Extruder", &"raw_dock") + Vector3(0, 0.028, -0.66), Vector2(1.47, 1.4), SAFETY)
+	_bay(layout.cart_body_center(layout.port(&"Extruder", &"raw_dock")) + Vector3.UP * 0.028, Vector2(1.47, 1.4), SAFETY)
 
 
 func _build_oven(id: StringName, title: String) -> void:
@@ -415,7 +415,7 @@ func _build_oven(id: StringName, title: String) -> void:
 	_oven_doors[id] = door
 	_oven_heaters[id] = heater
 	for dock: Vector3 in [layout.port(id, &"raw_dock"), layout.port(id, &"cooked_dock")]:
-		_bay(dock + Vector3(0, 0.027, -0.67), Vector2(1.48, 1.42), SAFETY)
+		_bay(layout.cart_body_center(dock) + Vector3.UP * 0.027, Vector2(1.48, 1.42), SAFETY)
 
 
 func _build_coater(id: StringName, title: String) -> void:
@@ -440,9 +440,9 @@ func _build_coater(id: StringName, title: String) -> void:
 	_console(node, Vector3(1.75, 1.46, 1.33), Color("#d7a889"))
 	_beacon(node, Vector3(1.69, 2.15, 0.52))
 	_coating_drums[id] = rotor
-	_bay(layout.port(id, &"cooked_dock") + Vector3(0, 0.027, -0.65), Vector2(1.46, 1.41), SAFETY)
+	_bay(layout.cart_body_center(layout.port(id, &"cooked_dock")) + Vector3.UP * 0.027, Vector2(1.46, 1.41), SAFETY)
 	if _erp_enabled:
-		_bay(layout.port(id, &"coated_dock") + Vector3(0, 0.027, -0.65), Vector2(1.46, 1.41), Color("#b88bc7"))
+		_bay(layout.cart_body_center(layout.port(id, &"coated_dock")) + Vector3.UP * 0.027, Vector2(1.46, 1.41), Color("#b88bc7"))
 
 
 func _build_pack_wip() -> void:
@@ -457,7 +457,7 @@ func _build_pack_wip() -> void:
 		for x: float in [-0.07, 0.66, 1.43, 2.16]:
 			node.inventory_slots.append(_stock.wafer(node, Vector3(x, y + 0.14, -0.38),
 				Stock.CHOCOLATE, Vector3(0.61, 0.22, 0.75)))
-	_bay(layout.port(&"PackagingWIP", &"coated_dock") + Vector3(0, 0.033, -0.65), Vector2(1.51, 1.46), Color("#e0b3ee"))
+	_bay(layout.cart_body_center(layout.port(&"PackagingWIP", &"coated_dock")) + Vector3.UP * 0.033, Vector2(1.51, 1.46), Color("#e0b3ee"))
 
 
 func _build_packer() -> void:
@@ -484,39 +484,40 @@ func _build_palletizing() -> void:
 	_draw.box(node, Vector3(-0.66, 0.46, -2), Vector3(6.67, 0.83, 1.45), STEEL)
 	_draw.box(node, Vector3(-0.66, 0.92, -2), Vector3(6.80, 0.12, 1.52), METAL)
 	_draw.box(node, Vector3(-0.66, 0.68, -1.23), Vector3(6.75, 0.19, 0.08), AMBER)
-	_rail(node.position + Vector3(-3.65, 0, -3.22), node.position + Vector3(2.75, 0, -3.22))
+	_rail(node.to_global(Vector3(-3.65, 0, -3.22)), node.to_global(Vector3(2.75, 0, -3.22)))
 	for index in Layout.PALLET_BAYS:
 		var at := layout.pallet_position(index)
-		_bay(at + Vector3(0, 0.023, 0), Vector2(2.16, 1.91), SAFETY)
-		_staged.append(_stock.pallet(self, at))
-		_floor_text(at + Vector3(0, 0.036, 1.22), "P%d" % (index + 1), PALE, 0.017)
+		_bay(at + Vector3(0, 0.023, 0), Vector2(2.16, 1.91), SAFETY, node.rotation.y)
+		_staged.append(_stock.pallet(node, node.to_local(at)))
+		_floor_text(at + Vector3(0, 0.036, 1.22).rotated(Vector3.UP, node.rotation.y), "P%d" % (index + 1), PALE, 0.017)
 
 
 func _build_warehouse() -> void:
 	var node := _station(&"Warehouse", "07  FG warehouse", AMBER)
-	var center := node.position
 	var size := layout.objects[&"Warehouse"].size
-	_draw.box(self, center + Vector3(0, 0.015, 0),
+	_draw.box(node, Vector3(0, 0.015, 0),
 		Vector3(size.x - 0.4, 0.025, size.y - 0.2), Color("#637276"))
 	for index in Layout.WAREHOUSE_SLOTS:
 		var at := layout.warehouse_slot(index)
 		var marker := _draw.box(self, at + Vector3(0, 0.033, 0), Vector3(1.93, 0.021, 1.54), METAL)
+		marker.rotation.y = node.rotation.y
 		_warehouse_markers.append(marker)
-		_bay(at + Vector3(0, 0.053, 0), Vector2(2.02, 1.68), PALE)
-		_stored.append(_stock.pallet(self, at + Vector3(0, 0.049, 0)))
+		_bay(at + Vector3(0, 0.053, 0), Vector2(2.02, 1.68), PALE, node.rotation.y)
+		_stored.append(_stock.pallet(node, node.to_local(at) + Vector3(0, 0.049, 0)))
 		if _erp_enabled:
 			var pick := Equipment.new()
 			pick.position = at
+			pick.rotation.y = node.rotation.y
 			add_child(pick)
 			var id := StringName("FGSlot%d" % index)
 			pick.configure(id, _draw, Vector3(1.7, 1.7, 1.4), "", AMBER, false)
 			_equipment[id] = pick
 			_pallet_picks.append(pick)
 			pick.set_active(false)
-		_floor_text(at + Vector3(0, 0.053, 1.05), "%02d" % (index + 1), PALE, 0.015)
+		_floor_text(at + Vector3(0, 0.053, 1.05).rotated(Vector3.UP, node.rotation.y), "%02d" % (index + 1), PALE, 0.015)
 	for x: float in [-4.42, 4.46]:
-		_draw.box(self, center + Vector3(x, 0.73, -3.81), Vector3(0.17, 1.46, 0.18), AMBER)
-	_draw.box(self, center + Vector3(0.02, 1.28, -3.81), Vector3(9.0, 0.15, 0.11), STEEL)
+		_draw.box(node, Vector3(x, 0.73, -3.81), Vector3(0.17, 1.46, 0.18), AMBER)
+	_draw.box(node, Vector3(0.02, 1.28, -3.81), Vector3(9.0, 0.15, 0.11), STEEL)
 
 
 func _build_raw_warehouse() -> void:
@@ -671,10 +672,14 @@ func _strip(start: float, end: float, z: float, width: float, tint: Color) -> vo
 	_draw.box(self, Vector3((start + end) * 0.5, 0.016, z), Vector3(length, 0.025, width), tint)
 
 
-func _bay(at: Vector3, size: Vector2, tint: Color) -> void:
+func _bay(at: Vector3, size: Vector2, tint: Color, yaw: float = 0.0) -> void:
 	for side: float in [-1, 1]:
-		_draw.box(self, at + Vector3(side * size.x / 2, 0, 0), Vector3(0.063, 0.019, size.y), tint)
-		_draw.box(self, at + Vector3(0, 0, side * size.y / 2), Vector3(size.x, 0.019, 0.063), tint)
+		var edge := _draw.box(self, at + Vector3(side * size.x / 2, 0, 0).rotated(Vector3.UP, yaw),
+			Vector3(0.063, 0.019, size.y), tint)
+		edge.rotation.y = yaw
+		edge = _draw.box(self, at + Vector3(0, 0, side * size.y / 2).rotated(Vector3.UP, yaw),
+			Vector3(size.x, 0.019, 0.063), tint)
+		edge.rotation.y = yaw
 
 
 func _floor_text(at: Vector3, text: String, tint: Color, size: float) -> void:

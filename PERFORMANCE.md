@@ -67,3 +67,16 @@ Godot 4.7.2 Compatibility on the same M4 Pro, at 1280 × 800 and the 30 FPS cap.
 Against the Phase 3 closed-terminal run, the matched single-order median increased by 0.10 ms in CPU rendering, 0.145 ms in simulation work per frame, and 1.82 MiB of engine-tracked memory. The parallel run used a later window with two committed routes and ended with 88 cartons packed and eight pallets stored. It exercises contention but uses a different production state from the matched comparison. GPU execution was not traced in these samples.
 
 The headless legacy workload’s p95 tick times at 1, 4, 8, 16, and 32 lines were 0.018, 0.070, 0.144, 0.272, and 0.561 ms. The matching Phase 3 figures were 0.016, 0.064, 0.128, 0.258, and 0.510 ms. The legacy harness uses independent lines and excludes ERP and shared resource scheduling.
+
+## Build Mode
+
+Native Godot 4.7.2 Compatibility on the same M4 Pro at 1280 × 800 and the 30 FPS cap. The factory was paused. Each case sampled 150 frames after 45 warm-up frames. The drag case submitted a distinct snapped Oven 02 position per measured frame. Of those, 43 passed placement validation.
+
+| Mode | Rendered FPS | Factory update p50 / p95 (µs) | Preview p50 / p95 (ms per new cell) |
+| --- | ---: | ---: | ---: |
+| Pre-editor checkpoint | 30.0 | 69 / 133 | — |
+| Editor closed | 30.0 | 63 / 127 | — |
+| Build Mode idle after camera settled | No redraws in sample | 46 / 75 | — |
+| Placement preview | 30.0 | 6 / 31 | 0.89 / 6.00 |
+
+The factory-update column excludes the separately timed preview. Preview validation runs when the snapped cell or orientation changes and reuses cached results on revisits. A confirmed edit rebuilds the view and collision geometry. This short run measures the existing hall and waypoint routes.

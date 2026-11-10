@@ -14,11 +14,12 @@ var _lines := ImmediateMesh.new()
 var _hover := ImmediateMesh.new()
 var _outline := ImmediateMesh.new()
 var _preview_outline := ImmediateMesh.new()
+var _blocked := ImmediateMesh.new()
+var _blocked_view: MeshInstance3D
 var _grid_layer := Node3D.new()
 var _fill: MeshInstance3D
-var _ghost: MeshInstance3D
+var _ghosts: Array[MeshInstance3D] = []
 var _fill_box := BoxMesh.new()
-var _ghost_box := BoxMesh.new()
 var _line_material := StandardMaterial3D.new()
 var _ghost_material := StandardMaterial3D.new()
 var _last_hover := Rect2i()
@@ -39,11 +40,11 @@ func configure(factory_grid: Grid, deck: Placement) -> void:
 	_instance(_grid_layer, _hover, _line_material)
 	_instance(self, _outline, _line_material)
 	_instance(self, _preview_outline, _line_material)
+	_blocked_view = _instance(self, _blocked, _line_material)
+	_blocked_view.hide()
 	_fill = _instance(self, _fill_box, _tint(Color(0.34, 0.92, 0.70, 0.22)))
 	_ghost_material = _tint(VALID)
-	_ghost = _instance(self, _ghost_box, _ghost_material)
 	_fill.hide()
-	_ghost.hide()
 	_lines.surface_begin(Mesh.PRIMITIVE_LINES)
 	_grid_lines(grid.bounds(), 0.055)
 	_grid_lines(deck.footprint(), deck.elevation + 0.025)
@@ -62,14 +63,27 @@ func is_grid_visible() -> bool:
 	return _grid_layer.visible
 
 
-func project(camera: Camera3D, point: Vector2, elevation: float = 0.0) -> Vector3:
-	return project_ray(camera.project_ray_origin(point), camera.project_ray_normal(point), elevation)
+func show_build_areas(enabled: bool, items: Array = [], aisles: Array = []) -> void:
+	_blocked_view.visible = enabled
+	if not enabled:
+		return
+	_blocked.clear_surfaces()
+	_blocked.surface_begin(Mesh.PRIMITIVE_LINES)
+	for rect: Rect2i in aisles:
+		_rect(_blocked, rect, 0.057, Color(0.96, 0.43, 0.37, 0.48), true)
+	for item: Placement in items:
+		_rect(_blocked, item.footprint(), item.elevation + 0.065, Color(0.95, 0.67, 0.40, 0.64))
+	_blocked.surface_end()
 
 
-func project_ray(origin: Vector3, direction: Vector3, elevation: float = 0.0) -> Vector3:
+func project(camera: Camera3D, point: Vector2, elevation: float = 0.0, inside_only: bool = true) -> Vector3:
+	return project_ray(camera.project_ray_origin(point), camera.project_ray_normal(point), elevation, inside_only)
+
+
+func project_ray(origin: Vector3, direction: Vector3, elevation: float = 0.0, inside_only: bool = true) -> Vector3:
 	var plane := Plane(Vector3.UP, grid.origin.y + elevation)
 	var hit: Variant = plane.intersects_ray(origin, direction)
-	if hit == null or not grid.bounds().has_point(grid.cell_at(hit)):
+	if hit == null or (inside_only and not grid.bounds().has_point(grid.cell_at(hit))):
 		return Vector3.INF
 	return hit
 
@@ -120,24 +134,41 @@ func clear_selection() -> void:
 	_fill.hide()
 
 
-func preview(item: Placement, valid: bool) -> void:
-	var rect := item.footprint()
+func preview_group(items: Array, valid: bool, conflicts: Array) -> void:
 	var tint := VALID if valid else INVALID
-	_ghost_box.size = Vector3(rect.size.x, item.height, rect.size.y)
-	_ghost.position = item.center(grid) + Vector3(0, item.height * 0.5 + 0.025, 0)
+	while _ghosts.size() < items.size():
+		_ghosts.append(_instance(self, BoxMesh.new(), _ghost_material))
 	_ghost_material.albedo_color = Color(tint, 0.27)
-	_ghost.show()
 	_preview_outline.clear_surfaces()
 	_preview_outline.surface_begin(Mesh.PRIMITIVE_LINES)
-	_rect(_preview_outline, rect, item.elevation + 0.094, tint)
-	_rect(_preview_outline, rect, item.elevation + item.height, tint)
-	if item.required_area() != rect:
-		_rect(_preview_outline, item.required_area(), item.elevation + 0.088, tint, true)
+	for index in _ghosts.size():
+		var ghost := _ghosts[index]
+		ghost.visible = index < items.size()
+		if not ghost.visible:
+			continue
+		var item: Placement = items[index]
+		var rect := item.footprint()
+		(ghost.mesh as BoxMesh).size = Vector3(rect.size.x, item.height, rect.size.y)
+		ghost.position = item.center(grid) + Vector3(0, item.height * 0.5 + 0.025, 0)
+		_rect(_preview_outline, rect, item.elevation + 0.094, tint)
+		_rect(_preview_outline, rect, item.elevation + item.height, tint)
+		if item.required_area() != rect:
+			_rect(_preview_outline, item.required_area(), item.elevation + 0.088, tint, true)
+		var center := Vector2(rect.position) + Vector2(rect.size) * 0.5
+		var facing := Vector2(0, -1).rotated(item.yaw())
+		var tip := center + facing * 0.9
+		var y := item.elevation + item.height + 0.04
+		_line(_preview_outline, center, tip, y, tint)
+		for sign_x: float in [-1.0, 1.0]:
+			_line(_preview_outline, tip, tip - facing * 0.35 + facing.orthogonal() * sign_x * 0.25, y, tint)
+	for cell: Vector2i in conflicts:
+		_rect(_preview_outline, Rect2i(cell, Vector2i.ONE), 0.11, INVALID)
 	_preview_outline.surface_end()
 
 
 func clear_preview() -> void:
-	_ghost.hide()
+	for ghost in _ghosts:
+		ghost.hide()
 	_preview_outline.clear_surfaces()
 
 

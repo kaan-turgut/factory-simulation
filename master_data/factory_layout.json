@@ -72,7 +72,7 @@
       "height": 2.04,
       "id": "Hopper",
       "kind": "machine",
-      "movable": false,
+      "movable": true,
       "ports": {
         "drop_0": [
           -0.779999971389771,
@@ -111,7 +111,7 @@
       "height": 3.48,
       "id": "Extruder",
       "kind": "machine",
-      "movable": false,
+      "movable": true,
       "ports": {
         "feed": [
           0.0,
@@ -252,7 +252,7 @@
       "height": 1.35,
       "id": "Palletizer",
       "kind": "storage",
-      "movable": false,
+      "movable": true,
       "ports": {
         "belt_in": [
           -2.75,
@@ -281,7 +281,7 @@
       "height": 1.5,
       "id": "Warehouse",
       "kind": "storage",
-      "movable": false,
+      "movable": true,
       "ports": {},
       "size": [
         10,
@@ -481,7 +481,7 @@
           -1.5
         ]
       },
-      "movable": false
+      "movable": true
     }
   ],
   "size": [
