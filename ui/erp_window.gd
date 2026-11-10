@@ -1,0 +1,1032 @@
+extends CanvasLayer
+## ChocoERP terminal. One table per view, bounded journal rendering, refresh only while open.
+
+const Line = preload("res://simulation/production_line.gd")
+const Book = Line.ERP
+const Plan = preload("res://erp/mrp.gd")
+const Style = preload("res://ui/hud_style.gd")
+
+signal closed
+signal play_requested(enabled: bool)
+signal save_requested
+signal load_requested
+signal locate_requested(location: String)
+signal route_requested(id: String)
+
+const MODULES := ["Dashboard", "Material Master", "Bill of Materials", "Inventory Management",
+	"Material Requirements Planning", "Production Orders", "Procurement", "Goods Movements", "Reports and Analytics",
+	"Routing Master", "Work Center Master", "Production Versions"]
+const INK := Color("#182d42")
+const MUTED := Color("#50677b")
+const BLUE := Color("#1969a4")
+const PAPER := Color("#f5f8fc")
+
+var line: Line
+var plan := Plan.new()
+var _page := 0
+var _selected := {}
+var _rows := {}
+var _revision := -1
+var _pending_page := false
+var _suppliers := false
+var _proposals_only := false
+var _open := false
+var _root: Control
+var _dimmer: ColorRect
+var _shell: PanelContainer
+var _title: Label
+var _summary: Label
+var _status: Label
+var _clock: Label
+var _pause: Button
+var _search: LineEdit
+var _family: LineEdit
+var _date_filter: LineEdit
+var _table: Tree
+var _detail: RichTextLabel
+var _actions: HFlowContainer
+var _nav: Array[Button] = []
+var _tween: Tween
+var _timer: Timer
+
+
+func _ready() -> void:
+	layer = 20
+	_build()
+	_root.hide()
+	_timer = Timer.new()
+	_timer.wait_time = 0.5
+	add_child(_timer)
+	_timer.timeout.connect(_poll)
+
+
+func bind(factory_line: Line) -> void:
+	line = factory_line
+	plan = Plan.new()
+	_revision = -1
+	if _open:
+		_render()
+
+
+func is_open() -> bool:
+	return _open
+
+
+func open(page: int = -1, query: String = "") -> void:
+	if page >= 0:
+		_page = page
+		_search.set_text(query)
+		_family.clear()
+		_date_filter.clear()
+		_selected = {}
+		_suppliers = false
+	if _tween != null:
+		_tween.kill()
+	_open = true
+	_root.show()
+	_timer.start()
+	_set_page(_page, false)
+	_shell.pivot_offset = _shell.size
+	_shell.scale = Vector2(0.12, 0.09)
+	_dimmer.modulate.a = 0.0
+	_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_tween.tween_property(_shell, "scale", Vector2.ONE, 0.26)
+	_tween.tween_property(_dimmer, "modulate:a", 1.0, 0.25)
+
+
+func close() -> void:
+	if not _open:
+		return
+	_open = false
+	_timer.stop()
+	if _tween != null:
+		_tween.kill()
+	_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_tween.tween_property(_shell, "scale", Vector2(0.12, 0.09), 0.19)
+	_tween.tween_property(_dimmer, "modulate:a", 0.0, 0.19)
+	_tween.chain().tween_callback(func() -> void:
+		_root.hide()
+		closed.emit())
+
+
+func notice(message: String) -> void:
+	_status.text = message
+
+
+func _poll() -> void:
+	if not _open:
+		return
+	_clock.text = Book.date(line.elapsed_seconds())
+	_pause.text = "Pause shift" if line.playing else "Play shift"
+	if line.erp.revision != _revision and _page not in [1, 2, 4, 9, 11]:
+		_render()
+
+
+func _build() -> void:
+	_root = Control.new()
+	_root.name = "ChocoERP"
+	add_child(_root)
+	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_dimmer = ColorRect.new()
+	_dimmer.color = Color("#081322ba")
+	_root.add_child(_dimmer)
+	_dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_shell = PanelContainer.new()
+	_root.add_child(_shell)
+	_shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_shell.offset_left = 34
+	_shell.offset_right = -34
+	_shell.offset_top = 27
+	_shell.offset_bottom = -28
+	_shell.add_theme_stylebox_override("panel", Style.box(PAPER, Color("#6c859c"), 13, 16))
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 12)
+	_shell.add_child(stack)
+	var header := HBoxContainer.new()
+	stack.add_child(header)
+	header.add_child(_label("ChocoERP", 26, BLUE))
+	header.add_child(_label("   /   PLANT OPERATIONS", 13, MUTED))
+	_spacer(header)
+	_clock = _label("", 14, MUTED)
+	header.add_child(_clock)
+	_pause = _button(header, "Pause shift", func() -> void:
+		play_requested.emit(not line.playing)
+		_poll())
+	_button(header, "Save", func() -> void: save_requested.emit())
+	_button(header, "Load", func() -> void:
+		_form("Load saved shift", [], func(_values: Dictionary) -> String:
+			load_requested.emit()
+			return ""))
+	_button(header, "Close  ×", close)
+	stack.add_child(HSeparator.new())
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 14)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(body)
+	var sidebar_scroll := ScrollContainer.new()
+	sidebar_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sidebar_scroll.custom_minimum_size.x = 255
+	body.add_child(sidebar_scroll)
+	var sidebar := VBoxContainer.new()
+	sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sidebar.custom_minimum_size.x = 206
+	sidebar.add_theme_constant_override("separation", 6)
+	sidebar_scroll.add_child(sidebar)
+	sidebar.add_child(_label("WORKSPACES", 13, MUTED))
+	for index in MODULES.size():
+		var button := _button(sidebar, MODULES[index], _set_page.bind(index))
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_nav.append(button)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 8)
+	body.add_child(content)
+	_title = _label("", 23, INK)
+	content.add_child(_title)
+	_summary = _label("", 14, MUTED)
+	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(_summary)
+	var filters := HBoxContainer.new()
+	content.add_child(filters)
+	_search = _filter(filters, "Search by code, description or status")
+	_family = _filter(filters, "Product family")
+	_date_filter = _filter(filters, "Due through sim minute")
+	_actions = HFlowContainer.new()
+	content.add_child(_actions)
+	_table = Tree.new()
+	_table.name = "ERPTable"
+	_table.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_table.custom_minimum_size.y = 210
+	_table.hide_root = true
+	_table.select_mode = Tree.SELECT_ROW
+	_table.column_titles_visible = true
+	_table.add_theme_stylebox_override("panel", Style.box(Color.WHITE, Color("#cad5e0"), 5, 2))
+	var hover := Style.box(Color("#edf5fc"), Color("#d6e6f4"), 3, 2)
+	var selected := Style.box(Color("#d5edff"), Color("#a2c8e3"), 3, 2)
+	var focused := Style.box(Color("#c7e5fa"), Color("#84b8de"), 3, 2)
+	_table.add_theme_stylebox_override("hovered", hover)
+	_table.add_theme_stylebox_override("hovered_dimmed", hover)
+	_table.add_theme_stylebox_override("selected", selected)
+	_table.add_theme_stylebox_override("hovered_selected", selected)
+	_table.add_theme_stylebox_override("selected_focus", focused)
+	_table.add_theme_stylebox_override("hovered_selected_focus", focused)
+	for color_key in ["font_color", "font_selected_color", "font_hovered_color",
+			"font_hovered_dimmed_color", "font_hovered_selected_color"]:
+		_table.add_theme_color_override(color_key, INK)
+	_table.add_theme_color_override("title_button_color", INK)
+	_table.add_theme_stylebox_override("title_button_normal", Style.box(Color("#e6eef6"), Color("#dae3ec"), 0, 5))
+	_table.add_theme_stylebox_override("title_button_hover", Style.box(Color("#d5edff"), Color("#a2c8e3"), 0, 5))
+	_table.add_theme_stylebox_override("title_button_pressed", Style.box(Color("#c7e5fa"), Color("#84b8de"), 0, 5))
+	_table.add_theme_constant_override("v_separation", 7)
+	_table.add_theme_font_size_override("font_size", 14)
+	_table.item_selected.connect(_on_select)
+	content.add_child(_table)
+	_detail = RichTextLabel.new()
+	_detail.bbcode_enabled = false
+	_detail.custom_minimum_size.y = 88
+	_detail.add_theme_color_override("default_color", INK)
+	_detail.add_theme_font_size_override("normal_font_size", 14)
+	content.add_child(_detail)
+	_status = _label("Ready", 14, BLUE)
+	stack.add_child(_status)
+
+
+func _filter(parent: Control, hint: String) -> LineEdit:
+	var edit := LineEdit.new()
+	edit.placeholder_text = hint
+	edit.custom_minimum_size.x = 155
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.add_theme_color_override("font_color", INK)
+	edit.add_theme_color_override("font_placeholder_color", MUTED)
+	edit.add_theme_stylebox_override("normal", Style.box(Color.WHITE, Color("#bfcfdc"), 5, 6))
+	edit.text_changed.connect(func(_value: String) -> void: _render())
+	parent.add_child(edit)
+	return edit
+
+
+func _set_page(index: int, clear_search: bool = true) -> void:
+	_page = index
+	_selected = {}
+	_suppliers = false
+	if clear_search:
+		_search.clear()
+		_family.clear()
+		_date_filter.clear()
+	for i in _nav.size():
+		_nav[i].modulate = Color("#a9e6ff") if i == _page else Color.WHITE
+	for child in _actions.get_children():
+		_actions.remove_child(child)
+		child.queue_free()
+	_family.visible = _page == 4
+	_date_filter.visible = _page == 4
+	_build_actions()
+	_render()
+
+
+func _build_actions() -> void:
+	match _page:
+		1:
+			_action("Edit material", _edit_material)
+			_action("Clone product", _clone_product)
+			_action("Locate stock", _locate)
+		2:
+			_action("Edit component", _edit_component)
+			_action("Add component", _edit_component.bind(true))
+			_action("Edit BOM header", _edit_header)
+		3:
+			_action("Transfer", _transfer)
+			_action("Adjust RM stock", _adjust)
+			_action("Dispatch one pallet", func() -> void:
+				notice("Dispatched %d pallet(s)." % line.dispatch(false))
+				_render())
+			_action("Locate stock", _locate)
+		4:
+			_action("Run MRP", _run_mrp)
+			_action("Create demand", _new_demand)
+			_action("Convert proposal", _convert)
+			var proposals := _button(_actions, "Proposals only", func() -> void:
+				_proposals_only = not _proposals_only
+				_render())
+			proposals.toggle_mode = true
+			proposals.button_pressed = _proposals_only
+		5:
+			_action("Create order", _new_order)
+			_action("Release", func() -> void: _order_action("release"))
+			_action("Priority / start", _priority)
+			_action("Cancel", func() -> void: _confirm_order("Cancelled"))
+			_action("Close order", func() -> void: _order_action("Closed"))
+			_action("Setup times", _setup)
+			_action("Select version", _select_order_version)
+			_action("Show route", _highlight_order)
+		6:
+			_action("Create purchase order", _new_purchase)
+			_action("Suppliers / POs", func() -> void:
+				_suppliers = not _suppliers
+				_selected = {}
+				_render())
+
+
+func _render() -> void:
+	if line == null or line.erp == null or not _open:
+		return
+	var book := line.erp
+	_revision = book.revision
+	_title.text = MODULES[_page]
+	_clock.text = Book.date(line.elapsed_seconds())
+	_pause.text = "Pause shift" if line.playing else "Play shift"
+	_rows.clear()
+	_table.clear()
+	match _page:
+		0: _dashboard()
+		1: _materials()
+		2: _bom()
+		3: _inventory()
+		4: _mrp()
+		5: _orders()
+		6: _procurement()
+		7: _movements()
+		8: _reports()
+		9: _routing_master()
+		10: _work_center_master()
+		11: _production_versions()
+	var old_key := String(_selected.get("key", ""))
+	if _rows.has(old_key):
+		_rows[old_key].select(0)
+		_selected = _rows[old_key].get_metadata(0)
+	_detail.text = String(_selected.get("detail", "Select a row to see transaction or master-data details."))
+
+
+func _header(columns: Array, summary: String) -> TreeItem:
+	_table.columns = columns.size()
+	for index in columns.size():
+		_table.set_column_title(index, columns[index])
+		_table.set_column_expand(index, true)
+		_table.set_column_clip_content(index, true)
+		var minimum := {"Material": 116, "Description": 114, "Need date": 98, "MRP element": 124,
+			"Receipt": 65, "Demand": 66, "Projected": 80, "Short": 54, "Document": 84}
+		_table.set_column_custom_minimum_width(index, int(minimum.get(columns[index], 50)))
+	_summary.text = summary
+	return _table.create_item()
+
+
+func _row(parent: TreeItem, values: Array, metadata: Dictionary = {}, filter: bool = true) -> TreeItem:
+	var words := PackedStringArray()
+	for value in values:
+		words.append(str(value))
+	var query := _search.text.strip_edges().to_lower()
+	if filter and not query.is_empty() and not " ".join(words).to_lower().contains(query):
+		return null
+	var row := _table.create_item(parent)
+	for index in mini(words.size(), _table.columns):
+		row.set_text(index, words[index])
+		if words[index] in ["In Progress", "Received", "Completed"]:
+			row.set_custom_color(index, Color("#176b47"))
+		elif words[index] in ["Late", "Cancelled", "Short"]:
+			row.set_custom_color(index, Color("#a14532"))
+	row.set_metadata(0, metadata)
+	if metadata.has("key"):
+		_rows[metadata.key] = row
+	return row
+
+
+func _on_select() -> void:
+	var row := _table.get_selected()
+	if row != null:
+		_selected = row.get_metadata(0)
+		_detail.text = String(_selected.get("detail", ""))
+
+
+func _dashboard() -> void:
+	var b := line.erp
+	var active := PackedStringArray()
+	var root := _header(["Indicator", "Current value"], "LINE-01  ·  Live operational overview")
+	var open_orders := 0
+	var pending_po := 0
+	var shortages := {}
+	for item in b.orders.values():
+		if item.status in b.OPEN:
+			open_orders += 1
+		if item.status == "In Progress":
+			active.append("%s · %s · %s" % [item.id, item.code, item.route.description])
+		if item.status == "Created":
+			shortages.merge(b.shortages(item), true)
+	for po in b.purchases.values():
+		pending_po += int(po.status != "Received")
+	for pair in [
+		["Active orders", " / ".join(active) if not active.is_empty() else "—"],
+		["Today's production", _qty(b.today_kg()) + " kg received"],
+		["Open orders / purchases", "%d orders / %d purchase orders" % [open_orders, pending_po]],
+		["Material shortages", ", ".join(PackedStringArray(shortages.keys())) if not shortages.is_empty() else "—"],
+		["Finished warehouse", "%d / %d pallets · %s kg" % [line.warehouse_count(), line.settings[&"warehouse_capacity"], _qty(line.warehouse_mass())]],
+		["Setup remaining", "%s s coating / %s s packing" % [_qty(b.coat_remaining), _qty(b.pack_remaining)]],
+		["Shortage idle time", "%s sim min (sampled)" % _qty(b.delay_seconds / 60.0)],
+		["Run utilization", _utilization()]
+	]:
+		_row(root, pair)
+
+
+func _materials() -> void:
+	var b := line.erp
+	var root := _header(["Material", "Description", "Type", "Unit", "Supply", "Location", "Status"],
+		"Search across material codes, categories and descriptions.")
+	for code in b.catalog.materials:
+		var item: Dictionary = b.catalog.materials[code]
+		var detail := "%s · Safety stock %s %s · Lead %s min" % [item.name, _qty(item.minimum), item.unit, _qty(item.lead / 60.0)]
+		if item.type == "FERT":
+			detail += "\n%s / %s · %s · Pack %s kg × %d = %s kg per shipping box\n%d boxes per pallet · %s kg net per pallet · BOM %s · %s\nShelf life %d days · Standard batch %s kg" % [
+				item.coating, item.wafer, item.family, _qty(item.pack_kg), item.packs_per_box, _qty(item.box_kg),
+				item.boxes_per_pallet, _qty(item.boxes_per_pallet * item.box_kg), item.bom, "%d production versions" % b.catalog.production_versions.values().filter(
+					func(row: Dictionary) -> bool: return row.product == code).size(), item.shelf_days, _qty(item.batch_kg)]
+		_row(root, [code, item.name, item.type, item.unit, item.procurement, item.location, "Active" if item.active else "Inactive"],
+			{"key": code, "code": code, "location": item.location, "detail": detail})
+
+
+func _bom() -> void:
+	var root := _header(["Material hierarchy", "Description", "Qty / base", "Unit", "Scrap %", "Version"],
+		"Expand a product and its semi-finished components. Quantities are per parent BOM base.")
+	var catalog := line.erp.catalog
+	for code in catalog.boms:
+		if catalog.materials[code].type != "FERT":
+			continue
+		var title: String = catalog.materials[code].name
+		var query := _search.text.strip_edges().to_lower()
+		if not query.is_empty() and not (code + " " + title).to_lower().contains(query):
+			continue
+		_bom_node(root, code, "", 0.0, 0.0, code, {})
+
+
+func _bom_node(parent: TreeItem, code: String, parent_code: String, quantity: float, scrap: float,
+		path: String, seen: Dictionary) -> void:
+	var catalog := line.erp.catalog
+	var bom: Dictionary = catalog.boms.get(code, {})
+	var name: String = catalog.materials[code].name
+	var key := path
+	var row := _row(parent, [code, name, _qty(quantity) if not parent_code.is_empty() else _qty(bom.get("base", 0.0)),
+		catalog.materials[code].unit, _qty(scrap * 100.0), "v%d%s" % [bom.get("version", 0), "" if bom.get("active", true) else " · inactive"]],
+		{"key": key, "code": code, "parent": parent_code, "quantity": quantity, "scrap": scrap,
+			"detail": "%s · %s\nParent %s · BOM base %s %s" % [code, name, parent_code, _qty(bom.get("base", 0.0)), catalog.materials[code].unit]}, false)
+	if seen.has(code):
+		return
+	seen[code] = true
+	for part in bom.get("parts", []):
+		_bom_node(row, part.code, code, part.qty, part.scrap, path + "/" + part.code, seen)
+	seen.erase(code)
+	row.collapsed = not bom.is_empty()
+
+
+func _inventory() -> void:
+	var b := line.erp
+	var root := _header(["Material", "Description", "Location", "On hand", "Reserved", "Available", "In transit", "Unit"],
+		"Raw stock comes from the ledger. WIP and finished goods come from physical buffers and pallets.")
+	for code in b.catalog.materials:
+		var item: Dictionary = b.catalog.materials[code]
+		if item.procurement != "External":
+			continue
+		var reserve := float(b.reservations.get(code, 0.0))
+		for location in b.RAW_LOCATIONS:
+			var qty := b.stock(code, location)
+			var allocated := minf(reserve, qty)
+			reserve -= allocated
+			if qty <= Book.EPS and location != "RM-WH":
+				continue
+			_inventory_row(root, code, location, qty, allocated)
+	var packaging_wip := line.erp_pack_wip()
+	var upstream_wip := line.erp_wip()
+	for code in packaging_wip:
+		upstream_wip[code] -= packaging_wip[code]
+	for pair in [["WIP", upstream_wip], ["PACK-WIP", packaging_wip], ["FG-WH", line.erp_fg()]]:
+		for code in pair[1]:
+			if pair[1][code] > Book.EPS:
+				_inventory_row(root, code, pair[0], pair[1][code], pair[1][code] if pair[0] in ["WIP", "PACK-WIP"] else 0.0)
+
+
+func _inventory_row(root: TreeItem, code: String, location: String, qty: float, reserved: float) -> void:
+	var item: Dictionary = line.erp.catalog.materials[code]
+	var moving := location == "TRANSIT"
+	_row(root, [code, item.name, location, _qty(0.0 if moving else qty), _qty(reserved),
+		_qty(0.0 if moving else maxf(0.0, qty - reserved)), _qty(qty if moving else 0.0), item.unit],
+		{"key": code + location, "code": code, "location": location,
+			"detail": "%s · %s · %s %s\nReservations are assigned across locations for display." % [
+				code, line.erp.catalog.locations[location], _qty(qty), item.unit]})
+
+
+func _mrp() -> void:
+	var summary := plan.summary
+	var note := "Create demand or an order, then run MRP. Convert selected buy or make proposals explicitly."
+	if not summary.is_empty():
+		note = "%d shortage materials   ·   %d buy proposals   ·   %d make proposals   ·   %d late risks   ·   %d/%d covered" % [
+			summary.shortages.size(), summary.buy, summary.make, summary.late, summary.covered, summary.requirements]
+	var root := _header(["Material", "Description", "Need date", "MRP element", "Receipt", "Demand", "Projected", "Short", "Document"], note)
+	var b := line.erp
+	var i := 0
+	for row in plan.rows:
+		i += 1
+		if _proposals_only and row.proposal.is_empty():
+			continue
+		if not _family.text.is_empty() and not String(row.family).to_lower().contains(_family.text.to_lower()):
+			continue
+		if _date_filter.text.is_valid_float() and float(row.date) > _date_filter.text.to_float() * 60.0:
+			continue
+		_row(root, [row.code, b.catalog.materials[row.code].name, Book.date(row.date), row.kind,
+			_qty(row["in"]), _qty(row["out"]), _qty(row.projected), _qty(row.short), row.doc],
+			{"key": row.proposal if not row.proposal.is_empty() else str(i), "proposal": row.proposal,
+				"detail": "%s · %s · need %s\nAction date %s · unit %s · %s" % [
+					row.kind, row.doc, Book.date(row.date), Book.date(row.action_date) if row.action_date >= 0 else "Past / none",
+					b.catalog.materials[row.code].unit, "Short / late risk" if row.short > 0 else "Covered"]})
+
+
+func _orders() -> void:
+	var root := _header(["Order", "Product", "Route", "Plan boxes", "Received", "Priority", "Status"],
+		"Release reserves supplies and freezes the routing. Priority 1 runs first among eligible orders.")
+	for order in line.erp.orders.values():
+		var missing := line.erp.shortages(order) if order.status == "Created" else {}
+		var warning: String = "" if order.status == "Created" else order.warning
+		if order.status in ["Created", "Released"]:
+			var conflicts := line.route_conflicts(order)
+			if not conflicts.is_empty():
+				warning = "Queues behind " + ", ".join(conflicts)
+		if not missing.is_empty():
+			warning += ("\n" if not warning.is_empty() else "") + "Missing " + _amounts(missing)
+		var detail := "%s · %s v%d · %s · BOM v%d\n%s sim min processing estimate · Planned %s to %s\n%s\nReceived %s kg · Packed %d boxes · WIP %s\nConsumed %s\n%s" % [
+			order.id, order.route.id, order.route.version, order.version, order.recipe.bom_version, _qty(order.estimate / 60.0),
+			Book.date(order.start), Book.date(order.finish), _operation_lines(order.route, order.get("progress", {})),
+			_qty(order.received_kg), order.packed, _amounts(line.order_wip(order.id)), _amounts(order.consumed), warning]
+		_row(root, [order.id, order.code, order.route.id, order.boxes, order.received, order.priority, order.status],
+			{"key": order.id, "id": order.id, "detail": detail})
+
+
+func _procurement() -> void:
+	var b := line.erp
+	if _suppliers:
+		var root := _header(["Supplier", "Name", "Lead min", "Minimum", "Price / unit"], "Fictional supplier master")
+		for supplier in b.catalog.suppliers.values():
+			_row(root, [supplier.id, supplier.name, _qty(supplier.lead / 60.0), supplier.minimum, supplier.price],
+				{"key": supplier.id, "detail": ", ".join(PackedStringArray(supplier.codes))})
+		return
+	var root := _header(["PO", "Supplier", "Material", "Ordered", "Received", "Expected", "Status"],
+		"Open purchases receive automatically when simulated time reaches the delivery date.")
+	for po in b.purchases.values():
+		_row(root, [po.id, po.supplier, po.code, _qty(po.qty), _qty(po.received), Book.date(po.due), po.status],
+			{"key": po.id, "detail": "%s · %s · %s per %s" % [po.id, b.catalog.suppliers[po.supplier].name, _qty(po.price), b.catalog.materials[po.code].unit]})
+
+
+func _movements() -> void:
+	var root := _header(["Movement", "Time", "Material", "Quantity", "From → To", "Type", "Document"],
+		"Latest 200 postings. Continuous process flows are grouped in 15 simulated-second windows.")
+	for row in line.erp.journal():
+		_row(root, [row.id, Book.date(row.time), row.code, _qty(row.qty) + " " + row.unit,
+			row["from"] + " → " + row.to, row.type, row.document],
+			{"key": row.id, "detail": "%s · %s through %s\n%s" % [row.document, Book.date(row.time), Book.date(row.last), row.reason]})
+
+
+func _reports() -> void:
+	var root := _header(["Sample time", "Today's FG kg", "Stock kg", "Active order", "Short orders", "Delay min"],
+		"Recorded once per simulated minute. Current utilization  " + _utilization())
+	for row in line.erp.history.slice(maxi(0, line.erp.history.size() - 200)):
+		_row(root, [Book.date(row.time), _qty(row.kg), _qty(row.warehouse), row.order, row.shortages, _qty(row.delay / 60.0)])
+
+
+func _utilization() -> String:
+	var b := line.erp
+	return "Extruder %d%% · Coater 01 %d%% · Coater 02 %d%% · Packing %d%%" % [
+		roundi(100.0 * b.utilization.Extruder / maxf(1.0, b.now)),
+		roundi(100.0 * b.utilization.Coater / maxf(1.0, b.now)),
+		roundi(100.0 * b.utilization.get("Coater02", 0.0) / maxf(1.0, b.now)),
+		roundi(100.0 * b.utilization.Packer / maxf(1.0, b.now))]
+
+
+func _routing_master() -> void:
+	var catalog := line.erp.catalog
+	var root := _header(["Routing", "Description", "Version", "Machines", "Validity"],
+		"Operations use work center parameters. Select a routing for its full operation sequence.")
+	for route in catalog.routings.values():
+		var resolved: Dictionary = route.duplicate(true)
+		var machine_names := PackedStringArray()
+		for op in resolved.operations:
+			var center: Dictionary = catalog.work_centers[op.work_center]
+			machine_names.append(center.description)
+			op.merge({"description": center.description, "technical": center.technical, "available": center.available})
+		var versions := PackedStringArray()
+		for version in catalog.production_versions.values():
+			if version.routing == route.id and version.active:
+				versions.append("%s (%s)" % [version.id, version.product])
+		_row(root, [route.id, route.description, int(route.version), " → ".join(machine_names), _validity(route)],
+			{"key": route.id, "detail": _operation_lines(resolved, {}, true) + "\nVersions · " + ", ".join(versions)})
+
+
+func _work_center_master() -> void:
+	var root := _header(["Center", "Equipment", "Operation", "Technical", "Availability", "Order"],
+		"Master availability and live resource commitments are shown separately.")
+	for center in line.erp.catalog.work_centers.values():
+		var id := StringName(center.equipment)
+		var order := line.order_at(id)
+		var part := line.layout.objects[id]
+		_row(root, [center.id, center.description, center.operation.capitalize(), _technical(center.technical),
+			"Available" if center.available else "Offline", order.get("id", "—")], {"key": center.id,
+			"detail": "%s · %s · Grid (%d, %d) · %d × %d m\n%s\nFamilies %s · Coatings %s\nLive state %s · Assigned %s" % [
+				center.id, center.description, part.cell.x, part.cell.y, part.footprint().size.x, part.footprint().size.y,
+				_technical(center.technical), ", ".join(PackedStringArray(center.categories)),
+				"All family coatings" if center.coatings.is_empty() else ", ".join(PackedStringArray(center.coatings)),
+				line.work_center_status(id), order.get("id", "—")]})
+
+
+func _production_versions() -> void:
+	var catalog := line.erp.catalog
+	var root := _header(["Version", "Product", "BOM", "Routing", "Lot boxes", "Validity"],
+		"Search by SKU or production version. Validity uses simulated dates.")
+	for version in catalog.production_versions.values():
+		var route: Dictionary = catalog.routings[version.routing]
+		_row(root, [version.id, version.product, "v%d" % version.bom_version,
+			"%s v%d" % [version.routing, version.routing_version], "%d–%d" % [version.min_boxes, version.max_boxes],
+			_validity(version)], {"key": version.id, "detail": "%s · %s\n%s\n%s" % [
+				version.product, catalog.materials[version.product].name, route.description, _validity(version)]})
+
+
+func _validity(row: Dictionary) -> String:
+	if not row.active:
+		return "Inactive"
+	return "%s – %s" % [Book.date(row.valid_from), Book.date(row.valid_to) if row.valid_to > 0 else "open"]
+
+
+func _operation_lines(route: Dictionary, progress: Dictionary = {}, show_handling: bool = false) -> String:
+	var rows := PackedStringArray()
+	for op in route.operations:
+		var done := " · %s kg processed" % _qty(progress.get(op.type, 0.0)) if not progress.is_empty() else ""
+		rows.append("%02d %s · %s%s%s" % [op.number, op.description, _technical(op.technical), done,
+			" · Offline" if not op.get("available", true) else ""])
+		if show_handling:
+			rows.append("    %s → %s · %s" % [String(op.input).capitalize(), String(op.output).capitalize(), op.handling])
+	return "\n".join(rows)
+
+
+func _technical(technical: Dictionary) -> String:
+	var parts := PackedStringArray()
+	var units := {"rate": "kg/h", "batch_kg": "kg/batch", "cycle_seconds": "s/cycle",
+		"input_kg": "kg intake", "setup_seconds": "s setup"}
+	for field in units:
+		if technical.has(field):
+			parts.append("%s %s" % [_qty(technical[field]), units[field]])
+	return " · ".join(parts)
+
+
+func _select_order_version() -> void:
+	var order: Dictionary = line.erp.orders.get(_selected.get("id", ""), {})
+	if order.get("status") != "Created":
+		notice("Select a created order to change its production version.")
+		return
+	_production_form(order)
+
+
+func _highlight_order() -> void:
+	var id: String = _selected.get("id", "")
+	if id.is_empty():
+		notice("Select an order first.")
+		return
+	close()
+	route_requested.emit(id)
+
+
+func _production_form(existing: Dictionary = {}) -> void:
+	var fields := [["version", "Production version", []]]
+	if existing.is_empty():
+		fields = [["code", "Finished material", "FG-1002"], ["boxes", "Shipping boxes", "13"],
+			["start", "Start after sim minutes", "0"], ["priority", "Priority 1–9", "5"]] + fields
+	_form("Create production order" if existing.is_empty() else "Select production version", fields,
+		func(v: Dictionary) -> String:
+			if v.version.is_empty():
+				return "Choose an eligible production version."
+			if not existing.is_empty():
+				return line.erp.select_version(existing.id, v.version)
+			return _result(line.erp.create_order(v.code, v.boxes.to_int(),
+				line.erp.now + _number(v.start) * 60.0, v.priority.to_int(), v.version)),
+		func(inputs: Dictionary, preview: Label, refill: bool) -> void:
+			_update_version_picker(inputs, preview, refill, existing))
+
+
+func _update_version_picker(inputs: Dictionary, preview: Label, refill: bool, existing: Dictionary) -> void:
+	var book := line.erp
+	var code: String = inputs.code.text.strip_edges() if existing.is_empty() else existing.code
+	var boxes: int = inputs.boxes.text.to_int() if existing.is_empty() else existing.boxes
+	var when: float = book.now + _number(inputs.start.text) * 60.0 if existing.is_empty() else maxf(book.now, existing.start)
+	var picker: OptionButton = inputs.version
+	if refill:
+		var wanted := String(picker.get_selected_metadata()) if picker.selected >= 0 else String(existing.get("version", ""))
+		picker.clear()
+		for row in book.catalog.production_versions.values():
+			if row.product != code:
+				continue
+			var route := book.catalog.route_for(code, boxes, when, row.id, false)
+			if not route.error.is_empty():
+				continue
+			var unavailable: bool = route.operations.any(func(op: Dictionary) -> bool: return not op.available)
+			picker.add_item("%s · %s%s" % [row.id, route.description, " · Offline" if unavailable else ""])
+			var index := picker.item_count - 1
+			picker.set_item_metadata(index, row.id)
+			picker.set_item_disabled(index, unavailable)
+			if not unavailable and (picker.selected < 0 or wanted == row.id):
+				picker.select(index)
+		if picker.selected >= 0 and picker.is_item_disabled(picker.selected):
+			picker.select(-1)
+	if picker.selected < 0:
+		preview.text = "No available version for this SKU, lot size and date."
+		return
+	var recipe := book.catalog.recipe(code, boxes)
+	if not recipe.error.is_empty():
+		preview.text = recipe.error
+		return
+	var route := book.catalog.route_for(code, boxes, when, String(picker.get_selected_metadata()))
+	if not route.error.is_empty():
+		preview.text = route.error
+		return
+	var conflicts := line.route_conflicts({"id": existing.get("id", ""), "route": route})
+	var shared := PackedStringArray()
+	for operation in [route.operations[0], route.operations[3]]:
+		var owner := line.order_at(StringName(operation.equipment))
+		if not owner.is_empty():
+			shared.append("%s · %s" % [operation.description, owner.id])
+	preview.text = "BOM v%d · %s kg · %.1f sim min processing estimate\n%s\n%s%s" % [
+		route.bom_version, _qty(recipe.target), book.catalog.estimate(recipe, route) / 60.0,
+		_operation_lines(route), "Queues behind " + ", ".join(conflicts) if not conflicts.is_empty()
+			else "No oven or coater conflict.",
+		" Shared now · " + ", ".join(shared) if not shared.is_empty() else ""]
+
+
+
+func _new_order() -> void:
+	_production_form()
+
+
+func _new_demand() -> void:
+	_form("Create independent demand", [["code", "Finished material", "FG-1002"],
+		["boxes", "Shipping boxes", "13"], ["due", "Due after sim minutes", "10"]],
+		func(v: Dictionary) -> String:
+			return _result(line.erp.create_demand(v.code, v.boxes.to_int(), line.erp.now + _number(v.due) * 60.0)))
+
+
+func _new_purchase() -> void:
+	_form("Submit purchase order", [["supplier", "Supplier ID", "SUP-02"],
+		["code", "External material", "RM-COAT-1002"], ["qty", "Quantity in base unit", "10.4"]],
+		func(v: Dictionary) -> String: return _result(line.erp.purchase(v.supplier, v.code, _number(v.qty))))
+
+
+func _priority() -> void:
+	var id := String(_selected.get("id", ""))
+	var order: Dictionary = line.erp.orders.get(id, {})
+	if order.is_empty() or order.status not in ["Created", "Released"]:
+		notice("Select a pending order.")
+		return
+	_form("Schedule " + id, [["priority", "Priority 1–9", str(order.priority)],
+		["start", "Planned start at sim minute", _qty(order.start / 60.0)]],
+		func(v: Dictionary) -> String:
+			var start := _number(v.start) * 60.0
+			if not is_finite(start) or start < 0.0:
+				return "Enter a nonnegative simulated minute."
+			var error := line.erp.prioritize(id, v.priority.to_int())
+			if error.is_empty():
+				order.finish += start - order.start
+				order.start = start
+			return error)
+
+
+func _setup() -> void:
+	var b := line.erp
+	var alternate: Dictionary = b.catalog.center_at(&"Coater02")
+	_form("Setup times for future releases", [["coat", "Coater 01 · sim minutes", _qty(b.coat_setup_seconds / 60.0)],
+		["alternate", "Coater 02 · sim minutes", _qty(alternate.technical.setup_seconds / 60.0)],
+		["pack", "Packaging · sim minutes", _qty(b.pack_setup_seconds / 60.0)]],
+		func(v: Dictionary) -> String:
+			var coat := _number(v.coat)
+			var coat2 := _number(v.alternate)
+			var pack := _number(v.pack)
+			for duration in [coat, coat2, pack]:
+				if not Line.Settings.Master.number(duration, 0, 1440):
+					return "Enter 0–1440 simulated minutes."
+			b.coat_setup_seconds = coat * 60.0
+			b.pack_setup_seconds = pack * 60.0
+			b.catalog.center_at(&"Coater").technical.setup_seconds = b.coat_setup_seconds
+			b.catalog.center_at(&"Packer").technical.setup_seconds = b.pack_setup_seconds
+			alternate.technical.setup_seconds = coat2 * 60.0
+			b.changed()
+			return "")
+
+
+func _order_action(action: String) -> void:
+	var id := String(_selected.get("id", ""))
+	if id.is_empty():
+		notice("Select a production order.")
+		return
+	var result := line.erp.release(id) if action == "release" else line.erp.transition(id, action)
+	notice("Updated " + id if result.is_empty() else result)
+	_render()
+
+
+func _confirm_order(status: String) -> void:
+	var id := String(_selected.get("id", ""))
+	if id.is_empty():
+		notice("Select a production order.")
+		return
+	_form("Cancel " + id + " and release its reservation?", [],
+		func(_v: Dictionary) -> String: return line.erp.transition(id, status))
+
+
+func _transfer() -> void:
+	_form("Post location transfer", [["code", "Material", _selected.get("code", "RM-FLOUR")],
+		["qty", "Quantity in base unit", "25"], ["source", "From location", "RM-WH"],
+		["target", "To location", "RM-STAGE"], ["reason", "Reason", "Manual replenishment"]],
+		func(v: Dictionary) -> String:
+			return line.erp.manual_transfer(v.code, _number(v.qty), v.source, v.target, v.reason))
+
+
+func _adjust() -> void:
+	_form("Adjust raw warehouse stock", [["code", "Material", _selected.get("code", "RM-FLOUR")],
+		["qty", "Signed quantity in base unit", "-1"], ["reason", "Reason", "Physical count"]],
+		func(v: Dictionary) -> String: return line.erp.adjust(v.code, _number(v.qty), v.reason))
+
+
+func _run_mrp() -> void:
+	plan.run(line.erp, line.erp_fg())
+	notice("MRP calculated at " + Book.date(line.erp.now))
+	_render()
+
+
+func _convert() -> void:
+	var key := String(_selected.get("proposal", ""))
+	if key.is_empty():
+		notice("Select a purchase or planned production proposal.")
+		return
+	_form("Convert selected proposal to a document?", [], func(_v: Dictionary) -> String:
+		return _result(plan.convert(key, line.erp, line.erp_fg())))
+
+
+func _edit_material() -> void:
+	var code := String(_selected.get("code", ""))
+	var catalog := line.erp.catalog
+	var item: Dictionary = catalog.materials.get(code, {})
+	if item.is_empty():
+		notice("Select a material.")
+		return
+	var fields := [["name", "Description", item.name], ["minimum", "Safety stock in base unit", _qty(item.minimum)],
+		["lead", "Lead time · simulated minutes", _qty(item.lead / 60.0)], ["active", "Active (yes / no)", "yes" if item.active else "no"]]
+	if item.type == "FERT":
+		fields.append_array([["pack", "Net kg per consumer pack", _qty(item.pack_kg)],
+			["packs", "Packs per shipping box", str(item.packs_per_box)],
+			["pallet", "Shipping boxes per pallet", str(item.boxes_per_pallet)]])
+	_form("Edit " + code, fields, func(v: Dictionary) -> String:
+		var error := catalog.edit_material(code, v.name, _number(v.minimum), _number(v.lead) * 60.0,
+			v.active.to_lower() == "yes", _number(v.get("pack", "0")),
+			String(v.get("packs", "0")).to_int(), String(v.get("pallet", "0")).to_int())
+		if error.is_empty():
+			line.erp.changed()
+		return error)
+
+
+func _clone_product() -> void:
+	var code := String(_selected.get("code", ""))
+	_form("Clone selected finished product", [["code", "New stable code", "FG-1006"],
+		["name", "Description", "New wafer variant"]], func(v: Dictionary) -> String:
+		var error := line.erp.catalog.clone_product(code, v.code, v.name)
+		if error.is_empty():
+			line.erp.changed()
+		return error)
+
+
+func _edit_header() -> void:
+	var code := String(_selected.get("code", ""))
+	var b := line.erp
+	var current: Dictionary = b.catalog.boms.get(code, {})
+	if current.is_empty():
+		notice("Select a BOM parent.")
+		return
+	_form("Edit BOM " + code, [["base", "Base quantity in parent unit", _qty(current.base)],
+		["active", "Active (yes / no)", "yes" if current.active else "no"]],
+		func(v: Dictionary) -> String:
+			var error := b.catalog.save_bom(code, _number(v.base), current.parts, v.active.to_lower() == "yes")
+			if error.is_empty():
+				b.changed()
+			return error)
+
+
+func _edit_component(adding: bool = false) -> void:
+	var child := String(_selected.get("code", ""))
+	var parent := String(_selected.get("parent", ""))
+	var b := line.erp
+	if parent.is_empty() or adding:
+		parent = child
+		child = ""
+	var bom: Dictionary = b.catalog.boms.get(parent, {})
+	if bom.is_empty():
+		notice("Select a BOM parent to add a component, or select an existing component.")
+		return
+	_form("Component in " + parent, [["code", "Component material", child],
+		["qty", "Quantity per BOM base (0 removes)", _qty(_selected.get("quantity", 0.0))],
+		["scrap", "Scrap percentage", _qty(float(_selected.get("scrap", 0.0)) * 100.0)]],
+		func(v: Dictionary) -> String:
+			if not b.catalog.materials.has(v.code) or not is_finite(_number(v.qty)) or _number(v.qty) < 0:
+				return "Use a known component and a nonnegative quantity."
+			var parts: Array = bom.parts.duplicate(true)
+			for index in range(parts.size() - 1, -1, -1):
+				if parts[index].code == child:
+					parts.remove_at(index)
+			if _number(v.qty) > 0.0:
+				parts.append({"code": v.code, "qty": _number(v.qty), "unit": b.catalog.materials[v.code].unit,
+					"scrap": _number(v.scrap) / 100.0})
+			var error := b.catalog.save_bom(parent, bom.base, parts, bom.active)
+			if error.is_empty():
+				b.changed()
+			return error)
+
+
+func _locate() -> void:
+	var location := String(_selected.get("location", ""))
+	if location.is_empty():
+		notice("Select a material or stock row first.")
+		return
+	close()
+	locate_requested.emit(location)
+
+
+func _form(title: String, fields: Array, submit: Callable, update: Callable = Callable()) -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = title
+	dialog.ok_button_text = "Confirm"
+	dialog.dialog_hide_on_ok = false
+	add_child(dialog)
+	var form := VBoxContainer.new()
+	form.custom_minimum_size.x = 440
+	dialog.add_child(form)
+	var inputs := {}
+	for field in fields:
+		form.add_child(_label(field[1], 14, Color.WHITE))
+		if field[2] is Array:
+			var picker := OptionButton.new()
+			form.add_child(picker)
+			inputs[field[0]] = picker
+		else:
+			var edit := LineEdit.new()
+			edit.text = str(field[2])
+			form.add_child(edit)
+			inputs[field[0]] = edit
+	if update.is_valid():
+		var preview := _label("", 13, Color("#daeaf6"))
+		preview.custom_minimum_size = Vector2(450, 130)
+		preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		form.add_child(preview)
+		for input in inputs.values():
+			if input is LineEdit:
+				input.text_changed.connect(func(_value: String) -> void: update.call(inputs, preview, true))
+			elif input is OptionButton:
+				input.item_selected.connect(func(_index: int) -> void: update.call(inputs, preview, false))
+		update.call(inputs, preview, true)
+	var feedback := _label("", 14, Color("#ffc289"))
+	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	form.add_child(feedback)
+	dialog.confirmed.connect(func() -> void:
+		var values := {}
+		for key in inputs:
+			var input: Control = inputs[key]
+			if input is OptionButton:
+				values[key] = String(input.get_selected_metadata()) if input.selected >= 0 else ""
+			else:
+				values[key] = input.text.strip_edges()
+		var before := _status.text
+		var error: String = submit.call(values)
+		if error.is_empty():
+			dialog.hide()
+			if _status.text == before:
+				notice("Transaction saved." if fields.size() > 0 else "Done.")
+			_render()
+			dialog.queue_free()
+		else:
+			feedback.text = error)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered()
+
+
+func _result(result: Dictionary) -> String:
+	if result.error.is_empty():
+		notice("Created " + result.id)
+	return result.error
+
+
+func _number(copy: String) -> float:
+	return copy.to_float() if copy.is_valid_float() else NAN
+
+
+func _qty(value: float) -> String:
+	return String.num(value, 4)
+
+
+func _amounts(values: Dictionary) -> String:
+	var parts := PackedStringArray()
+	for key in values:
+		parts.append("%s %s" % [key, _qty(values[key])])
+	return ", ".join(parts) if not parts.is_empty() else "—"
+
+
+func _action(copy: String, callback: Callable) -> void:
+	var button := _button(_actions, copy, callback)
+	button.add_theme_font_size_override("font_size", 13)
+
+
+func _button(parent: Control, copy: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = copy
+	Style.button_style(button)
+	button.pressed.connect(callback)
+	parent.add_child(button)
+	return button
+
+
+func _label(copy: String, size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = copy
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_font_size_override("font_size", size)
+	return label
+
+
+func _spacer(parent: Control) -> void:
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(spacer)

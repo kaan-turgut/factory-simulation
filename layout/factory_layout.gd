@@ -1,0 +1,391 @@
+extends RefCounted
+## Chocolate Works floor plan. Equipment anchors, loading points and routes share this model.
+
+const Master = preload("res://erp/master_files.gd")
+const Grid = preload("res://layout/factory_grid.gd")
+const Placement = preload("res://layout/placement.gd")
+const Rules = preload("res://layout/placement_rules.gd")
+
+const DEFAULT_SIZE := Vector2i(88, 32)
+const MIN_SIZE := Vector2i(88, 25)
+const ORIGIN := Vector3(-32, 0, 13)
+const PLATFORM_HEIGHT := 3.5
+const CART_LANE := 11.2
+const WALK_LANE := 9.45
+const LIFT_LANE := 5.8
+const REAR_LANE := 17.4
+const PALLET_BAYS := 3
+const WAREHOUSE_SLOTS := 8
+const MAX_CREW := 4
+const MAX_CARTS := 4
+const CART_BODY := Vector3(1.22, 1.75, 1.49)
+const CART_OFFSET := Vector3(0, 0, 0.67)
+
+# Port offsets use local +X right, +Y up, +Z rear, measured from the footprint center.
+const LINKS := {
+	&"CartonBelt": [&"Packer", &"belt_out", &"Palletizer", &"belt_in"]
+}
+
+const SUPPLY_STATIONS := {"COAT-IN": &"Coater", "COAT-IN-02": &"Coater02", "PACK-IN": &"Packer"}
+
+var error := ""
+var grid: Grid
+var objects: Dictionary[StringName, Placement] = {}
+var reserved: Array[Rect2i] = []
+
+
+func _init(dimensions: Vector2i = Vector2i.ZERO, directory: String = "", snapshot: Dictionary = {}) -> void:
+	error = _load(dimensions, directory, snapshot)
+
+
+func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> String:
+	var result := Master.read("factory_layout", directory) if snapshot.is_empty() else {"error": "", "data": snapshot}
+	if not result.error.is_empty():
+		return result.error
+	if not result.data is Dictionary or not _numbers(result.data.get("size"), 2, true, 1) or not result.data.get("objects") is Array:
+		return "factory_layout.json: expected size and equipment definitions."
+	var data: Dictionary = result.data
+	var configured := Vector2i(int(data.size[0]), int(data.size[1]))
+	if configured != configured.max(MIN_SIZE):
+		return "factory_layout.json size: too small for factory aisles."
+	grid = Grid.new(configured if dimensions == Vector2i.ZERO else dimensions.max(MIN_SIZE), ORIGIN)
+	var width := grid.size.x
+	for row in data.objects:
+		if not row is Dictionary or not row.get("id") is String or row.id.is_empty() or objects.has(StringName(row.id)):
+			return "factory_layout.json: missing or duplicate equipment ID."
+		if not row.get("kind") is String or not _numbers(row.get("cell"), 2, true) \
+			or not _numbers(row.get("size"), 2, true, 1) or not _numbers(row.get("clearance"), 4, true) \
+			or not Master.number(row.get("height"), 0.001) or not Master.number(row.get("elevation")) \
+			or not Master.number(row.get("turns"), 0, 3, true) or not row.get("ports") is Dictionary or not row.get("movable") is bool:
+			return "factory_layout.json [%s]: invalid footprint, elevation, clearance, orientation or ports." % row.id
+		var ports: Dictionary[StringName, Vector3] = {}
+		for key in row.ports:
+			var point: Array = row.ports[key] if row.ports[key] is Array else []
+			if not _numbers(point, 3, false, -INF):
+				return "factory_layout.json [%s].ports.%s: expected three finite coordinates." % [row.id, key]
+			ports[StringName(key)] = Vector3(point[0], point[1], point[2])
+		var x := int(row.cell[0]) + (width - configured.x if row.id == "Warehouse" else 0)
+		_define(Placement.new(StringName(row.id), StringName(row.kind), Vector2i(x, int(row.cell[1])),
+			Vector2i(int(row.size[0]), int(row.size[1])), row.height, row.elevation, int(row.turns),
+			Vector4i(int(row.clearance[0]), int(row.clearance[1]), int(row.clearance[2]), int(row.clearance[3])), ports, row.movable))
+	var required := {&"Platform":[&"pick_0", &"pick_1"], &"Stairs":[], &"Hopper":[&"drop_0", &"drop_1", &"outlet"],
+		&"Extruder":[&"feed", &"raw_dock"], &"Oven":[&"raw_dock", &"cooked_dock"], &"Oven02":[&"raw_dock", &"cooked_dock"],
+		&"Coater":[&"cooked_dock", &"coated_dock", &"supply"], &"Coater02":[&"cooked_dock", &"coated_dock", &"supply"],
+		&"Packer":[&"belt_out", &"supply"], &"PackagingWIP":[&"coated_dock"],
+		&"Palletizer":[&"belt_in"], &"Warehouse":[], &"RawParking":[], &"CookedParking":[], &"CoatedParking":[], &"RawWarehouse":[]}
+	for key in required:
+		if not objects.has(key):
+			return "factory_layout.json: missing required equipment %s." % key
+		for port_id in required.get(key, []):
+			if not objects[key].ports.has(port_id):
+				return "factory_layout.json [%s].ports.%s: required dock." % [key, port_id]
+	var cart_end := objects[&"Palletizer"].cell.x
+	var lift_start := cart_end - 2
+	reserved = [Rect2i(0, 0, width, 2), Rect2i(0, 8, cart_end, 2),
+		Rect2i(0, 10, cart_end, 2), Rect2i(lift_start, 4, width - lift_start, 3)]
+	return ""
+
+
+func snapshot() -> Dictionary:
+	var rows := []
+	for item in objects.values():
+		var ports := {}
+		for key in item.ports:
+			var point: Vector3 = item.ports[key]
+			ports[String(key)] = [point.x, point.y, point.z]
+		rows.append({"id": String(item.id), "kind": String(item.kind), "cell": [item.cell.x, item.cell.y],
+			"size": [item.size.x, item.size.y], "height": item.height, "elevation": item.elevation,
+			"turns": item.turns, "clearance": [item.clearance.x, item.clearance.y, item.clearance.z, item.clearance.w],
+			"ports": ports, "movable": item.movable})
+	return {"size": [grid.size.x, grid.size.y], "objects": rows}
+
+
+func _numbers(values: Variant, count: int, whole: bool, low: float = 0.0) -> bool:
+	if not values is Array or values.size() != count:
+		return false
+	for value in values:
+		if not Master.number(value, low, INF, whole):
+			return false
+	return true
+
+
+func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
+	if location == "RM-STAGE":
+		return grid.to_world(Vector2(1.0, 10.0))
+	if SUPPLY_STATIONS.has(location):
+		return port(SUPPLY_STATIONS[location], &"supply", plan)
+	return grid.to_world(Vector2(10.0, 2.15))
+
+
+func supply_route(from: Vector3, target: Vector3) -> Array[Vector3]:
+	return route(from, target, 2.15)
+
+
+func _define(item: Placement) -> void:
+	assert(not objects.has(item.id), "Duplicate layout ID")
+	objects[item.id] = item
+
+
+func center(id: StringName) -> Vector3:
+	return objects[id].center(grid)
+
+
+func port(id: StringName, name: StringName, plan: Dictionary = objects) -> Vector3:
+	return plan[id].port(grid, name)
+
+
+func lane_z(lane: float) -> float:
+	return grid.to_world(Vector2(0, lane)).z
+
+
+func platform_pick(index: int) -> Vector3:
+	return port(&"Platform", StringName("pick_%d" % index))
+
+
+func platform_drop(index: int) -> Vector3:
+	return port(&"Hopper", StringName("drop_%d" % index))
+
+
+func crew_home(index: int) -> Vector3:
+	return grid.to_world(Vector2(7.0 + index * 1.3, 8.05))
+
+
+func cart_home(index: int, raw: bool) -> Vector3:
+	var offsets := [0.0, 1.55, 3.1, 6.75]
+	var parking := objects[&"RawParking" if raw else &"CookedParking"]
+	var x: float = -2.75 + index * 1.62 if raw else -3.5 + offsets[index]
+	return parking.local_point(grid, Vector3(x, 0, -0.1))
+
+
+func coated_cart_home(index: int) -> Vector3:
+	return objects[&"CoatedParking"].local_point(grid, Vector3(-3.5 + index * 2.0, 0, -0.1))
+
+
+func pallet_position(index: int) -> Vector3:
+	return objects[&"Palletizer"].local_point(grid, Vector3(-2.65 + index * 2.65, 0, -2.35))
+
+
+func pallet_approach(index: int) -> Vector3:
+	return pallet_position(index) + Vector3(0, 0, 1.65)
+
+
+func warehouse_slot(index: int) -> Vector3:
+	return objects[&"Warehouse"].local_point(grid, Vector3(-3.60 + (index % 4) * 2.2,
+		0, -2.55 + floori(index / 4.0) * 5.2))
+
+
+func warehouse_approach(index: int) -> Vector3:
+	return warehouse_slot(index) + Vector3(0, 0, 1.65)
+
+
+func lift_home() -> Vector3:
+	return grid.to_world(Vector2(objects[&"Palletizer"].cell.x + 8.6, LIFT_LANE))
+
+
+func lift_side_x() -> float:
+	return grid.to_world(Vector2(grid.size.x - 1.05, 0)).x
+
+
+func route(from: Vector3, to: Vector3, lane: float) -> Array[Vector3]:
+	if from.is_equal_approx(to):
+		return []
+	if is_equal_approx(from.x, to.x):
+		return [to]
+	var z := lane_z(lane)
+	return [Vector3(from.x, from.y, z), Vector3(to.x, to.y, z), to]
+
+
+func lift_to_slot(from: Vector3, index: int) -> Array[Vector3]:
+	var target := warehouse_approach(index)
+	if index < 4:
+		return route(from, target, LIFT_LANE)
+	var rear := lane_z(REAR_LANE)
+	return [Vector3(from.x, 0, lane_z(LIFT_LANE)), Vector3(lift_side_x(), 0, lane_z(LIFT_LANE)),
+		Vector3(lift_side_x(), 0, rear), Vector3(target.x, 0, rear), target]
+
+
+func lift_from_slot(index: int) -> Array[Vector3]:
+	var from := warehouse_approach(index)
+	if index < 4:
+		return route(from, lift_home(), LIFT_LANE)
+	var rear := lane_z(REAR_LANE)
+	return [Vector3(from.x, 0, rear), Vector3(lift_side_x(), 0, rear),
+		Vector3(lift_side_x(), 0, lane_z(LIFT_LANE)), lift_home()]
+
+
+func belt(id: StringName, plan: Dictionary = objects) -> Array[Vector3]:
+	var link: Array = LINKS[id]
+	return [port(link[0], link[1], plan), port(link[2], link[3], plan)]
+
+
+func definition(id: StringName) -> Placement:
+	if not LINKS.has(id):
+		return objects.get(id)
+	var span := belt(id)
+	var a := grid.coordinates(span[0])
+	var b := grid.coordinates(span[1])
+	var across := Vector2(0, 0.60) if absf(a.x - b.x) > absf(a.y - b.y) else Vector2(0.60, 0)
+	var first := Vector2i((a.min(b) - across).floor())
+	var last := Vector2i((a.max(b) + across).ceil())
+	return Placement.new(id, &"conveyor", first, last - first, span[0].y + 0.20)
+
+
+func validate_move(id: StringName, anchor: Vector2i, orientation: int) -> String:
+	if not objects.has(id) or not objects[id].movable:
+		return "This assembly has a fixed location."
+	var item: Placement = objects[id].at(anchor, orientation)
+	var reason := Rules.validate(grid, item, objects, reserved)
+	if not reason.is_empty():
+		return reason
+	var plan := objects.duplicate()
+	plan[item.id] = item
+	return _validate_connections(plan)
+
+
+func move(id: StringName, anchor: Vector2i, orientation: int) -> String:
+	var reason := validate_move(id, anchor, orientation)
+	if reason.is_empty():
+		objects[id] = objects[id].at(anchor, orientation)
+	return reason
+
+
+func validate() -> String:
+	if not error.is_empty():
+		return error
+	for item: Placement in objects.values():
+		var reason := Rules.validate(grid, item, objects, reserved)
+		if not reason.is_empty():
+			return "factory_layout.json [%s]: %s" % [item.id, reason]
+	var problem := _validate_connections(objects)
+	return "factory_layout.json: " + problem if not problem.is_empty() else ""
+
+
+func _validate_connections(plan: Dictionary) -> String:
+	if not port(&"Extruder", &"feed", plan).is_equal_approx(port(&"Hopper", &"outlet", plan)):
+		return "The hopper outlet must align with the extruder feed."
+	var deck: Placement = plan[&"Platform"]
+	var hopper: Placement = plan[&"Hopper"]
+	var walking_area := Rect2(deck.footprint()).grow(-0.2)
+	for index in 2:
+		var pick := grid.coordinates(port(&"Platform", StringName("pick_%d" % index), plan))
+		var drop := grid.coordinates(port(&"Hopper", StringName("drop_%d" % index), plan))
+		if not walking_area.has_point(pick) or not walking_area.has_point(drop) \
+				or _segment_hits(pick, drop, Rect2(hopper.footprint()).grow(0.18)):
+			return "A platform worker would lose access to the hopper."
+	var obstacles := _obstacles(plan)
+	var docks: Array[Vector3] = [
+		port(&"Extruder", &"raw_dock", plan), port(&"Oven", &"raw_dock", plan),
+		port(&"Oven", &"cooked_dock", plan), port(&"Coater", &"cooked_dock", plan),
+		port(&"Oven02", &"raw_dock", plan), port(&"Oven02", &"cooked_dock", plan), port(&"Coater02", &"cooked_dock", plan),
+		port(&"Coater", &"coated_dock", plan), port(&"Coater02", &"coated_dock", plan), port(&"PackagingWIP", &"coated_dock", plan)
+	]
+	for index in MAX_CARTS:
+		docks.append(cart_home(index, true))
+		docks.append(cart_home(index, false))
+		docks.append(coated_cart_home(index))
+	var destinations := docks.duplicate()
+	for index in MAX_CREW:
+		destinations.append(crew_home(index))
+	if not _lane_clear(docks, CART_LANE, 0.34, obstacles, docks):
+		return "A cart dock or cart route would be obstructed."
+	if not _lane_clear(destinations, WALK_LANE, 0.22, obstacles, docks):
+		return "A worker would lose access to a cart or dock."
+	for index in PALLET_BAYS:
+		var approach := pallet_approach(index)
+		if not _path_clear(lift_home(), route(lift_home(), approach, LIFT_LANE), 0.88, obstacles):
+			return "A forklift pickup route would be obstructed."
+		for slot in WAREHOUSE_SLOTS:
+			if not _path_clear(approach, lift_to_slot(approach, slot), 0.88, obstacles):
+				return "A forklift delivery route would be obstructed."
+	for slot in WAREHOUSE_SLOTS:
+		if not _path_clear(warehouse_approach(slot), lift_from_slot(slot), 0.88, obstacles):
+			return "A forklift return route would be obstructed."
+	var supply_home := supply_point("RM-WH", plan)
+	for location in ["RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN"]:
+		if not _path_clear(supply_home, supply_route(supply_home, supply_point(location, plan)), 0.75, obstacles):
+			return "A supply shuttle route to %s would be obstructed." % location
+	for key: StringName in LINKS:
+		var endpoints := belt(key, plan)
+		var link: Array = LINKS[key]
+		var direction := endpoints[1] - endpoints[0]
+		var source: Placement = plan[link[0]]
+		var target: Placement = plan[link[2]]
+		var heading := Vector3.RIGHT.rotated(Vector3.UP, source.yaw())
+		var intake := Vector3.RIGHT.rotated(Vector3.UP, target.yaw())
+		if direction.dot(heading) < 0.6 or direction.length() > 12.0 \
+			or direction.cross(heading).length() > 0.001 or heading.dot(intake) < 0.99:
+			return "Keep the connected belt ports aligned and within 12 m."
+		if not _path_clear(endpoints[0], [endpoints[1]], 0.49, obstacles, [link[0], link[2]]):
+			return "A conveyor connection would be obstructed."
+	return ""
+
+
+func _lane_clear(
+	points: Array[Vector3], lane: float, radius: float, obstacles: Dictionary, parked_carts: Array[Vector3]
+) -> bool:
+	var z := lane_z(lane)
+	var low := INF
+	var high := -INF
+	var blockers := obstacles.duplicate()
+	for index in parked_carts.size():
+		var key := StringName("CartStop%d" % index)
+		blockers[key] = _area(parked_carts[index] - CART_OFFSET, Vector2(CART_BODY.x, CART_BODY.z))
+	for point in points:
+		var junction := Vector3(point.x, 0, z)
+		var own := parked_carts.find(point)
+		var ignored := [StringName("CartStop%d" % own)] if own >= 0 else []
+		if not _path_clear(point, [junction], radius, blockers, ignored):
+			return false
+		low = minf(low, point.x)
+		high = maxf(high, point.x)
+	return _path_clear(Vector3(low, 0, z), [Vector3(high, 0, z)], radius, blockers)
+
+
+func _obstacles(plan: Dictionary) -> Dictionary[StringName, Rect2]:
+	var result: Dictionary[StringName, Rect2] = {}
+	for item: Placement in plan.values():
+		if is_zero_approx(item.elevation) and (item.kind in [&"machine", &"access"] or item.id == &"RawWarehouse"):
+			result[item.id] = Rect2(item.footprint())
+	result[&"PackagingWIP"] = _area(center(&"PackagingWIP") + Vector3(1.05, 0, -0.35), Vector2(3.4, 1.25))
+	result[&"Palletizer"] = _area(center(&"Palletizer") + Vector3(-0.66, 0, -2.0), Vector2(6.7, 1.5))
+	for index in PALLET_BAYS:
+		result[StringName("PalletBay%d" % index)] = _area(pallet_position(index), Vector2(1.70, 1.36))
+	for index in WAREHOUSE_SLOTS:
+		result[StringName("WarehouseSlot%d" % index)] = _area(warehouse_slot(index), Vector2(1.70, 1.36))
+	return result
+
+
+func _area(at: Vector3, size: Vector2) -> Rect2:
+	return Rect2(grid.coordinates(at) - size * 0.5, size)
+
+
+func _path_clear(
+	start: Vector3, path: Array[Vector3], radius: float, obstacles: Dictionary,
+	ignore: Array = []
+) -> bool:
+	var from := grid.coordinates(start)
+	var inside := Rect2(grid.bounds()).grow(-radius)
+	if not inside.has_point(from):
+		return false
+	var points: Array[Vector3] = [start]
+	points.append_array(path)
+	for point: Vector3 in points:
+		var to := grid.coordinates(point)
+		if not inside.has_point(to):
+			return false
+		for id in obstacles:
+			if id not in ignore and _segment_hits(from, to, obstacles[id].grow(radius)):
+				return false
+		from = to
+	return true
+
+
+func _segment_hits(from: Vector2, to: Vector2, rect: Rect2) -> bool:
+	if rect.has_point(from) or rect.has_point(to):
+		return true
+	var corners := [rect.position, Vector2(rect.end.x, rect.position.y),
+		rect.end, Vector2(rect.position.x, rect.end.y)]
+	for index in corners.size():
+		if Geometry2D.segment_intersects_segment(from, to, corners[index], corners[(index + 1) % 4]) != null:
+			return true
+	return false

@@ -1,0 +1,11 @@
+{
+  "COAT-IN": "Coater supplies",
+  "FG-WH": "Finished goods warehouse",
+  "PACK-IN": "Packaging supplies",
+  "RM-STAGE": "Ingredient mezzanine",
+  "RM-WH": "Raw material warehouse",
+  "TRANSIT": "Supply shuttle",
+  "WIP": "In-process stock",
+  "COAT-IN-02": "Coater 02 supplies",
+  "PACK-WIP": "Coated wafers at packaging"
+}

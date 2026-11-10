@@ -1,0 +1,99 @@
+[
+  {
+    "id": "WC-EXT-01",
+    "description": "Extruder 01",
+    "equipment": "Extruder",
+    "operation": "extrude",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "rate": 9000
+    },
+    "available": true
+  },
+  {
+    "id": "WC-OVN-01",
+    "description": "Oven 01",
+    "equipment": "Oven",
+    "operation": "bake",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 75,
+      "cycle_seconds": 36
+    },
+    "available": true
+  },
+  {
+    "id": "WC-OVN-02",
+    "description": "Oven 02",
+    "equipment": "Oven02",
+    "operation": "bake",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 60,
+      "cycle_seconds": 42
+    },
+    "available": true
+  },
+  {
+    "id": "WC-COT-01",
+    "description": "Coater 01",
+    "equipment": "Coater",
+    "operation": "coat",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "rate": 7800,
+      "input_kg": 65,
+      "setup_seconds": 600
+    },
+    "available": true,
+    "supply_location": "COAT-IN"
+  },
+  {
+    "id": "WC-COT-02",
+    "description": "Coater 02",
+    "equipment": "Coater02",
+    "operation": "coat",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [
+      "Milk",
+      "Dark",
+      "White"
+    ],
+    "technical": {
+      "rate": 6900,
+      "input_kg": 55,
+      "setup_seconds": 480
+    },
+    "available": true,
+    "supply_location": "COAT-IN-02"
+  },
+  {
+    "id": "WC-PKG-01",
+    "description": "Packaging 01",
+    "equipment": "Packer",
+    "operation": "pack",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "rate": 7200,
+      "setup_seconds": 300
+    },
+    "available": true
+  }
+]

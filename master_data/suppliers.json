@@ -1,0 +1,58 @@
+[
+	{
+		"codes": [
+			"RM-FLOUR",
+			"RM-SUGAR"
+		],
+		"id": "SUP-01",
+		"lead": 60.0,
+		"minimum": 5.0,
+		"name": "Mill & Meadow Ingredients",
+		"price": 1.2
+	},
+	{
+		"codes": [
+			"RM-COAT-1001",
+			"RM-COAT-1002",
+			"RM-COAT-1003",
+			"RM-COAT-1004",
+			"RM-COAT-1005"
+		],
+		"id": "SUP-02",
+		"lead": 90.0,
+		"minimum": 1.0,
+		"name": "Cocoa Quay",
+		"price": 4.8
+	},
+	{
+		"codes": [
+			"RM-OIL",
+			"RM-WATER"
+		],
+		"id": "SUP-03",
+		"lead": 60.0,
+		"minimum": 5.0,
+		"name": "Clearbrook Oils & Supply",
+		"price": 1.55
+	},
+	{
+		"codes": [
+			"PK-PALLET",
+			"PK-BOX-1001",
+			"PK-LABEL-1001",
+			"PK-BOX-1002",
+			"PK-LABEL-1002",
+			"PK-BOX-1003",
+			"PK-LABEL-1003",
+			"PK-BOX-1004",
+			"PK-LABEL-1004",
+			"PK-BOX-1005",
+			"PK-LABEL-1005"
+		],
+		"id": "SUP-04",
+		"lead": 60.0,
+		"minimum": 5.0,
+		"name": "Foldline Packaging",
+		"price": 0.42
+	}
+]

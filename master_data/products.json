@@ -1,0 +1,62 @@
+[
+	{
+		"boxes_per_pallet": 8,
+		"coating": "Milk",
+		"coating_color": "#86533f",
+		"code": "FG-1001",
+		"family": "Chocolate wafers",
+		"pack_kg": 0.1,
+		"package_color": "#5974bc",
+		"packs_per_box": 50,
+		"shelf_days": 180,
+		"wafer": "Crisp wheat wafer"
+	},
+	{
+		"boxes_per_pallet": 8,
+		"coating": "Dark",
+		"coating_color": "#492b26",
+		"code": "FG-1002",
+		"family": "Chocolate wafers",
+		"pack_kg": 0.08,
+		"package_color": "#51346a",
+		"packs_per_box": 50,
+		"shelf_days": 180,
+		"wafer": "Crisp wheat wafer"
+	},
+	{
+		"boxes_per_pallet": 10,
+		"coating": "White",
+		"coating_color": "#f2d6a0",
+		"code": "FG-1003",
+		"family": "Chocolate wafers",
+		"pack_kg": 0.12,
+		"package_color": "#d1b256",
+		"packs_per_box": 40,
+		"shelf_days": 180,
+		"wafer": "Crisp wheat wafer"
+	},
+	{
+		"boxes_per_pallet": 6,
+		"coating": "Hazelnut",
+		"coating_color": "#ab704c",
+		"code": "FG-1004",
+		"family": "Chocolate wafers",
+		"pack_kg": 0.12,
+		"package_color": "#4d866c",
+		"packs_per_box": 50,
+		"shelf_days": 180,
+		"wafer": "Crisp wheat wafer"
+	},
+	{
+		"boxes_per_pallet": 10,
+		"coating": "Strawberry",
+		"coating_color": "#e495a7",
+		"code": "FG-1005",
+		"family": "Chocolate wafers",
+		"pack_kg": 0.09,
+		"package_color": "#c65376",
+		"packs_per_box": 40,
+		"shelf_days": 180,
+		"wafer": "Crisp wheat wafer"
+	}
+]

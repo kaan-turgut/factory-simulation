@@ -1,0 +1,322 @@
+[
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "DOUGH-01",
+		"parts": [
+			{
+				"code": "RM-FLOUR",
+				"qty": 0.55,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.2,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-OIL",
+				"qty": 0.1,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-WATER",
+				"qty": 0.15,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "RAW-01",
+		"parts": [
+			{
+				"code": "DOUGH-01",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "BAKED-01",
+		"parts": [
+			{
+				"code": "RAW-01",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "COATED-1001",
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.8,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-COAT-1001",
+				"qty": 0.2,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 5.0,
+		"parent": "FG-1001",
+		"parts": [
+			{
+				"code": "COATED-1001",
+				"qty": 5.0,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "PK-BOX-1001",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-LABEL-1001",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"scrap": 0.0,
+				"unit": "ea"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "COATED-1002",
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.8,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-COAT-1002",
+				"qty": 0.2,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 4.0,
+		"parent": "FG-1002",
+		"parts": [
+			{
+				"code": "COATED-1002",
+				"qty": 4.0,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "PK-BOX-1002",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-LABEL-1002",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"scrap": 0.0,
+				"unit": "ea"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "COATED-1003",
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.8,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-COAT-1003",
+				"qty": 0.2,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 4.8,
+		"parent": "FG-1003",
+		"parts": [
+			{
+				"code": "COATED-1003",
+				"qty": 4.8,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "PK-BOX-1003",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-LABEL-1003",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.1,
+				"scrap": 0.0,
+				"unit": "ea"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "COATED-1004",
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.8,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-COAT-1004",
+				"qty": 0.2,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 6.0,
+		"parent": "FG-1004",
+		"parts": [
+			{
+				"code": "COATED-1004",
+				"qty": 6.0,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "PK-BOX-1004",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-LABEL-1004",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.166666666666667,
+				"scrap": 0.0,
+				"unit": "ea"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 1.0,
+		"parent": "COATED-1005",
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.8,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "RM-COAT-1005",
+				"qty": 0.2,
+				"scrap": 0.0,
+				"unit": "kg"
+			}
+		],
+		"version": 1
+	},
+	{
+		"active": true,
+		"base": 3.6,
+		"parent": "FG-1005",
+		"parts": [
+			{
+				"code": "COATED-1005",
+				"qty": 3.6,
+				"scrap": 0.0,
+				"unit": "kg"
+			},
+			{
+				"code": "PK-BOX-1005",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-LABEL-1005",
+				"qty": 1.0,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.1,
+				"scrap": 0.0,
+				"unit": "ea"
+			}
+		],
+		"version": 1
+	}
+]

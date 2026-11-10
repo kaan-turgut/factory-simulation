@@ -1,0 +1,182 @@
+[
+  {
+    "id": "WAFER-01",
+    "description": "Oven 01 / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "extrude",
+        "work_center": "WC-EXT-01",
+        "input": "dough",
+        "output": "raw",
+        "handling": "Sacks from mezzanine; load raw cart"
+      },
+      {
+        "number": 20,
+        "type": "bake",
+        "work_center": "WC-OVN-01",
+        "input": "raw",
+        "output": "baked",
+        "handling": "Floor worker loads and unloads a batch"
+      },
+      {
+        "number": 30,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": "baked",
+        "output": "coated",
+        "handling": "Floor worker unloads cooked cart and loads coated wafers into an outbound cart"
+      },
+      {
+        "number": 40,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": "coated",
+        "output": "finished",
+        "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
+      }
+    ]
+  },
+  {
+    "id": "WAFER-02",
+    "description": "Oven 02 / Coater 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "extrude",
+        "work_center": "WC-EXT-01",
+        "input": "dough",
+        "output": "raw",
+        "handling": "Sacks from mezzanine; load raw cart"
+      },
+      {
+        "number": 20,
+        "type": "bake",
+        "work_center": "WC-OVN-02",
+        "input": "raw",
+        "output": "baked",
+        "handling": "Floor worker loads and unloads a batch"
+      },
+      {
+        "number": 30,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": "baked",
+        "output": "coated",
+        "handling": "Floor worker unloads cooked cart and loads coated wafers into an outbound cart"
+      },
+      {
+        "number": 40,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": "coated",
+        "output": "finished",
+        "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
+      }
+    ]
+  },
+  {
+    "id": "WAFER-03",
+    "description": "Oven 01 / Coater 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "extrude",
+        "work_center": "WC-EXT-01",
+        "input": "dough",
+        "output": "raw",
+        "handling": "Sacks from mezzanine; load raw cart"
+      },
+      {
+        "number": 20,
+        "type": "bake",
+        "work_center": "WC-OVN-01",
+        "input": "raw",
+        "output": "baked",
+        "handling": "Floor worker loads and unloads a batch"
+      },
+      {
+        "number": 30,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": "baked",
+        "output": "coated",
+        "handling": "Floor worker unloads cooked cart and loads coated wafers into an outbound cart"
+      },
+      {
+        "number": 40,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": "coated",
+        "output": "finished",
+        "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
+      }
+    ]
+  },
+  {
+    "id": "WAFER-04",
+    "description": "Oven 02 / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "extrude",
+        "work_center": "WC-EXT-01",
+        "input": "dough",
+        "output": "raw",
+        "handling": "Sacks from mezzanine; load raw cart"
+      },
+      {
+        "number": 20,
+        "type": "bake",
+        "work_center": "WC-OVN-02",
+        "input": "raw",
+        "output": "baked",
+        "handling": "Floor worker loads and unloads a batch"
+      },
+      {
+        "number": 30,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": "baked",
+        "output": "coated",
+        "handling": "Floor worker unloads cooked cart and loads coated wafers into an outbound cart"
+      },
+      {
+        "number": 40,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": "coated",
+        "output": "finished",
+        "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
+      }
+    ]
+  }
+]
