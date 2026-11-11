@@ -11,6 +11,7 @@ const Processing = preload("res://world/processing_models.gd")
 const WarehouseView = preload("res://world/warehouse_view.gd")
 const Industrial = preload("res://world/industrial_models.gd")
 const Hall = preload("res://world/hall_models.gd")
+const LineModels = preload("res://world/line_models.gd")
 const Palette = preload("res://ui/status_colors.gd")
 
 const INK := Color("#253541")
@@ -35,6 +36,7 @@ var layout: Layout
 var _draw := Primitives.new()
 var _stock := Stock.new(_draw)
 var _industrial := Industrial.new(_draw, _stock)
+var _line := LineModels.new(_industrial)
 var _equipment: Dictionary[StringName, Equipment] = {}
 var _logistics: Logistics
 var _staged: Array[Stock.PalletView] = []
@@ -101,7 +103,7 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	_draw.batch_static(self, _warehouse_markers)
 	for station in _equipment.values():
 		_draw.batch_static(station, [station.beacon])
-	_logistics = Logistics.new(self, _draw, _stock, _erp_enabled)
+	_logistics = Logistics.new(self, _draw, _stock, _erp_enabled, _industrial)
 
 
 func update_view(camera: Camera3D) -> void:
@@ -352,15 +354,22 @@ func _build_platform() -> void:
 	var sheet_thickness := 0.05
 	var frame_height := 0.34 - sheet_thickness
 	var leg_height := y - sheet_thickness
-	_draw.box(deck, Vector3(0, -sheet_thickness - frame_height * 0.5, 0),
-		Vector3(plan.size.x, frame_height, plan.size.y), INK)
-	_draw.box(deck, Vector3(0, -sheet_thickness * 0.5, 0),
-		Vector3(plan.size.x - 0.08, sheet_thickness, plan.size.y - 0.08), METAL)
+	var k := _industrial
+	var column := k.paint(STEEL)
+	k.box(deck, Vector3(0, -sheet_thickness - frame_height * 0.5, 0),
+		Vector3(plan.size.x, frame_height, plan.size.y), k.frame_dark)
+	k.box(deck, Vector3(0, -sheet_thickness * 0.5, 0),
+		Vector3(plan.size.x - 0.08, sheet_thickness, plan.size.y - 0.08), k.grating)
+	# Joists under the grating.
+	for x in range(1, int(plan.size.x)):
+		k.box(deck, Vector3(-half.x + x, -sheet_thickness - frame_height - 0.12, 0),
+			Vector3(0.1, 0.24, plan.size.y - 0.3), k.frame_dark)
 	for side_x: float in [-1.0, 1.0]:
 		for side_z: float in [-1.0, 1.0]:
 			var leg := Vector3(side_x * (half.x - 0.23), -y + leg_height * 0.5, side_z * (half.y - 0.23))
-			_draw.box(deck, leg, Vector3(0.26, leg_height, 0.26), STEEL)
-			_draw.box(deck, leg + Vector3(0, -leg_height * 0.5 + 0.07, 0), Vector3(0.53, 0.14, 0.55), INK)
+			k.box(deck, leg, Vector3(0.26, leg_height, 0.26), column)
+			k.box(deck, leg + Vector3(0, -leg_height * 0.5 + 0.015, 0), Vector3(0.5, 0.03, 0.5), k.frame_dark)
+			k.box(deck, leg + Vector3(0, -leg_height * 0.5 + 0.5, 0), Vector3(0.3, 1.0, 0.3), k.hazard)
 	var left := deck.position.x - half.x + 0.08
 	var right := deck.position.x + half.x - 0.08
 	var front := deck.position.z + half.y - 0.08
@@ -381,8 +390,13 @@ func _build_platform() -> void:
 		var step_y := rise * (12.0 - index) / 13.0
 		var z := -stair_depth * 0.5 + (index + 0.5) * stair_depth / 12.0
 		var size := Vector3(stair_width, 0.22, stair_depth / 12.0)
-		_draw.box(stairs, Vector3(0, step_y - 0.11, z), size, METAL)
+		_industrial.box(stairs, Vector3(0, step_y - 0.03, z), Vector3(size.x, 0.05, size.z), _industrial.grating)
+		_industrial.box(stairs, Vector3(0, step_y - 0.03, z + size.z * 0.5 - 0.02), Vector3(size.x, 0.052, 0.04), _industrial.safety)
 		stairs.add_hitbox(size, Vector3(0, step_y - 0.22, z))
+	for x: float in [-stair_width * 0.5, stair_width * 0.5]:
+		var stringer := _industrial.box(stairs, Vector3(x, rise * 0.5 - 0.1, 0),
+			Vector3(0.06, 0.3, sqrt(stair_depth * stair_depth + rise * rise)), _industrial.frame_dark)
+		stringer.rotation.x = atan2(rise, stair_depth)
 	for x: float in [-stair_width * 0.55, stair_width * 0.55]:
 		_rail(stairs.position + Vector3(x, rise, -stair_depth * 0.5),
 			stairs.position + Vector3(x, 0.25, stair_depth * 0.5))
@@ -391,11 +405,7 @@ func _build_platform() -> void:
 			_stock.sack(deck, Vector3(-4.12 + index * 1.21, 0.22 + tier * 0.31,
 				-2.27 - (index % 2) * 0.24), 1.14)
 	_floor_text(deck.position + Vector3(-2.0, 0.023, 0.41), "INGREDIENT DECK", INK, 0.015)
-	_draw.cylinder(hopper, Vector3(0, 0.47, 0), 0.32, 0.82, METAL, 1.03)
-	_draw.cylinder(hopper, Vector3(0, 1.13, 0), 1.03, 0.66, Color("#7199a5"))
-	_draw.cylinder(hopper, Vector3(0, 1.48, 0), 1.10, 0.12, METAL)
-	_draw.cylinder(hopper, Vector3(0, 1.55, 0), 0.84, 0.032, INK)
-	_draw.box(hopper, Vector3(0, 0.64, 1.0), Vector3(0.46, 0.32, 0.11), AMBER)
+	_line.build_hopper(hopper)
 	for index in 6:
 		var bag := _stock.sack(hopper, Vector3(0, 1.58, 0), 0.55)
 		bag.position = Vector3(-0.52 + (index % 3) * 0.52, 1.58, -0.26 + floori(index / 3.0) * 0.54)
@@ -405,25 +415,9 @@ func _build_platform() -> void:
 func _build_extruder() -> void:
 	var node := _station(&"Extruder", "02  Extruder", TEAL)
 	node.offset_readout(Vector3(0, -0.66, 1.25))
-	_base(node)
-	_draw.box(node, Vector3(-0.2, 0.80, 0), Vector3(4.19, 1.02, 2.38), TEAL)
 	var feed: Vector3 = layout.objects[&"Extruder"].ports[&"feed"]
 	feed.z = -feed.z
-	var feed_top := feed.y - 0.025
-	_draw.cylinder(node, Vector3(feed.x, (1.77 + feed_top) * 0.5, feed.z), 0.31, feed_top - 1.77, METAL)
-	_draw.cylinder(node, Vector3(feed.x, 2.02, feed.z), 0.48, 0.16, PALE)
-	var barrel := _draw.cylinder(node, Vector3(0.10, 1.43, 0), 0.68, 3.71, METAL)
-	barrel.rotation_degrees.z = 90
-	_auger = _pivot(node, Vector3(1.83, 1.43, 0))
-	var nose := _draw.cylinder(_auger, Vector3.ZERO, 0.51, 0.29, TEAL)
-	nose.rotation_degrees.z = 90
-	for index in 4:
-		var angle := index * TAU / 4.0
-		_draw.box(_auger, Vector3(0.16, sin(angle) * 0.34, cos(angle) * 0.34),
-			Vector3(0.07, 0.12, 0.12), PALE)
-	_draw.box(node, Vector3(1.85, 0.93, 0.84), Vector3(1.1, 0.24, 1.77), METAL)
-	_console(node, Vector3(-1.17, 1.10, 1.22), Color("#81e6d4"))
-	_beacon(node, Vector3(-1.68, 1.69, 0.3))
+	_auger = _line.build_extruder(node, TEAL, feed)
 	_bay(layout.cart_body_center(layout.port(&"Extruder", &"raw_dock")) + Vector3.UP * 0.028, Vector2(1.47, 1.4), SAFETY)
 
 
@@ -448,32 +442,28 @@ func _build_pack_wip() -> void:
 	var node := _station(&"PackagingWIP", "Packaging WIP", Color("#b88bc7"))
 	node.offset_readout(Vector3(-0.8, 0.10, 0.55))
 	_draw.box(node, Vector3(0, 0.017, 0), Vector3(5.84, 0.03, 1.90), Color("#695d75"))
-	for x: float in [-0.45, 1.05, 2.55]:
-		for z: float in [-0.81, 0.08]:
-			_draw.box(node, Vector3(x, 0.76, z), Vector3(0.09, 1.52, 0.09), STEEL)
+	_line.wire_shelving(node, Vector3(1.05, 0, -0.37), Vector3(3.1, 1.5, 0.92), [0.2, 0.82, 1.44], [-1.5, 0.0, 1.5])
 	for y: float in [0.20, 0.82]:
-		_draw.box(node, Vector3(1.05, y, -0.37), Vector3(3.13, 0.095, 1.02), METAL)
 		for x: float in [-0.07, 0.66, 1.43, 2.16]:
-			node.inventory_slots.append(_stock.wafer(node, Vector3(x, y + 0.14, -0.38),
+			node.inventory_slots.append(_stock.wafer(node, Vector3(x, y + 0.012, -0.38),
 				Stock.CHOCOLATE, Vector3(0.61, 0.22, 0.75)))
 	_bay(layout.cart_body_center(layout.port(&"PackagingWIP", &"coated_dock")) + Vector3.UP * 0.033, Vector2(1.51, 1.46), Color("#e0b3ee"))
 
 
 func _build_packer() -> void:
 	var node := _station(&"Packer", "05  Packaging", AMBER)
-	var model := Processing.new(_draw, node, &"Packer", 4.2, AMBER)
-	_processing_models[&"Packer"] = model
-	_beacon(node, model.beacon_mount)
+	_processing_models[&"Packer"] = Processing.new(_industrial, node, &"Packer", 4.2, AMBER)
 	_build_belt(&"CartonBelt", layout.belt(&"CartonBelt"), AMBER)
 
 
 func _build_palletizing() -> void:
 	var node := _station(&"Palletizer", "06  Palletizing", AMBER)
 	node.offset_readout(Vector3(0, 0, -2.0))
-	_draw.box(node, Vector3(-0.66, 0.46, -2), Vector3(6.67, 0.83, 1.45), STEEL)
-	_draw.box(node, Vector3(-0.66, 0.92, -2), Vector3(6.80, 0.12, 1.52), METAL)
-	_draw.box(node, Vector3(-0.66, 0.68, -1.23), Vector3(6.75, 0.19, 0.08), AMBER)
-	_rail(node.to_global(Vector3(-3.65, 0, -3.22)), node.to_global(Vector3(2.75, 0, -3.22)))
+	var bays: Array[Vector3] = []
+	for index in Layout.PALLET_BAYS:
+		bays.append(node.to_local(layout.pallet_position(index)))
+	_line.build_palletizing(node, AMBER, bays)
+	_rail(node.to_global(Vector3(-3.65, 0, -3.42)), node.to_global(Vector3(-0.3, 0, -3.42)))
 	for index in Layout.PALLET_BAYS:
 		var at := layout.pallet_position(index)
 		_bay(at + Vector3(0, 0.023, 0), Vector2(2.16, 1.91), SAFETY, node.rotation.y)
@@ -489,7 +479,7 @@ func _build_warehouse() -> void:
 	var node := _station(&"Warehouse", "07  FG warehouse", AMBER, true, not high_bay)
 	if high_bay:
 		node.add_hitbox(Vector3(size.x, 0.12, size.y), Vector3.ZERO)
-	_warehouse_views.append(WarehouseView.new(node, _draw, room, AMBER))
+	_warehouse_views.append(WarehouseView.new(node, _draw, room, AMBER, _industrial))
 	node.offset_readout(Vector3(0, room.height - spec.height, -size.y * 0.30))
 	_draw.box(node, Vector3(0, 0.015, 0),
 		Vector3(size.x - 0.4, 0.025, size.y - 0.2), Color("#637276"))
@@ -530,7 +520,7 @@ func _build_raw_warehouse() -> void:
 	var node := _station(&"RawWarehouse", "RM  Raw materials", TEAL, true, not high_bay)
 	if high_bay:
 		node.add_hitbox(Vector3(spec.size.x, 0.12, spec.size.y), Vector3.ZERO)
-	_warehouse_views.append(WarehouseView.new(node, _draw, room, TEAL))
+	_warehouse_views.append(WarehouseView.new(node, _draw, room, TEAL, _industrial))
 	node.offset_readout(Vector3(0, room.height - spec.height, -spec.size.y * 0.25))
 	_draw.box(node, Vector3(0, 0.045, 0), Vector3(spec.size.x - 0.2, 0.09, spec.size.y - 0.2), Color("#687f8b"))
 	for index in room.racks.size():
@@ -556,7 +546,7 @@ func _build_raw_warehouse() -> void:
 			for bay in bays:
 				var at := Vector3((bay + 0.5 - bays * 0.5) * area.size.x / bays, shelf + 0.10, 0.0)
 				if high_bay:
-					_draw.box(group, at + Vector3.UP * 0.05, Vector3(1.38, 0.14, 1.10), Stock.WOOD)
+					_stock.pallet_deck(group, at - Vector3.UP * 0.02, Vector2(1.38, 1.10), 0.14)
 				if index < 2:
 					_stock.sack(group, at + Vector3.UP * 0.26, 1.1 if high_bay else 0.81)
 				else:
@@ -578,13 +568,10 @@ func _build_raw_warehouse() -> void:
 
 func _build_sfg_warehouse() -> void:
 	var node := _station(&"SFGWarehouse", "SFG  WAFER STOCK", TEAL)
-	_draw.box(node, Vector3(0, 0.055, 0), Vector3(6.9, 0.11, 2.9), Color("#687f8b"))
-	for x: float in [-3.2, -1.1, 1.1, 3.2]:
-		_draw.box(node, Vector3(x, 1.1, 0.1), Vector3(0.12, 2.2, 0.15), STEEL)
-	for y: float in [0.35, 1.25, 2.14]:
-		_draw.box(node, Vector3(0, y, 0.1), Vector3(6.5, 0.10, 1.45), TEAL)
+	_draw.box(node, Vector3(0, 0.012, 0), Vector3(6.9, 0.02, 2.9), Color("#687f8b"))
+	_line.longspan_shelving(node, Vector3(0, 0, 0.1), Vector3(6.5, 2.3, 1.25), [0.35, 1.25, 2.14], [-3.2, -1.1, 1.1, 3.2])
 	for index in 6:
-		var at := Vector3(-2.15 + (index % 3) * 2.15, 0.55 + floorf(index / 3.0) * 0.9, 0.1)
+		var at := Vector3(-2.15 + (index % 3) * 2.15, 0.53 + floorf(index / 3.0) * 0.9, 0.1)
 		var stock := Node3D.new()
 		stock.position = at
 		node.add_child(stock)
@@ -599,24 +586,12 @@ func _build_cell(id: StringName) -> void:
 	var node := _station(id, art[0], art[1])
 	var size: Vector2i = layout.objects[id].size
 	if id == &"CreamMixer":
-		_base(node)
-		var tank := Vector3(0.14, 1.59, -0.28)
-		_draw.cylinder(node, Vector3(tank.x, 0.52, tank.z), 1.76, 0.18, STEEL)
-		_draw.cylinder(node, tank, 1.68, 2.32, METAL)
-		_draw.cylinder(node, tank + Vector3.UP * 1.20, 1.74, 0.28, art[1])
-		_cream_motor = _pivot(node, tank + Vector3.UP * 1.50)
-		_draw.box(_cream_motor, Vector3.ZERO, Vector3(1.34, 0.36, 0.56), STEEL)
-		_draw.box(node, Vector3(tank.x, 0.95, 1.37), Vector3(1.12, 0.56, 0.72), art[1])
+		_cream_motor = _line.build_cream_mixer(node, art[1])
 		for index in 4:
-			_cream_supplies.append(_stock.sack(node, Vector3(-2.0, 0.64, -1.68 + index * 0.88), 0.78))
-		var console := Vector3(1.94, 1.56, 1.16)
-		_draw.box(node, Vector3(console.x, 0.92, console.z), Vector3(0.15, 0.90, 0.16), STEEL)
-		_console(node, console, art[1])
-		_beacon(node, console + Vector3.UP * 0.265)
+			_cream_supplies.append(_stock.sack(node, Vector3(-2.0, 0.63, -1.68 + index * 0.88), 0.78))
 	else:
-		var model := Processing.new(_draw, node, id, size.x - 0.30, art[1])
+		var model := Processing.new(_industrial, node, id, size.x - 0.30, art[1])
 		_processing_models[id] = model
-		_beacon(node, model.beacon_mount)
 		node.offset_readout(Vector3(0, 0.72, -0.68))
 		if id == &"CoolingTunnel":
 			for index in 6:
@@ -624,12 +599,17 @@ func _build_cell(id: StringName) -> void:
 					Stock.CHOCOLATE, Vector3(0.44, 0.14, 0.66)))
 	var tray_z := 1.78 if id == &"CreamMixer" else 1.50
 	var tray_y := 0.77 if id == &"CreamMixer" else 0.95
-	_draw.box(node, Vector3(0, tray_y, tray_z), Vector3(2.03, 0.11, 0.66), STEEL)
-	_draw.box(node, Vector3(0, tray_y + 0.075, tray_z + 0.30), Vector3(2.03, 0.10, 0.07), METAL)
-	for x: float in [-0.85, 0.85]:
-		_draw.box(node, Vector3(x, tray_y * 0.5, tray_z), Vector3(0.091, tray_y, 0.10), METAL)
+	# Stainless outfeed table with raised lips.
+	var k := _industrial
+	k.box(node, Vector3(0, tray_y - 0.02, tray_z), Vector3(2.03, 0.04, 0.66), k.stainless)
+	for z: float in [-0.32, 0.32]:
+		k.box(node, Vector3(0, tray_y + 0.02, tray_z + z), Vector3(2.03, 0.05, 0.02), k.polished)
+	for x: float in [-0.95, 0.95]:
+		for z: float in [-0.26, 0.26]:
+			k.leg(node, Vector3(x, 0, tray_z + z), tray_y - 0.04)
+	k.box(node, Vector3(0, 0.25, tray_z), Vector3(1.9, 0.02, 0.5), k.stainless_dark)
 	for index in 4:
-		var at := Vector3(-0.66 + index * 0.44, tray_y + 0.059, tray_z)
+		var at := Vector3(-0.66 + index * 0.44, tray_y + 0.003, tray_z)
 		if id == &"Packer02":
 			var box := _pivot(node, at)
 			_stock.carton(box, Vector3.UP * 0.10, Vector3(0.37, 0.20, 0.42))
@@ -740,57 +720,13 @@ func _station(
 	return station
 
 
-func _base(parent: Equipment, inset: Vector2 = Vector2.ZERO) -> void:
-	var footprint := layout.objects[parent.name].size
-	var width := footprint.x - 0.12 - inset.x
-	var depth := footprint.y - 0.28 - inset.y
-	_draw.box(parent, Vector3(0, 0.22, 0), Vector3(width, 0.44, depth), INK)
-	_draw.box(parent, Vector3(0, 0.41, 0), Vector3(width * 0.96, 0.15, depth * 0.92), STEEL)
-
-
-func _console(parent: Node3D, at: Vector3, tint: Color) -> void:
-	_draw.box(parent, at, Vector3(0.62, 0.53, 0.22), INK)
-	_draw.box(parent, at + Vector3(0, 0.076, 0.116), Vector3(0.40, 0.19, 0.023), tint)
-	_draw.box(parent, at + Vector3(0.16, -0.14, 0.116), Vector3(0.077, 0.075, 0.023), PALE)
-
-
-func _beacon(station: Equipment, at: Vector3) -> void:
-	_draw.cylinder(station, at + Vector3(0, 0.12, 0), 0.10, 0.30, INK)
-	station.beacon = _draw.cylinder(station, at + Vector3(0, 0.38, 0), 0.18, 0.25, PALE)
-	var lamp := StandardMaterial3D.new()
-	lamp.emission_enabled = true
-	lamp.emission_energy_multiplier = 0.66
-	station.beacon.material_override = lamp
-
-
 func _build_belt(id: StringName, span: Array[Vector3], accent: Color) -> void:
 	_station(id, "", accent, false)
-	var delta := span[1] - span[0]
-	var length := delta.length()
-	var belt := _pivot(self, span[0])
-	belt.rotation.y = -atan2(delta.z, delta.x)
-	_draw.box(belt, Vector3(length * 0.5, 0, 0), Vector3(length, 0.15, 1.03), INK)
-	for index in floori(length / 0.17):
-		var roller := _draw.cylinder(belt, Vector3(index * 0.17 + 0.1, 0.09, 0),
-			0.045, 0.98, STEEL)
-		roller.rotation_degrees.x = 90
-	for side: float in [-0.55, 0.55]:
-		_draw.box(belt, Vector3(length * 0.5, 0.12, side), Vector3(length, 0.16, 0.085), accent)
-		for x: float in [0.24, length - 0.24]:
-			_draw.box(belt, Vector3(x, -span[0].y * 0.5, side), Vector3(0.14, span[0].y, 0.14), STEEL)
-	_draw.batch_static(belt)
+	_line.roller_conveyor(self, span[0] + Vector3.UP * 0.1, span[1] + Vector3.UP * 0.1, accent, 1.0)
 
 
 func _rail(start: Vector3, end: Vector3) -> void:
-	var delta := end - start
-	var count := ceili(delta.length() / 1.72)
-	for index in count + 1:
-		var at := start.lerp(end, float(index) / count)
-		_draw.box(self, at + Vector3(0, 0.52, 0), Vector3(0.081, 1.04, 0.085), SAFETY)
-	for y: float in [0.46, 1.00]:
-		var mid := (start + end) / 2.0 + Vector3(0, y, 0)
-		var beam := _draw.box(self, mid, Vector3(0.074, 0.074, delta.length()), SAFETY)
-		beam.look_at(mid + delta)
+	_industrial.handrail(self, start, end)
 
 
 func _strip(start: float, end: float, z: float, width: float, tint: Color) -> void:

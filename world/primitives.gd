@@ -47,6 +47,15 @@ func sphere(parent: Node3D, at: Vector3, size: Vector3, color: Color) -> MeshIns
 	return instance
 
 
+func capsule(parent: Node3D, at: Vector3, radius: float, height: float, color: Color) -> MeshInstance3D:
+	var mesh := CapsuleMesh.new()
+	mesh.radius = radius
+	mesh.height = height
+	mesh.radial_segments = 16
+	mesh.rings = 4
+	return _mesh(parent, at, mesh, color)
+
+
 func _mesh(parent: Node3D, at: Vector3, mesh: Mesh, color: Color) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.position = at

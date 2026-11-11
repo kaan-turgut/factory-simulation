@@ -128,3 +128,16 @@ To reproduce the headless workloads from the project directory, run:
 godot --headless --path . --max-fps 30 --script res://tests/benchmarks/product_expansion_benchmark.gd
 godot --headless --path . --max-fps 30 --script res://tests/benchmarks/product_expansion_benchmark.gd -- filled
 ```
+
+## Detailed equipment and crew (Nov 2026)
+
+Godot 4.7.2 Compatibility, M4 Pro, 1280 × 800, 30 FPS cap, default ERP scene with a fresh shift, 60 warm-up and 150 measured frames. Both builds ran from clean copies of the same commit; the second adds only the new `world/` visuals. Render CPU is the viewport's measured render time plus frame setup.
+
+| View | Build | Draw calls p50 | Primitives p50 | Render CPU p50 / p95 (ms) | FPS |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Home overview | Before | 816 | 137,336 | 5.75–6.14 / 6.24–6.72 | 30.0 |
+| Home overview | After | 976 | 205,260 | 6.30–6.40 / 6.99–7.02 | 30.0 |
+| Close-up (spreader) | Before | 652 | 109,022 | 3.21–4.51 / 3.62–6.04 | 30.0 |
+| Close-up (spreader) | After | 810 | 180,374 | 4.27–4.53 / 6.04–6.12 | 30.0 |
+
+Ranges are two runs each. The new models add about 0.3 ms of render CPU per frame. GPU time was not measured (the Compatibility GPU timer reports zero).

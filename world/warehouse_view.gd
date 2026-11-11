@@ -4,6 +4,7 @@ extends RefCounted
 const Room = preload("res://layout/warehouse_room.gd")
 const Primitives = preload("res://world/primitives.gd")
 const Line = preload("res://simulation/production_line.gd")
+const Industrial = preload("res://world/industrial_models.gd")
 
 const CLADDING := Color("#788a92")
 const PANEL := Color("#475c66")
@@ -58,10 +59,12 @@ class Door extends Node3D:
 
 var doors: Array[Door] = []
 var _draw: Primitives
+var _kit: Industrial
 
 
-func _init(parent: Node3D, draw: Primitives, room: Room, accent: Color) -> void:
+func _init(parent: Node3D, draw: Primitives, room: Room, accent: Color, kit: Industrial) -> void:
 	_draw = draw
+	_kit = kit
 	var shell := Node3D.new()
 	shell.name = "StockRoom"
 	parent.add_child(shell)
@@ -101,7 +104,7 @@ func _sense(actor: Line.Operator, alpha: float, reach: Vector3) -> void:
 func _panel(parent: Node3D, area: Rect2, height: float, accent: Color) -> void:
 	var center := area.get_center()
 	_draw.box(parent, Vector3(center.x, height * 0.5, center.y),
-		Vector3(area.size.x, height, area.size.y), CLADDING)
+		Vector3(area.size.x, height, area.size.y), CLADDING).material_override = _kit.ribbed(CLADDING)
 	var horizontal := area.size.x > area.size.y
 	var span := maxf(area.size.x, area.size.y)
 	var axis := Vector3.RIGHT if horizontal else Vector3.BACK
@@ -120,26 +123,43 @@ func _panel(parent: Node3D, area: Rect2, height: float, accent: Color) -> void:
 
 
 func _rack(parent: Node3D, room: Room, area: Rect2, accent: Color) -> void:
+	# Selective pallet racking: perforated frames with diagonal bracing, step beams in the
+	# room accent, wire mesh decks, base plates and column guards on the aisle side.
+	var k := _kit
+	var upright := k.paint(Color("#2f5d8a"))
+	var beam := k.paint(accent)
 	var center := area.get_center()
 	var front := area.end.y - 0.09
 	var rear := area.position.y + 0.09
+	var depth := front - rear
 	for bay in room.rack_bays + 1:
 		var x := lerpf(area.position.x + 0.08, area.end.x - 0.08, float(bay) / room.rack_bays)
 		for z: float in [rear, front]:
-			_draw.box(parent, Vector3(x, Room.RACK_HEIGHT * 0.5, z),
-				Vector3(0.14, Room.RACK_HEIGHT, 0.15), FRAME)
-			_draw.box(parent, Vector3(x, 0.21, z), Vector3(0.23, 0.42, 0.22), GUIDE)
-		for y in room.rack_levels:
-			_draw.box(parent, Vector3(x, y, center.y), Vector3(0.09, 0.13, area.size.y - 0.08), PANEL)
+			k.box(parent, Vector3(x, Room.RACK_HEIGHT * 0.5, z), Vector3(0.1, Room.RACK_HEIGHT, 0.08), upright)
+			k.box(parent, Vector3(x, Room.RACK_HEIGHT * 0.5, z + (0.041 if z == front else -0.041)),
+				Vector3(0.05, Room.RACK_HEIGHT - 0.1, 0.003), k.vent)
+			k.box(parent, Vector3(x, 0.006, z), Vector3(0.18, 0.012, 0.16), k.frame_dark)
+		k.box(parent, Vector3(x, 0.4, front + 0.13), Vector3(0.22, 0.8, 0.12), k.safety)
+		k.box(parent, Vector3(x, 0.4, front + 0.191), Vector3(0.16, 0.6, 0.003), k.hazard)
+		# Frame bracing: horizontals at the ends and alternating diagonals between.
+		var panel := 0.9
+		var rises := floori((Room.RACK_HEIGHT - 0.3) / panel)
+		var diagonal := sqrt(depth * depth + panel * panel)
+		for index in rises:
+			var y := 0.15 + index * panel
+			var brace := k.box(parent, Vector3(x, y + panel * 0.5, center.y), Vector3(0.03, 0.03, diagonal), upright)
+			brace.rotation.x = atan2(panel, depth) * (1.0 if index % 2 == 0 else -1.0)
+		for y: float in [0.15, Room.RACK_HEIGHT - 0.15]:
+			k.box(parent, Vector3(x, y, center.y), Vector3(0.03, 0.03, depth), upright)
 	for y in room.rack_levels:
 		for z: float in [rear, front]:
-			_draw.box(parent, Vector3(center.x, y, z),
-				Vector3(area.size.x, 0.16, 0.13), accent)
-		# Open shelves keep stock on the lower levels visible from overhead.
-		for part in range(1, room.rack_bays * 4):
-			var x := area.position.x + area.size.x * part / (room.rack_bays * 4.0)
-			_draw.box(parent, Vector3(x, y + 0.034, center.y),
-				Vector3(0.065, 0.05, area.size.y - 0.08), PANEL)
+			k.box(parent, Vector3(center.x, y, z + (0.06 if z == front else -0.06)),
+				Vector3(area.size.x, 0.12, 0.05), beam)
+		# Mesh decks keep stock on the lower levels visible from overhead.
+		k.box(parent, Vector3(center.x, y + 0.064, center.y), Vector3(area.size.x - 0.12, 0.008, depth - 0.02), k.grating)
+		for part in range(1, room.rack_bays * 3):
+			var x := area.position.x + area.size.x * part / (room.rack_bays * 3.0)
+			k.box(parent, Vector3(x, y + 0.035, center.y), Vector3(0.04, 0.05, depth - 0.02), k.stainless_dark)
 
 
 func _build_shutter(parent: Node3D, opening: Room.Opening, height: float, accent: Color) -> void:
