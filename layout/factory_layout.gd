@@ -7,7 +7,7 @@ const Placement = preload("res://layout/placement.gd")
 const Rules = preload("res://layout/placement_rules.gd")
 
 const DEFAULT_SIZE := Vector2i(88, 32)
-const MIN_SIZE := Vector2i(88, 25)
+const MIN_SIZE := Vector2i(88, 29)
 const ORIGIN := Vector3(-32, 0, 13)
 const PLATFORM_HEIGHT := 3.5
 const CART_LANE := 11.2
@@ -55,7 +55,16 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 		return "factory_layout.json size: too small for factory aisles."
 	grid = Grid.new(configured if dimensions == Vector2i.ZERO else dimensions.max(MIN_SIZE), ORIGIN)
 	var width := grid.size.x
-	for row in data.objects:
+	var definitions: Array = data.objects.duplicate()
+	if not snapshot.is_empty() and not definitions.any(func(row: Dictionary) -> bool: return row.get("id") == "SFGWarehouse"):
+		var defaults := Master.read("factory_layout", directory)
+		if not defaults.error.is_empty():
+			return defaults.error
+		for row in defaults.data.objects:
+			if row.id == "SFGWarehouse":
+				definitions.append(row)
+				break
+	for row in definitions:
 		if not row is Dictionary or not row.get("id") is String or row.id.is_empty() or objects.has(StringName(row.id)):
 			return "factory_layout.json: missing or duplicate equipment ID."
 		if not row.get("kind") is String or not _numbers(row.get("cell"), 2, true) \
@@ -80,7 +89,7 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 		&"Extruder":[&"feed", &"raw_dock"], &"Oven":[&"raw_dock", &"cooked_dock"], &"Oven02":[&"raw_dock", &"cooked_dock"],
 		&"Coater":[&"cooked_dock", &"coated_dock", &"supply"], &"Coater02":[&"cooked_dock", &"coated_dock", &"supply"],
 		&"Packer":[&"belt_out", &"supply"], &"PackagingWIP":[&"coated_dock"],
-		&"Palletizer":[&"belt_in"], &"Warehouse":[], &"RawParking":[], &"CookedParking":[], &"CoatedParking":[], &"RawWarehouse":[]}
+		&"Palletizer":[&"belt_in"], &"Warehouse":[], &"RawParking":[], &"CookedParking":[], &"CoatedParking":[], &"RawWarehouse":[], &"SFGWarehouse":[&"stock_dock"]}
 	for key in required:
 		if not objects.has(key):
 			return "factory_layout.json: missing required equipment %s." % key
@@ -413,7 +422,8 @@ func _dock_points(plan: Dictionary) -> Array[Vector3]:
 		port(&"Oven", &"cooked_dock", plan), port(&"Coater", &"cooked_dock", plan),
 		port(&"Oven02", &"raw_dock", plan), port(&"Oven02", &"cooked_dock", plan),
 		port(&"Coater02", &"cooked_dock", plan), port(&"Coater", &"coated_dock", plan),
-		port(&"Coater02", &"coated_dock", plan), port(&"PackagingWIP", &"coated_dock", plan)
+		port(&"Coater02", &"coated_dock", plan), port(&"PackagingWIP", &"coated_dock", plan),
+		port(&"SFGWarehouse", &"stock_dock", plan)
 	]
 	for index in MAX_CARTS:
 		points.append(cart_home(index, true))
@@ -522,7 +532,7 @@ func _cached_approach(point: Vector3, lane: float, radius: float, blockers: Dict
 func _obstacles(plan: Dictionary) -> Dictionary:
 	var result := {}
 	for item: Placement in plan.values():
-		if is_zero_approx(item.elevation) and (item.kind in [&"machine", &"access"] or item.id == &"RawWarehouse"):
+		if is_zero_approx(item.elevation) and (item.kind in [&"machine", &"access"] or item.id in [&"RawWarehouse", &"SFGWarehouse"]):
 			result[item.id] = Rect2(item.footprint())
 	var supports := _platform_supports(plan)
 	for index in supports.size():

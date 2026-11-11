@@ -3,7 +3,7 @@ extends RefCounted
 
 const Line = preload("res://simulation/production_line.gd")
 const PATH := "user://chocolate-works-erp.save"
-const VERSION := 3
+const VERSION := 5
 const LINE_FIELDS := ["elapsed_ticks", "multiplier", "layout_file_stamp", "ingredients_taken", "dispatched_kg",
 	"dispatched_pallets", "boxes_completed", "raw_deliveries", "cooked_deliveries", "forklift_deliveries",
 	"hopper_reserved", "warehouse_reserved_slot", "box_progress", "box_target", "_pending_seconds",
@@ -12,14 +12,14 @@ const ACTOR_FIELDS := ["id", "title", "position", "previous_position", "heading"
 	"destination", "remaining", "cargo_kg", "reserved_kg", "_route"]
 const CART_FIELDS := ["id", "raw", "coated", "site", "home", "position", "previous_position", "heading", "owner", "order_id"]
 const PALLET_FIELDS := ["target_boxes", "boxes", "mass", "id", "sku", "order_id", "tint", "sealed"]
-const CATALOG_FIELDS := ["materials", "boms", "suppliers", "routings", "work_centers", "production_versions", "locations"]
+const CATALOG_FIELDS := ["materials", "boms", "suppliers", "routings", "work_centers", "production_versions", "locations", "scheduling"]
 const OVEN_FIELDS := ["state", "remaining", "batches", "owner"]
 const MACHINE_FIELDS := ["configured_rate", "actual_rate", "state", "total_output"]
 const STOCK_FIELDS := ["capacity", "quantity"]
 const ERP_FIELDS := ["balances", "orders", "purchases", "demands", "reservations", "movements",
 	"history", "day_output", "pending_events", "now", "sequence", "active_id", "last_product", "feeder_id", "pack_id",
 	"coat_setup_seconds", "pack_setup_seconds", "coat_remaining", "pack_remaining", "shipment", "manual_shipments",
-	"_next_sample", "_next_flush", "utilization", "delay_seconds"]
+	"_next_sample", "_next_flush", "utilization", "delay_seconds", "explicit_planning", "planning_conversions", "auto_release"]
 
 
 static func save(line: Line, path: String = PATH) -> String:
@@ -45,7 +45,7 @@ static func load_line(path: String = PATH) -> Dictionary:
 		return {"error": "No saved shift found."}
 	var data: Variant = file.get_var(false)
 	file.close()
-	if not data is Dictionary or data.get("version", -1) not in [1, 2, VERSION]:
+	if not data is Dictionary or data.get("version", -1) not in [1, 2, 3, 4, VERSION]:
 		return {"error": "The save is invalid or uses an unsupported version."}
 	return restore(data)
 
@@ -88,12 +88,12 @@ static func snapshot(line: Line) -> Dictionary:
 
 
 static func restore(data: Dictionary) -> Dictionary:
-	for key in ["size", "plan", "settings", "line", "stock", "machines", "oven", "oven_stock",
+	for key in ["version", "size", "plan", "settings", "line", "stock", "machines", "oven", "oven_stock",
 		"platform", "floor", "forklift", "jobs", "carts", "berths", "staged", "warehouse",
 		"load", "erp", "catalog", "shuttle"]:
 		if not data.has(key):
 			return {"error": "The save is missing " + key + "."}
-	if not data.erp is Dictionary or not data.erp.get("balances") is Dictionary \
+	if data.version not in [1, 2, 3, 4, VERSION] or not data.erp is Dictionary or not data.erp.get("balances") is Dictionary \
 			or not data.size is Vector2i or not data.plan is Dictionary:
 		return {"error": "Invalid save structure."}
 	for location in data.erp.balances.values():
@@ -101,7 +101,7 @@ static func restore(data: Dictionary) -> Dictionary:
 			if not is_finite(float(qty)) or float(qty) < 0.0:
 				return {"error": "Invalid stock in save."}
 	var old: bool = data.version == 1
-	var refit: bool = int(data.version) < VERSION
+	var refit: bool = int(data.version) < 3
 	if not old and (not data.get("layout") is Dictionary or not data.get("execution") is Dictionary
 			or not data.catalog is Dictionary or not data.catalog.get("production_versions") is Dictionary):
 		return {"error": "The save is missing routing or layout data."}
@@ -162,12 +162,29 @@ static func restore(data: Dictionary) -> Dictionary:
 	line.staged_pallets.assign(data.staged.map(_pallet))
 	line.warehouse.assign(data.warehouse.map(_pallet))
 	line.lift_load = _pallet(data.load)
-	var pack_location: String = line.erp.catalog.locations["PACK-WIP"]
+	var default_locations := line.erp.catalog.locations.duplicate()
+	var prep_center: Dictionary = line.erp.catalog.work_centers["WC-MIX-01"]
 	_set_fields(line.erp.catalog, data.catalog, ["materials", "boms", "suppliers"] if old else CATALOG_FIELDS)
 	_set_fields(line.erp, data.erp, ERP_FIELDS)
 	line.erp.shuttle = _actor(data.shuttle)
-	if not line.erp.catalog.locations.has("PACK-WIP"):
-		line.erp.catalog.locations["PACK-WIP"] = pack_location
+	for location in ["PACK-WIP"] + Line.ERP.SFG_LOCATIONS:
+		if not line.erp.catalog.locations.has(location):
+			line.erp.catalog.locations[location] = default_locations[location]
+	for location in Line.ERP.SFG_LOCATIONS:
+		if not line.erp.balances.has(location):
+			line.erp.balances[location] = {}
+	if not data.catalog.has("scheduling"):
+		line.erp.catalog.work_centers["WC-MIX-01"] = prep_center
+		for code in line.erp.catalog.materials:
+			var material: Dictionary = line.erp.catalog.materials[code]
+			if material.type == "HALB":
+				material.location = "SFG-DECK" if code == "DOUGH-01" else "SFG-WH"
+		for order in line.erp.orders.values():
+			if order.status in ["Created", "Released"]:
+				order.warning = "Legacy combined route. Cancel this order and schedule independent stages."
+	for order in line.erp.orders.values():
+		if order.has("stage") and order.status == "Released":
+			line.erp.dispatch_queue[order.id] = true
 	if line.pack_wip.quantity > Line.EPSILON and line.erp.pack_id.is_empty():
 		return {"error": "Saved packaging WIP has no production order."}
 	if old:
@@ -178,8 +195,41 @@ static func restore(data: Dictionary) -> Dictionary:
 			return {"error": error}
 	if refit:
 		_refit_transport(line)
+	if data.version < 5:
+		_migrate_packaging(line.erp)
 	line.set_playing(false)
 	return {"error": "", "line": line, "refitted": refit}
+
+
+static func _migrate_packaging(book: Line.ERP) -> void:
+	# Only migrate the original packaged SKU defaults. Keep custom master data and order snapshots.
+	var legacy := {
+		"FG-1002": [0.08, 50, 8], "FG-1003": [0.12, 40, 10],
+		"FG-1004": [0.12, 50, 6], "FG-1005": [0.09, 40, 10],
+	}
+	var master := Line.ERP.Catalog.Master
+	var products := master.index("products", "code", ["pack_kg", "packs_per_box", "boxes_per_pallet"], master.PROJECT_PATH)
+	if not products.error.is_empty():
+		return
+	for code in legacy:
+		var item: Dictionary = book.catalog.materials.get(code, {})
+		var old: Array = legacy[code]
+		if not item.has("pack_kg") or not is_equal_approx(item.pack_kg, old[0]) \
+				or item.packs_per_box != old[1] or item.boxes_per_pallet != old[2] \
+				or book.catalog.boms.get(code, {}).get("version") != 1 or not products.data.has(code):
+			continue
+		var spec: Dictionary = products.data[code]
+		var error := book.catalog.edit_material(code, item.name, item.minimum, item.lead, item.active,
+			spec.pack_kg, spec.packs_per_box, spec.boxes_per_pallet)
+		if not error.is_empty():
+			continue
+		for demand in book.demands.values():
+			if demand.code != code or not String(demand.converted).is_empty() or not demand.get("converted_orders", []).is_empty():
+				continue
+			var recipe := Line.ERP.Scheduling.recipe(book.catalog, code, demand.boxes) if book.explicit_planning \
+				else book.catalog.recipe(code, demand.boxes)
+			if recipe.error.is_empty():
+				demand.recipe = recipe
 
 
 static func _execution(line: Line) -> Dictionary:
@@ -195,7 +245,8 @@ static func _execution(line: Line) -> Dictionary:
 		runs[id] = {"output": _fields(run.output, STOCK_FIELDS), "setup": run.setup, "cycle": run.cycle, "fed": run.fed,
 			"raw": run.raw.id if run.raw != null else &"", "cooked": run.cooked.id if run.cooked != null else &"",
 			"intake": run.intake.id if run.intake != null else &"", "outbound": run.outbound.id if run.outbound != null else &"",
-			"pack": run.pack.id if run.pack != null else &""}
+			"pack": run.pack.id if run.pack != null else &"",
+			"store": run.store.id if run.get("store") != null else &""}
 	return {"ovens": ovens, "coaters": coaters, "runs": runs, "last_coatings": line.last_coatings,
 		"pack_last_recipe": line.pack_last_recipe}
 
@@ -220,18 +271,28 @@ static func _restore_execution(line: Line, data: Dictionary, refit: bool) -> Str
 		if order.status not in ["Released", "In Progress"]:
 			continue
 		var route: Dictionary = order.get("route", {})
-		if not route.get("operations") is Array or route.operations.size() != 4:
+		if not route.get("operations") is Array or route.operations.size() != (1 if order.has("stage") else 4):
 			return "Missing saved routing for " + order.id
 		for op in route.operations:
 			if not op is Dictionary or not op.get("equipment") is String \
 			or not line.layout.objects.has(StringName(op.equipment)):
 				return "Saved route references missing equipment for " + order.id
+	var occupied := {}
 	for id in data.runs:
 		var order: Dictionary = line.erp.orders.get(id, {})
-		if order.is_empty() or not order.has("route") or not order.route.get("operations") is Array or order.route.operations.size() != 4:
+		if order.is_empty() or not order.has("route") or not order.route.get("operations") is Array or order.route.operations.size() != (1 if order.has("stage") else 4):
 			return "Missing saved route for " + id
-		if not line.ovens.has(StringName(order.route.operations[1].equipment)) \
-			or not line.coaters.has(StringName(order.route.operations[2].equipment)):
+		if order.has("stage"):
+			var op: Dictionary = order.route.operations[0]
+			var equipment := StringName(op.get("equipment", ""))
+			var center: Dictionary = line.erp.catalog.work_centers.get(order.get("center", ""), {})
+			if center.get("equipment", "") != op.get("equipment") or op.get("type") != order.stage \
+					or not line.layout.objects.has(equipment) or not line._equipment_implements(equipment, order.stage) \
+					or occupied.has(equipment):
+				return "Saved stage has an invalid or duplicate equipment commitment for " + id
+			occupied[equipment] = true
+		elif not line.ovens.has(StringName(order.route.operations[1].equipment)) \
+				or not line.coaters.has(StringName(order.route.operations[2].equipment)):
 			return "Saved route refers to missing equipment for " + id
 		line._begin_route(order, true)
 		var run: Dictionary = line.runs[id]
@@ -244,6 +305,12 @@ static func _restore_execution(line: Line, data: Dictionary, refit: bool) -> Str
 			run[key] = saved[key]
 		for key in ["raw", "cooked", "intake", "outbound", "pack"]:
 			run[key] = line.find_cart(saved.get(key, &""))
+		if order.has("stage"):
+			run.store = line.find_cart(saved.get("store", &""))
+			if run.store != null:
+				if line.sfg_dock != null:
+					return "Saved routes claim the same SFG dock."
+				line.sfg_dock = run.store
 		if run.pack != null:
 			if line.pack_dock != null:
 				return "Saved routes claim the same packaging dock."

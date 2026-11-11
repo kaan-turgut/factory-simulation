@@ -133,12 +133,12 @@
 	},
 	{
 		"active": true,
-		"base": 4.0,
+		"base": 5.0,
 		"parent": "FG-1002",
 		"parts": [
 			{
 				"code": "COATED-1002",
-				"qty": 4.0,
+				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
@@ -161,7 +161,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 1
+		"version": 2
 	},
 	{
 		"active": true,
@@ -185,12 +185,12 @@
 	},
 	{
 		"active": true,
-		"base": 4.8,
+		"base": 5.0,
 		"parent": "FG-1003",
 		"parts": [
 			{
 				"code": "COATED-1003",
-				"qty": 4.8,
+				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
@@ -208,12 +208,12 @@
 			},
 			{
 				"code": "PK-PALLET",
-				"qty": 0.1,
+				"qty": 0.125,
 				"scrap": 0.0,
 				"unit": "ea"
 			}
 		],
-		"version": 1
+		"version": 2
 	},
 	{
 		"active": true,
@@ -237,12 +237,12 @@
 	},
 	{
 		"active": true,
-		"base": 6.0,
+		"base": 5.0,
 		"parent": "FG-1004",
 		"parts": [
 			{
 				"code": "COATED-1004",
-				"qty": 6.0,
+				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
@@ -260,12 +260,12 @@
 			},
 			{
 				"code": "PK-PALLET",
-				"qty": 0.166666666666667,
+				"qty": 0.125,
 				"scrap": 0.0,
 				"unit": "ea"
 			}
 		],
-		"version": 1
+		"version": 2
 	},
 	{
 		"active": true,
@@ -289,12 +289,12 @@
 	},
 	{
 		"active": true,
-		"base": 3.6,
+		"base": 5.0,
 		"parent": "FG-1005",
 		"parts": [
 			{
 				"code": "COATED-1005",
-				"qty": 3.6,
+				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
@@ -312,11 +312,11 @@
 			},
 			{
 				"code": "PK-PALLET",
-				"qty": 0.1,
+				"qty": 0.125,
 				"scrap": 0.0,
 				"unit": "ea"
 			}
 		],
-		"version": 1
+		"version": 2
 	}
 ]

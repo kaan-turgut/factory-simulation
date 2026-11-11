@@ -80,3 +80,20 @@ Native Godot 4.7.2 Compatibility on the same M4 Pro at 1280 × 800 and the 30 FP
 | Placement preview | 30.0 | 6 / 31 | 0.89 / 6.00 |
 
 The factory-update column excludes the separately timed preview. Preview validation runs when the snapped cell or orientation changes and reuses cached results on revisits. A confirmed edit rebuilds the view and collision geometry. This short run measures the existing hall and waypoint routes.
+
+## Phase 5 scheduling
+
+Godot 4.7.2 Compatibility, Apple M4 Pro, 1280 × 800, 30 FPS cap, and 20× simulated time. Native runs used 45 warm-up frames and 150 measured frames. The explicit-stage runs prepared coated stock by executing the upstream orders, then sampled an active 100-box packaging order with 1,000 future baking operations in the schedule. The open board was scrolled to a range with scheduled bars. Each run below packed 14 cartons and stored one pallet by the end of the sample.
+
+| Workload | FPS | CPU rendering p50 / p95, ms | Simulation per frame p50 / p95, ms | Engine-tracked memory p50, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| Checkpoint, combined route, ERP closed | 30.0 | 5.13 / 8.77 | 0.51 / 0.91 | 66.37 |
+| Phase 5, same combined route, ERP closed | 30.0 | 5.09 / 8.21 | 0.56 / 0.94 | 68.44 |
+| Phase 5, explicit stages, board closed | 30.0 | 4.92 / 8.47 | 0.39 / 0.74 | 79.40 |
+| Phase 5, explicit stages, board open | 30.0 | 5.53 / 7.72 | 0.34 / 0.62 | 80.27 |
+
+In the matched explicit-stage runs, the open board added 0.87 MiB of tracked memory and 0.61 ms of median CPU render time. The simulation measurements vary across runs. Both workloads stayed below the frame budget. The combined-route checkpoint comparison isolates the added scene and application overhead from the different production model and the 1,000-order dataset. GPU execution was unmeasured in Phase 5.
+
+The existing headless regression measured legacy p95 tick times of 0.018, 0.072, 0.142, 0.285, and 0.571 ms at 1, 4, 8, 16, and 32 independent lines respectively, with zero reported mass error. The corresponding Phase 4 results were 0.018, 0.070, 0.144, 0.272, and 0.561 ms.
+
+Live dispatch reads a queue of released stage orders. The Gantt caches scheduled rows by schedule revision and paints the visible resource and time ranges. Finite-slot edits still scan the relevant bookings, and MRP sorts dated requirements and receipts when run. Benchmark those editing operations separately before scaling to substantially larger scheduling horizons.

@@ -53,10 +53,16 @@ The goal is to combine realistic industrial production behavior with an accessib
 - Keep instructions understandable for a user without game-development experience.
 
 ## ERP Consistency
-- Raw balances and reservations belong to the ERP ledger. Derive WIP and finished goods from physical buffers and tagged pallets.
+- Raw and received semi-finished stock and reservations belong to the ERP ledger. Derive in-process WIP and finished goods from physical buffers, carts, and tagged pallets.
 - Freeze the executable recipe and product specification on each order. Route consumption and receipts through fixed-step production events.
 - Keep planning proposals separate from executable orders and keep posted movements append-only.
 - Run the ERP integration and scene tests when changing transaction logic, snapshots, or the terminal.
+
+## Detailed Scheduling
+- Each manufactured stage requires its own scheduled and released order. A demand, proposal, scheduled receipt, or pegging link cannot start equipment or satisfy a physical release check.
+- Reserve only immediate BOM components, atomically. Post issues and receipts when simulated work or transport actually occurs.
+- Keep planned intervals separate from actual times. Freeze the executable route, capacity parameters, and BOM on release. Check both calendar and finite resource availability for schedule edits.
+- Keep the Gantt a readout and editor of authoritative orders. Run the detailed scheduling test for changes to planning, routing, WIP handoffs, or ERP persistence.
 
 ## External Master Data
 - Keep demonstration definitions in `master_data/` and validate references, machine capabilities, and physical ports before starting a shift.

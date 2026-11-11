@@ -19,7 +19,7 @@ const CART_HANDLING_SECONDS := 3.0
 const COATER_OUTFEED_KG := 36.0
 const LIFT_HANDLING_SECONDS := 2.0
 
-enum JobKind { MOVE_CART, LOAD_OVEN, UNLOAD_OVEN, FEED_COATER, LOAD_COATED, UNLOAD_PACK_WIP }
+enum JobKind { MOVE_CART, LOAD_OVEN, UNLOAD_OVEN, FEED_COATER, LOAD_COATED, UNLOAD_PACK_WIP, SFG_LOAD, SFG_UNLOAD }
 enum LiftPhase { WAIT, TO_PALLET, PICK_UP, TO_STORAGE, DROP_OFF, RETURN }
 
 class FloorJob:
@@ -85,6 +85,7 @@ var raw_at_extruder: Cart
 var raw_at_oven: Cart
 var cooked_at_oven: Cart
 var cooked_at_coater: Cart
+var sfg_dock: Cart
 var pack_dock: Cart
 var warehouse_reserved_slot := -1
 var box_progress := 0.0
@@ -105,13 +106,14 @@ func _init(floor_plan: Layout = null) -> void:
 		reset()
 
 
-func enable_erp() -> void:
+func enable_erp(explicit: bool = true) -> void:
 	if erp != null or not validation_error.is_empty():
 		return
 	validation_error = layout.validate()
 	if not validation_error.is_empty():
 		return
 	erp = ERP.new()
+	erp.explicit_planning = explicit
 	validation_error = erp.catalog.error
 	if not validation_error.is_empty():
 		return
@@ -143,6 +145,8 @@ func enable_erp() -> void:
 func _equipment_implements(id: StringName, operation: String) -> bool:
 	var definition: Layout.Placement = layout.objects[id]
 	match operation:
+		"mix":
+			return id == &"Hopper"
 		"extrude":
 			return id == &"Extruder"
 		"pack":
@@ -304,7 +308,14 @@ func material_on_site() -> float:
 	else:
 		mass += pack_wip.quantity
 		for run in runs.values():
-			mass += run.oven.stock.quantity + run.input.quantity + run.output.quantity
+			mass += run.output.quantity
+			if run.oven != null:
+				mass += run.oven.stock.quantity
+			if run.input != null:
+				mass += run.input.quantity
+		for location in ERP.SFG_LOCATIONS:
+			for quantity in erp.balances[location].values():
+				mass += float(quantity)
 	if lift_load != null:
 		mass += lift_load.mass
 	for worker in platform_crew:
@@ -421,7 +432,10 @@ func advance(real_seconds: float) -> void:
 
 func _step() -> void:
 	if erp != null:
-		_step_routed()
+		if erp.explicit_planning and not runs.values().any(func(run: Dictionary) -> bool: return not run.has("stage")):
+			_step_explicit()
+		else:
+			_step_routed()
 		return
 	_pack()
 	_transfer(coater, cooked_input, coated_input)
@@ -436,6 +450,320 @@ func _step() -> void:
 	_advance_floor()
 	_advance_forklift()
 	elapsed_ticks += 1
+
+
+func _step_explicit() -> void:
+	erp.clock(elapsed_seconds() + STEP_SECONDS)
+	_retire_routes()
+	if elapsed_ticks % 4 == 3:
+		_dispatch_stages()
+	erp.active_id = ""
+	erp.coat_remaining = 0.0
+	erp.pack_remaining = 0.0
+	for id in runs:
+		if erp.orders[id].status == "In Progress":
+			erp.active_id = id
+			break
+	erp.supply_tick(layout, STEP_SECONDS, minf(settings[&"sack_kg"], hopper.capacity), runs.keys())
+	if erp.feeder_id.is_empty():
+		extruder.idle()
+		erp.scope_id = "-"
+		_advance_platform()
+		erp.scope_id = ""
+	if erp.pack_id.is_empty():
+		packer.idle()
+	for id in runs:
+		var order: Dictionary = erp.orders[id]
+		if order.status != "In Progress":
+			continue
+		_open_run(id)
+		match order.stage:
+			"mix":
+				_advance_platform()
+			"extrude":
+				_advance_platform()
+				_step_extrusion()
+			"bake":
+				_step_oven(order.recipe)
+				if oven.state != Oven.State.COOKING:
+					order.oven_wait_seconds += STEP_SECONDS
+			"coat":
+				if _run.setup > EPSILON:
+					coater.record(0.0, STEP_HOURS, Machine.State.SETUP)
+					_run.setup = maxf(0.0, _run.setup - STEP_SECONDS)
+				else:
+					_coat_erp()
+				erp.coat_remaining = maxf(erp.coat_remaining, _run.setup)
+			"pack":
+				if _run.setup > EPSILON:
+					packer.record(0.0, STEP_HOURS, Machine.State.SETUP)
+					_run.setup = maxf(0.0, _run.setup - STEP_SECONDS)
+				else:
+					coated_input = pack_wip
+					_pack()
+				erp.pack_remaining = _run.setup
+		if elapsed_ticks % 4 == 3 and order.status == "In Progress":
+			_monitor_stage(order)
+		_close_run()
+	for cart in carts:
+		cart.previous_position = cart.position
+	_advance_floor()
+	_advance_forklift()
+	elapsed_ticks += 1
+	erp.sample_kpis(self, STEP_SECONDS)
+
+
+func _monitor_stage(order: Dictionary) -> void:
+	var delay := ""
+	match order.stage:
+		"mix":
+			if not erp.dough_finished() and erp.feed_limit(0.0) <= EPSILON:
+				delay = "Waiting for ingredients at the staging deck"
+		"extrude":
+			if extruder.state == Machine.State.BLOCKED:
+				delay = "Waiting for a raw cart"
+			elif extruder.state == Machine.State.STARVED:
+				delay = "Waiting for a sack at the hopper"
+		"bake":
+			if oven.state in [Oven.State.IDLE, Oven.State.LOADING]:
+				delay = "Waiting for raw wafers or an oven load"
+			elif oven.state in [Oven.State.READY, Oven.State.UNLOADING]:
+				delay = "Waiting for a worker and an unloading cart"
+		"coat":
+			if _run.setup > EPSILON:
+				delay = "Coating changeover"
+			elif coater.state in [Machine.State.BLOCKED, Machine.State.STARVED]:
+				delay = "Waiting for wafer carts or coating supplies"
+		"pack":
+			if _run.setup > EPSILON:
+				delay = "Packaging changeover"
+			elif packer.state in [Machine.State.BLOCKED, Machine.State.STARVED]:
+				delay = "Waiting for carts, packaging supplies or pallet space"
+	if order.packed > 0 and order.packed == order.boxes and order.stage == "pack":
+		delay = "Waiting for forklift or warehouse capacity"
+	if not delay.is_empty() and _run.setup <= EPSILON:
+		order.logistics_seconds += 1.0
+	_set_delay(order, delay)
+
+
+func _set_delay(order: Dictionary, reason: String) -> void:
+	if order.delay != reason:
+		order.delay = reason
+		erp.changed()
+
+
+func _dispatch_stages() -> void:
+	var ready: Array[Dictionary] = []
+	for id in erp.dispatch_queue:
+		var order: Dictionary = erp.orders[id]
+		if order.start <= erp.now:
+			ready.append(order)
+	ready.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a.start < b.start if a.start != b.start else (a.priority < b.priority if a.priority != b.priority else a.id < b.id))
+	for order in ready:
+		var equipment := StringName(order.route.operations[0].equipment)
+		if not order_at(equipment).is_empty() or (order.stage in ["mix", "extrude"] and not erp.feeder_id.is_empty()):
+			_set_delay(order, "Work center or shared staging crew occupied")
+		elif not ERP.Scheduling.in_calendar(erp.catalog, order.center, erp.now, erp.now + 1.0):
+			_set_delay(order, "Work center calendar is closed")
+		else:
+			_begin_stage(order)
+			erp.dispatch_queue.erase(order.id)
+			order.status = "In Progress"
+			order.assigned_at = erp.now
+			order.delay = "Waiting for setup or physical components"
+			erp.changed()
+
+
+func _begin_stage(order: Dictionary, restoring: bool = false) -> void:
+	var op: Dictionary = order.route.operations[0]
+	var equipment := StringName(op.equipment)
+	var tech: Dictionary = op.technical
+	var stage: String = order.stage
+	var bake := equipment if stage == "bake" else &""
+	var coat := equipment if stage == "coat" else &""
+	var run := {"id": order.id, "stage": stage, "equipment": equipment, "bake": bake, "coat": coat,
+		"oven": ovens.get(bake), "coater": coaters.get(coat), "input": coater_inputs.get(coat),
+		"output": Storage.new(COATER_OUTFEED_KG), "raw": null, "cooked": null, "intake": null,
+		"outbound": null, "pack": null, "store": null, "cycle": tech.get("cycle_seconds", 0.0),
+		"setup": 0.0, "fed": false}
+	runs[order.id] = run
+	if restoring:
+		return
+	match stage:
+		"mix", "extrude":
+			erp.feeder_id = order.id
+			if stage == "extrude":
+				extruder.configured_rate = tech.rate
+		"bake":
+			run.oven.stock.resize(tech.batch_kg)
+		"coat":
+			run.input.resize(tech.input_kg)
+			run.coater.configured_rate = tech.rate
+			var prior: String = last_coatings.get(coat, "")
+			if not prior.is_empty() and prior != order.recipe.coating:
+				run.setup = tech.setup_seconds
+			last_coatings[coat] = order.recipe.coating
+		"pack":
+			erp.pack_id = order.id
+			packer.configured_rate = tech.rate
+			if not pack_last_recipe.is_empty() and (pack_last_recipe.packaging != order.recipe.packaging \
+					or pack_last_recipe.spec.box_kg != order.recipe.spec.box_kg \
+					or pack_last_recipe.spec.boxes_per_pallet != order.recipe.spec.boxes_per_pallet):
+				run.setup = tech.setup_seconds
+			pack_last_recipe = order.recipe
+
+
+func _start_stage() -> void:
+	var order := erp.active()
+	if order.has("stage") and order.started < 0.0:
+		order.started = erp.now
+		erp.changed()
+
+
+func _stage_jobs() -> Array[FloorJob]:
+	var jobs: Array[FloorJob] = []
+	var order := erp.active()
+	var stage: String = order.stage
+	var active: bool = order.status == "In Progress"
+	var stock_point := layout.port(&"SFGWarehouse", &"stock_dock")
+	var dock: Cart = _run.store
+	var input: Cart
+	var site := Cart.Site.PARKING
+	var destination := Vector3.ZERO
+	var category := ""
+	if stage == "bake":
+		input = raw_at_oven
+		site = Cart.Site.OVEN_RAW
+		destination = layout.port(_run.bake, &"raw_dock")
+		category = "raw"
+	elif stage == "coat":
+		input = cooked_at_coater
+		site = Cart.Site.COATER
+		destination = layout.port(_run.coat, &"cooked_dock")
+		category = "cooked"
+	elif stage == "pack":
+		input = _run.pack
+		site = Cart.Site.PACK_WIP
+		destination = layout.port(&"PackagingWIP", &"coated_dock")
+		category = "coated"
+	var requesting := active and not category.is_empty() and input == null \
+		and float(order.remaining.get(order.recipe.input, 0.0)) > EPSILON
+	if _available(dock, Cart.Site.SFG_DOCK):
+		var input_cart := _cart_matches(dock, category)
+		if input_cart and dock.stock.quantity > EPSILON:
+			jobs.append(_move(dock, site, destination, "Deliver " + order.recipe.input))
+		elif input_cart and requesting and erp.stock(order.recipe.input, "SFG-WH") > EPSILON:
+			jobs.append(_handling(JobKind.SFG_LOAD, dock, "Collect reserved " + order.recipe.input))
+		elif not input_cart and dock.stock.quantity > EPSILON:
+			jobs.append(_handling(JobKind.SFG_UNLOAD, dock, "Receive " + order.code + " into stock"))
+		else:
+			jobs.append(_move(dock, Cart.Site.PARKING, dock.home, "Return stock cart"))
+	if _available(input, site):
+		if input.stock.quantity <= EPSILON:
+			jobs.append(_move(input, Cart.Site.PARKING, input.home, "Return empty input cart"))
+		elif active:
+			if stage == "bake" and oven.owner == &"" and oven.can_load():
+				jobs.append(_handling(JobKind.LOAD_OVEN, input, "Load raw wafers"))
+			elif stage == "coat" and cooked_input.free_space() > EPSILON:
+				jobs.append(_handling(JobKind.FEED_COATER, input, "Unload coating intake"))
+			elif stage == "pack" and pack_wip.free_space() > EPSILON:
+				jobs.append(_handling(JobKind.UNLOAD_PACK_WIP, input, "Unload packaging WIP"))
+	if stage == "extrude":
+		var finished := erp.dough_finished() and hopper.quantity + hopper_reserved <= EPSILON
+		if _available(raw_at_extruder, Cart.Site.EXTRUDER):
+			if raw_at_extruder.stock.quantity > EPSILON and sfg_dock == null \
+					and (finished or raw_at_extruder.stock.free_space() <= EPSILON):
+				jobs.append(_move(raw_at_extruder, Cart.Site.SFG_DOCK, stock_point, "Deliver raw wafers to stock"))
+			elif not active and raw_at_extruder.stock.quantity <= EPSILON:
+				jobs.append(_move(raw_at_extruder, Cart.Site.PARKING, raw_at_extruder.home, "Return raw cart"))
+		elif active and not finished and raw_at_extruder == null:
+			var empty := _parked_cart(true)
+			if empty != null:
+				jobs.append(_move(empty, Cart.Site.EXTRUDER, layout.port(&"Extruder", &"raw_dock"), "Stage raw cart"))
+	elif stage == "bake":
+		if _available(cooked_at_oven, Cart.Site.OVEN_COOKED):
+			if cooked_at_oven.stock.quantity > EPSILON and sfg_dock == null:
+				jobs.append(_move(cooked_at_oven, Cart.Site.SFG_DOCK, stock_point, "Deliver baked wafers to stock"))
+			elif active and oven.state == Oven.State.READY and oven.owner == &"":
+				jobs.append(_handling(JobKind.UNLOAD_OVEN, cooked_at_oven, "Unload baked wafers"))
+			elif not active and cooked_at_oven.stock.quantity <= EPSILON:
+				jobs.append(_move(cooked_at_oven, Cart.Site.PARKING, cooked_at_oven.home, "Return baked cart"))
+		elif active and cooked_at_oven == null and oven.state in [Oven.State.COOKING, Oven.State.READY]:
+			var empty := _parked_cart(false)
+			if empty != null:
+				jobs.append(_move(empty, Cart.Site.OVEN_COOKED, layout.port(_run.bake, &"cooked_dock"), "Stage baked cart"))
+	elif stage == "coat":
+		var out: Cart = _run.outbound
+		if _available(out, Cart.Site.COATER_OUT):
+			var waiting: float = _run.output.quantity
+			var finished: bool = float(order.get("progress", {}).get("coat", 0.0)) + EPSILON >= order.recipe.target
+			if out.stock.quantity > EPSILON and (out.stock.free_space() <= EPSILON or (finished and waiting <= EPSILON)):
+				if sfg_dock == null:
+					jobs.append(_move(out, Cart.Site.SFG_DOCK, stock_point, "Deliver coated wafers to stock"))
+			elif active and waiting > EPSILON and (finished or waiting + EPSILON >= minf(out.stock.free_space(), _run.output.capacity)):
+				jobs.append(_handling(JobKind.LOAD_COATED, out, "Load coated wafers"))
+			elif not active and out.stock.quantity <= EPSILON:
+				jobs.append(_move(out, Cart.Site.PARKING, out.home, "Return coated cart"))
+		elif active and out == null and _run.output.quantity > EPSILON:
+			var empty := _parked_category("coated")
+			if empty != null:
+				jobs.append(_move(empty, Cart.Site.COATER_OUT, layout.port(_run.coat, &"coated_dock"), "Stage coated cart"))
+	if requesting and sfg_dock == null:
+		var empty := _parked_category(category)
+		if empty != null:
+			jobs.append(_move(empty, Cart.Site.SFG_DOCK, stock_point, "Collect a stock cart"))
+	return jobs
+
+
+func _cart_matches(cart: Cart, category: String) -> bool:
+	match category:
+		"raw": return cart.raw
+		"cooked": return not cart.raw and not cart.coated
+		"coated": return cart.coated
+	return false
+
+
+func _parked_category(category: String) -> Cart:
+	for cart in carts:
+		if _cart_matches(cart, category) and _available(cart, Cart.Site.PARKING):
+			return cart
+	return null
+
+
+func _stage_wip(order: Dictionary, run: Dictionary) -> Dictionary:
+	var totals := {}
+	var code: String = order.code
+	var input: String = order.recipe.input
+	match order.stage:
+		"mix", "extrude":
+			if erp.feeder_id == order.id:
+				var carried := hopper.quantity if order.stage == "extrude" else 0.0
+				for worker in platform_crew:
+					carried += worker.cargo_kg
+				totals[code if order.stage == "mix" else input] = carried
+		"bake":
+			var baked: bool = run.oven.state in [Oven.State.READY, Oven.State.UNLOADING]
+			totals[code if baked else input] = run.oven.stock.quantity
+		"coat":
+			totals[input] = run.input.quantity
+			totals[code] = run.output.quantity
+		"pack":
+			totals[input] = pack_wip.quantity + box_progress if erp.pack_id == order.id else 0.0
+			totals[code] = lift_load.mass if lift_load != null and lift_load.order_id == order.id else 0.0
+			for pallet in staged_pallets:
+				if pallet != null and pallet.order_id == order.id:
+					totals[code] += pallet.mass
+	for cart in carts:
+		if cart.order_id != order.id:
+			continue
+		var output: bool = (order.stage == "extrude" or (order.stage == "bake" and not cart.raw) or (order.stage == "coat" and cart.coated))
+		var material := code if output else input
+		totals[material] = float(totals.get(material, 0.0)) + cart.stock.quantity
+	for material in totals.keys():
+		if totals[material] <= EPSILON:
+			totals.erase(material)
+	return totals
 
 
 func _step_routed() -> void:
@@ -516,9 +844,11 @@ func _step_routed() -> void:
 
 
 func _dispatch_route() -> void:
+	if erp.explicit_planning:
+		return
 	var chosen := {}
 	for order in erp.orders.values():
-		if order.status != "Released" or order.start > erp.now or not route_conflicts(order).is_empty():
+		if order.has("stage") or order.status != "Released" or order.start > erp.now or not route_conflicts(order).is_empty():
 			continue
 		if chosen.is_empty() or order.priority < chosen.priority \
 				or (order.priority == chosen.priority and order.start < chosen.start):
@@ -533,6 +863,9 @@ func _dispatch_route() -> void:
 
 
 func _begin_route(order: Dictionary, restoring: bool = false) -> void:
+	if order.has("stage"):
+		_begin_stage(order, restoring)
+		return
 	var ops: Array = order.route.operations
 	var bake: StringName = StringName(ops[1].equipment)
 	var coat: StringName = StringName(ops[2].equipment)
@@ -556,7 +889,7 @@ func _begin_route(order: Dictionary, restoring: bool = false) -> void:
 func route_conflicts(order: Dictionary) -> Array[String]:
 	var result: Array[String] = []
 	for op in order.route.operations:
-		if op.type not in ["bake", "coat"]:
+		if not order.has("stage") and op.type not in ["bake", "coat"]:
 			continue
 		var equipment := StringName(op.equipment)
 		var owner := order_at(equipment)
@@ -569,16 +902,19 @@ func order_at(equipment: StringName) -> Dictionary:
 	if erp == null:
 		return {}
 	if equipment == &"Extruder":
-		return erp.orders.get(erp.feeder_id, {})
+		var order: Dictionary = erp.orders.get(erp.feeder_id, {})
+		return {} if order.get("stage") == "mix" else order
 	if equipment == &"Packer":
 		return erp.orders.get(erp.pack_id, {})
 	for run in runs.values():
-		if equipment == run.bake or equipment == run.coat:
+		if equipment == run.get("equipment", &"") or equipment == run.bake or equipment == run.coat:
 			return erp.orders[run.id]
 	return {}
 
 
 func work_center_status(equipment: StringName) -> String:
+	if equipment == &"Hopper":
+		return "Preparing" if not order_at(equipment).is_empty() else "Idle"
 	if ovens.has(equipment):
 		return ovens[equipment].state_title()
 	var machine: Machine = coaters.get(equipment, extruder if equipment == &"Extruder" else packer)
@@ -589,9 +925,15 @@ func _retire_routes() -> void:
 	for id in runs.keys():
 		var run: Dictionary = runs[id]
 		if erp.orders[id].status in ["Completed", "Closed"] and run.raw == null and run.cooked == null and run.intake == null \
-			and run.outbound == null and run.pack == null \
+			and run.outbound == null and run.pack == null and run.get("store") == null \
+			and (id != erp.feeder_id or raw_at_extruder == null) \
 			and not floor_assignments.values().any(func(job: FloorJob) -> bool: return job.run == id):
-			run.coater.idle()
+			if run.coater != null:
+				run.coater.idle()
+			if erp.feeder_id == id:
+				erp.feeder_id = ""
+			if erp.pack_id == id:
+				erp.pack_id = ""
 			runs.erase(id)
 
 
@@ -635,7 +977,11 @@ func _step_extrusion() -> void:
 		raw_at_extruder.order_id = erp.feeder_id
 		var recipe: Dictionary = erp.active().recipe
 		var kg := extruder.actual_rate * STEP_HOURS
-		_erp_transform(recipe.dough, kg, recipe.raw, kg, "Extrusion")
+		if _run.has("stage"):
+			_start_stage()
+			_stage_transform(recipe.input, kg, erp.active().code, kg, "Extrusion")
+		else:
+			_erp_transform(recipe.dough, kg, recipe.raw, kg, "Extrusion")
 
 
 func _step_oven(recipe: Dictionary) -> void:
@@ -645,12 +991,20 @@ func _step_oven(recipe: Dictionary) -> void:
 	oven.advance(STEP_SECONDS, _run.cycle)
 	if previous == Oven.State.COOKING and oven.state == Oven.State.READY:
 		_add_progress("bake", oven.stock.quantity)
-		_erp_transform(recipe.raw, oven.stock.quantity, recipe.baked, oven.stock.quantity, "Oven batch")
+		if _run.has("stage"):
+			_stage_transform(recipe.input, oven.stock.quantity, erp.active().code, oven.stock.quantity, "Oven batch")
+		else:
+			_erp_transform(recipe.raw, oven.stock.quantity, recipe.baked, oven.stock.quantity, "Oven batch")
 
 
 func _erp_transform(input: String, amount: float, output: String, produced: float, reason: String) -> void:
 	erp.flow(input, amount, "WIP", "", "Consumption", reason)
 	erp.flow(output, produced, "", "WIP", "SFG Receipt", reason)
+
+
+func _stage_transform(input: String, amount: float, output: String, produced: float, reason: String) -> void:
+	erp.flow(input, amount, "WIP", "", "WIP Used", reason)
+	erp.flow(output, produced, "", "WIP", "WIP Produced", reason)
 
 
 func _coat_erp() -> void:
@@ -668,12 +1022,20 @@ func _coat_erp() -> void:
 		erp.coat(kg)
 		cooked_input.remove(kg * baked_rate)
 		coated_input.apply_transfer(kg, 0.0)
-		_erp_transform(order.recipe.baked, kg * baked_rate, order.recipe.coated, kg, "Chocolate coating")
+		if order.has("stage"):
+			_start_stage()
+			_stage_transform(order.recipe.baked, kg * baked_rate, order.recipe.coated, kg, "Chocolate coating")
+		else:
+			_erp_transform(order.recipe.baked, kg * baked_rate, order.recipe.coated, kg, "Chocolate coating")
 	coater.record(kg, STEP_HOURS, _machine_state(target, kg, room <= limit))
 
 
 func _raw_finished() -> bool:
-	if not _run.fed and (erp.scope_id != erp.feeder_id or not erp.dough_finished() or hopper.quantity + hopper_reserved > EPSILON):
+	if _run.get("stage") == "bake":
+		var order := erp.active()
+		if float(order.remaining.get(order.recipe.input, 0.0)) > EPSILON:
+			return false
+	elif not _run.fed and (erp.scope_id != erp.feeder_id or not erp.dough_finished() or hopper.quantity + hopper_reserved > EPSILON):
 		return false
 	for cart in carts:
 		if cart.raw and cart.order_id == erp.scope_id and cart.stock.quantity > EPSILON:
@@ -719,6 +1081,8 @@ func _pack() -> void:
 			box_target = settings[&"box_kg"] if erp == null else erp.active().recipe.spec.box_kg
 		var amount := minf(available, box_target - box_progress)
 		box_progress += amount
+		if erp != null:
+			_start_stage()
 		packed += amount
 		available -= amount
 		if box_progress + EPSILON >= box_target:
@@ -730,7 +1094,7 @@ func _pack() -> void:
 			if erp != null:
 				var recipe: Dictionary = erp.active().recipe
 				_add_progress("pack", box_progress)
-				erp.flow(recipe.coated, box_progress, "PACK-WIP", "", "Consumption", "Carton packed")
+				erp.flow(recipe.coated, box_progress, "PACK-WIP", "", "WIP Used" if erp.active().has("stage") else "Consumption", "Carton packed")
 				erp.flow(pallet.sku, box_progress, "", "WIP", "Packed Receipt", "Carton packed")
 				if erp.pack_box(new_pallet):
 					pallet.sealed = true
@@ -792,14 +1156,25 @@ func _advance_platform() -> void:
 					worker.idle()
 					continue
 				worker.cargo_kg = worker.reserved_kg
-				ingredients_taken += worker.cargo_kg
+				if erp == null or erp.active().get("stage") != "extrude":
+					ingredients_taken += worker.cargo_kg
+				if erp != null and erp.active().get("stage") == "mix":
+					_start_stage()
 				worker.travel([layout.platform_drop(index)], Operator.State.CARRYING,
 					"Carry sack to hopper", "Ingredient hopper")
 			Operator.State.CARRYING:
 				worker.task = "Discharge ingredient sack"
-				worker.work(settings[&"unload_time"], Operator.State.UNLOADING)
+				var unload: float = settings[&"unload_time"]
+				if erp != null and erp.active().get("stage") == "mix":
+					var rate: float = erp.active().route.operations[0].technical.rate
+					unload = maxf(unload, worker.cargo_kg * 3600.0 * platform_crew.size() / rate)
+				worker.work(unload, Operator.State.UNLOADING)
 			Operator.State.UNLOADING:
-				hopper.apply_transfer(worker.cargo_kg, 0.0)
+				if erp != null and erp.active().get("stage") == "mix":
+					_add_progress("mix", worker.cargo_kg)
+					erp.receive_stage(erp.active(), worker.cargo_kg)
+				else:
+					hopper.apply_transfer(worker.cargo_kg, 0.0)
 				hopper_reserved = maxf(0.0, hopper_reserved - worker.reserved_kg)
 				worker.reserved_kg = 0.0
 				worker.cargo_kg = 0.0
@@ -867,7 +1242,7 @@ func _eligible_jobs() -> Array[FloorJob]:
 		result.append(_move(raw_at_extruder, Cart.Site.PARKING, raw_at_extruder.home, "Park idle extruder cart"))
 	for id in runs:
 		_open_run(id)
-		for job in _floor_jobs():
+		for job in (_stage_jobs() if _run.has("stage") else _floor_jobs()):
 			job.run = id
 			result.append(job)
 		_close_run()
@@ -1006,7 +1381,7 @@ func _continue_job(worker: Operator, job: FloorJob) -> void:
 			if job.kind == JobKind.LOAD_OVEN:
 				oven.state = Oven.State.LOADING
 				worker.work(CART_HANDLING_SECONDS, Operator.State.LOADING)
-			elif job.kind == JobKind.LOAD_COATED:
+			elif job.kind in [JobKind.LOAD_COATED, JobKind.SFG_LOAD]:
 				worker.work(CART_HANDLING_SECONDS, Operator.State.LOADING)
 			else:
 				if job.kind == JobKind.UNLOAD_OVEN:
@@ -1022,6 +1397,8 @@ func _continue_job(worker: Operator, job: FloorJob) -> void:
 			elif job.site == Cart.Site.COATER:
 				cooked_deliveries += 1
 		JobKind.LOAD_OVEN:
+			if erp != null:
+				_start_stage()
 			_move_mass(cart.stock, oven.stock)
 			oven.owner = &""
 			oven.advance(0.0, _run.get("cycle", settings[&"cook_minutes"] * 60.0))
@@ -1039,6 +1416,16 @@ func _continue_job(worker: Operator, job: FloorJob) -> void:
 			var amount := cart.stock.remove(pack_wip.free_space())
 			pack_wip.apply_transfer(amount, 0.0)
 			erp.flow(erp.active().recipe.coated, amount, "WIP", "PACK-WIP", "Transfer", "Coated cart unloaded")
+		JobKind.SFG_LOAD:
+			var order := erp.active()
+			var code: String = order.recipe.input
+			var amount := minf(cart.stock.free_space(), minf(erp.stock(code, "SFG-WH"), order.remaining.get(code, 0.0)))
+			if amount > EPSILON:
+				erp._consume(order, code, amount, "SFG-WH", "Issue reserved material to production cart")
+				cart.stock.apply_transfer(amount, 0.0)
+				cart.order_id = job.run
+		JobKind.SFG_UNLOAD:
+			erp.receive_stage(erp.active(), cart.stock.remove(cart.stock.quantity))
 	if cart.stock.quantity <= EPSILON:
 		cart.order_id = ""
 	cart.owner = &""
@@ -1049,6 +1436,8 @@ func _continue_job(worker: Operator, job: FloorJob) -> void:
 func _job_destination(site: Cart.Site) -> String:
 	if not _run.is_empty():
 		var ops: Array = erp.active().route.operations
+		if _run.has("stage") and site in [Cart.Site.OVEN_RAW, Cart.Site.OVEN_COOKED, Cart.Site.COATER, Cart.Site.COATER_OUT]:
+			return ops[0].description + " · " + Cart.SITE_NAMES[site]
 		match site:
 			Cart.Site.OVEN_RAW:
 				return ops[1].description + " loading"
@@ -1067,6 +1456,9 @@ func _move_mass(source: Storage, target: Storage) -> void:
 
 func _set_berth(site: Cart.Site, cart: Cart) -> void:
 	match site:
+		Cart.Site.SFG_DOCK:
+			_run.store = cart
+			sfg_dock = cart
 		Cart.Site.EXTRUDER:
 			raw_at_extruder = cart
 		Cart.Site.OVEN_RAW:
@@ -1169,6 +1561,8 @@ func order_wip(id: String) -> Dictionary:
 		return totals
 	var order: Dictionary = erp.orders[id]
 	var recipe: Dictionary = order.recipe
+	if run.has("stage"):
+		return _stage_wip(order, run)
 	if id == erp.feeder_id:
 		totals[recipe.dough] = hopper.quantity
 		for worker in platform_crew:

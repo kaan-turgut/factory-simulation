@@ -7,5 +7,7 @@
   "TRANSIT": "Supply shuttle",
   "WIP": "In-process stock",
   "COAT-IN-02": "Coater 02 supplies",
-  "PACK-WIP": "Coated wafers at packaging"
+  "PACK-WIP": "Coated wafers at packaging",
+  "SFG-WH": "Semi-finished warehouse",
+  "SFG-DECK": "Prepared dough at mezzanine"
 }

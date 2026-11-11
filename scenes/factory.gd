@@ -14,6 +14,7 @@ const NO_CELL := Vector2i(-2147483648, -2147483648)
 
 @export var building_cells := Vector2i.ZERO
 @export var erp_enabled := true
+@export var explicit_planning := true
 @export var resume_saved := true
 
 var terminal: ERPWindow
@@ -55,7 +56,7 @@ func _ready() -> void:
 		resume_saved = false
 	line = Line.new(Layout.new(building_cells))
 	if erp_enabled:
-		line.enable_erp()
+		line.enable_erp(explicit_planning)
 		if resume_saved and FileAccess.file_exists(SaveGame.PATH):
 			var saved := SaveGame.load_line()
 			if saved.error.is_empty():
@@ -341,7 +342,7 @@ func _update_build_panel() -> void:
 	var center := line.erp.catalog.center_at(item.id) if line.erp != null else {}
 	var title := String(center.get("description", {
 		&"Hopper": "Ingredient hopper", &"Warehouse": "Finished goods warehouse",
-		&"PackagingWIP": "Packaging WIP", &"Palletizer": "Palletizing bays"
+		&"PackagingWIP": "Packaging WIP", &"Palletizer": "Palletizing bays", &"SFGWarehouse": "Wafer stock"
 	}.get(item.id, String(item.id).capitalize())))
 	var footprint := item.footprint()
 	var details := "ID %s%s\nCell (%d, %d) · %d × %d cells · %d°\nElevation %.1f m · Height %.2f m" % [
@@ -646,6 +647,8 @@ func _resume_camera() -> void:
 func _locate_stock(location: String) -> void:
 	match location:
 		"RM-WH": _select(&"RawWarehouse")
+		"SFG-WH": _select(&"SFGWarehouse")
+		"SFG-DECK": _select(&"Platform")
 		"RM-STAGE": _select(&"Platform")
 		"COAT-IN": _select(&"Coater")
 		"COAT-IN-02": _select(&"Coater02")

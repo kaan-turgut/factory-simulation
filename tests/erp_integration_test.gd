@@ -10,6 +10,7 @@ var _failures := 0
 
 func _initialize() -> void:
 	_master_data()
+	_packaging_migration()
 	_purchase_and_transfer()
 	_reservations()
 	_late_receipt_and_safety()
@@ -30,6 +31,14 @@ func _master_data() -> void:
 		if not recipe.error.is_empty():
 			continue
 		colors[recipe.spec.package_color] = true
+		_near(recipe.spec.pack_kg, 0.1, code + " uses 100 g packs")
+		_near(recipe.spec.packs_per_box, 50.0, code + " uses 50 packs per shipping box")
+		_near(recipe.spec.box_kg, 5.0, code + " uses 5 kg shipping boxes")
+		_near(recipe.spec.boxes_per_pallet, 8.0, code + " uses eight-box pallets")
+		_near(recipe.spec.batch_kg, 40.0, code + " uses 40 kg full pallets")
+		_near(catalog.boms[code].base, 5.0, code + " uses a one-box BOM base")
+		_near(recipe.needs["PK-BOX-%d" % index], 9.0, code + " uses one carton per box")
+		_near(recipe.needs["PK-LABEL-%d" % index], 9.0, code + " uses one label per box")
 		_near(recipe.needs[recipe.coating], recipe.target * 0.2, "Variant coating explosion")
 		_near(recipe.needs["RM-FLOUR"], recipe.target * 0.8 * 0.55, "Multilevel flour explosion")
 		_near(recipe.needs["PK-PALLET"], ceilf(9.0 / recipe.spec.boxes_per_pallet), "Pallet rounding")
@@ -44,6 +53,41 @@ func _master_data() -> void:
 	var edited := catalog.recipe("FG-1020", 7)
 	_check(edited.error.is_empty() and edited.bom_version == old_version + 1, "Changed spec versions its BOM")
 	_near(edited.target, 35.0, "Consumer pack weight derives shipping weight")
+
+
+func _packaging_migration() -> void:
+	var line := _line()
+	var book := line.erp
+	var code := "FG-1002"
+	var catalog := book.catalog
+	catalog.edit_material(code, "Dark wafer (saved name)", 3.0, 210.0, true, 0.08, 50, 8)
+	catalog.boms[code].version = 1
+	catalog._update_bom_versions(code)
+	catalog.edit_material("FG-1003", "Custom white wafer", 0.0, 240.0, true, 0.12, 40, 10)
+	var dark_demand := book.create_demand(code, 3, 1500.0)
+	book.adjust("RM-COAT-1002", 2.0, "Saved stock fixture")
+	var released := book.create_order(code, 2, 1000.0, 1)
+	_check(book.release(released.id).is_empty(), "Release an order with the original carton size")
+	var data := Save.snapshot(line)
+	data.version = 4
+	var result := Save.restore(data)
+	_check(result.error.is_empty(), "Load a shift with original carton sizes")
+	if not result.error.is_empty():
+		return
+	var restored: Line = result.line
+	var updated := restored.erp.catalog.recipe(code, 2)
+	_check(updated.error.is_empty() and updated.bom_version == 2, "Migrated BOM and production versions agree")
+	_near(updated.target, 10.0, "New orders use standard 5 kg cartons")
+	_near(restored.erp.demands[dark_demand.id].recipe.target, 15.0, "Unconverted demand keeps its planned box count")
+	_near(restored.erp.catalog.materials["FG-1003"].box_kg, 4.8, "Custom packaging stays intact")
+	_check(updated.spec.name == "Dark wafer (saved name)" and updated.spec.minimum == 3.0,
+		"Migration preserves unrelated material fields")
+	_check(restored.erp.orders[released.id] == book.orders[released.id]
+		and restored.erp.reservations == book.reservations and restored.erp.balances == book.balances,
+		"Migration preserves the released specification, reservation and stock")
+	var reloaded := Save.restore(Save.snapshot(restored))
+	_check(reloaded.error.is_empty() and reloaded.line.erp.catalog.boms[code].version == 2,
+		"Saving a migrated shift preserves the new BOM version")
 
 
 func _purchase_and_transfer() -> void:
@@ -100,7 +144,7 @@ func _late_receipt_and_safety() -> void:
 	var plan := MRP.new()
 	plan.run(b, {})
 	var key := "BUY|" + id + "|RM-COAT-1002"
-	_near(plan.proposals[key].qty, 3.6, "MRP replenishes demand plus safety stock")
+	_near(plan.proposals[key].qty, 4.0, "MRP replenishes demand plus safety stock")
 	_check(plan.proposals[key].start < b.now, "Planning lead flags a past release date")
 	_check(plan.convert(key, b, {}).error.is_empty(), "Convert late purchase")
 	_check(not plan.proposals.has(key) and plan.summary.late > 0, "Late open PO is visible without duplication")
@@ -108,7 +152,7 @@ func _late_receipt_and_safety() -> void:
 		"Time-phased projection identifies the late receipt")
 	for row in plan.rows:
 		if row.code == "RM-COAT-1002" and row.kind == "BOM requirement":
-			_near(row.projected, -1.6, "Future receipts do not appear in projected stock before arrival")
+			_near(row.projected, -2.0, "Future receipts do not appear in projected stock before arrival")
 
 
 func _competing_demand() -> void:
@@ -140,7 +184,7 @@ func _planning_and_manufacturing() -> void:
 	var layout := Line.Layout.new()
 	_check(layout.move(&"Oven", Vector2i(16, 16), 1).is_empty(), "ERP uses placed factory layout")
 	var line := Line.new(layout)
-	line.enable_erp()
+	line.enable_erp(false)
 	var b := line.erp
 	var demand := b.create_demand("FG-1002", 13, 420.0)
 	var plan := MRP.new()
@@ -150,7 +194,7 @@ func _planning_and_manufacturing() -> void:
 	_check(plan.proposals.has(purchase_key) and plan.proposals.has(make_key), "Demand creates make and buy proposals")
 	if not plan.proposals.has(purchase_key) or not plan.proposals.has(make_key):
 		return
-	_near(plan.proposals[purchase_key].qty, 10.4, "MRP finds exact dark coating shortage")
+	_near(plan.proposals[purchase_key].qty, 13.0, "MRP finds exact dark coating shortage")
 	_check(plan.summary.buy == 1 and plan.summary.make == 1 and plan.summary.shortages.size() == 1,
 		"MRP distinguishes one shortage from other covered inputs")
 	plan.run(b, line.erp_fg())
@@ -171,7 +215,7 @@ func _planning_and_manufacturing() -> void:
 	_near(b.stock("RM-COAT-1002", "RM-WH"), 0.0, "No inventory before actual receipt")
 	_check(line.warehouse_count() == 0 and line.extruder.total_output == 0.0, "No production without release")
 	line.advance(0.25)
-	_near(b.stock("RM-COAT-1002", "RM-WH"), 10.4, "Timed receipt posts missing chocolate")
+	_near(b.stock("RM-COAT-1002", "RM-WH"), 13.0, "Timed receipt posts missing chocolate")
 	_check(b.release(id).is_empty() and b.orders[id].status == "Released", "Release covered order")
 	_check(line.warehouse_count() == 0 and b.orders[id].consumed.is_empty(), "Release is not production")
 	for step in 1400:
@@ -197,12 +241,12 @@ func _planning_and_manufacturing() -> void:
 	_check(order.status == "Completed" and order.received == 13 and order.packed == 13,
 		"Finished quantity is received through forklift before completion")
 	_check(order.started >= order.start and order.completed > order.started + 36.0, "Production requires elapsed time")
-	_near(order.received_kg, 52.0, "Finished quantity in kg")
-	_near(line.erp_fg().get("FG-1002", 0.0), 52.0, "ERP reads physical warehouse stock")
+	_near(order.received_kg, 65.0, "Finished quantity in kg")
+	_near(line.erp_fg().get("FG-1002", 0.0), 65.0, "ERP reads physical warehouse stock")
 	_check(line.warehouse_count() == 2 and line.warehouse[1].boxes == 5 and line.warehouse[1].sealed,
 		"Final partial pallet occupies real warehouse space")
-	_near(order.consumed.get("RM-COAT-1002", 0.0), 10.4, "Physical coating consumption")
-	_near(order.consumed.get("RM-FLOUR", 0.0), 22.88, "Physical dough consumption")
+	_near(order.consumed.get("RM-COAT-1002", 0.0), 13.0, "Physical coating consumption")
+	_near(order.consumed.get("RM-FLOUR", 0.0), 28.6, "Physical dough consumption")
 	_near(order.consumed.get("PK-BOX-1002", 0.0), 13.0, "Packaging consumed as cartons form")
 	_near(order.consumed.get("PK-PALLET", 0.0), 2.0, "Actual pallets consumed")
 	_near(b.reservations.get("RM-COAT-1002", 0.0), 0.0, "Completed order releases remaining reservation")
@@ -215,12 +259,12 @@ func _planning_and_manufacturing() -> void:
 		if row.type == "FG Receipt" and row.document == id:
 			fg_kg += row.qty
 			receipts += 1
-	_near(fg_kg, 52.0, "Order document traces warehouse receipts")
+	_near(fg_kg, 65.0, "Order document traces warehouse receipts")
 	_check(receipts == 2 and line.erp_wip().is_empty(), "Exactly two receipts and drained WIP")
 	_check(b.transition(id, "Closed").is_empty(), "Completed document can close")
 	_changeover(line)
 	_check(line.dispatch(false) == 1, "Dispatch removes one physical pallet")
-	_near(line.erp_fg().get("FG-1002", 0.0), 20.0, "ERP dispatch derives from the pallet inventory")
+	_near(line.erp_fg().get("FG-1002", 0.0), 25.0, "ERP dispatch derives from the pallet inventory")
 	for stock in b.balances.values():
 		for value in stock.values():
 			_check(value >= 0.0, "All externally stocked material stays nonnegative")
@@ -243,7 +287,7 @@ func _changeover(line: Line) -> void:
 	line.advance(500.0)
 	_check(b.orders[next].status == "Completed" and line.warehouse_count() == 3, "Second SKU completes independently")
 	_near(line.erp_fg().get("FG-1001", 0.0), 15.0, "Second SKU stays separate")
-	_near(line.erp_fg().get("FG-1002", 0.0), 52.0, "First SKU remains intact")
+	_near(line.erp_fg().get("FG-1002", 0.0), 65.0, "First SKU remains intact")
 
 
 func _thousand_box_order() -> void:
@@ -279,7 +323,7 @@ func _thousand_box_order() -> void:
 
 func _line() -> Line:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
 	return line
 
 

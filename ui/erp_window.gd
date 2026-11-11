@@ -3,6 +3,9 @@ extends CanvasLayer
 
 const Line = preload("res://simulation/production_line.gd")
 const Book = Line.ERP
+const Scheduling = Book.Scheduling
+const ScheduleBoard = preload("res://ui/scheduling_board.gd")
+const SCHEDULE_PAGE := 12
 const Plan = preload("res://erp/mrp.gd")
 const Style = preload("res://ui/hud_style.gd")
 
@@ -15,7 +18,7 @@ signal route_requested(id: String)
 
 const MODULES := ["Dashboard", "Material Master", "Bill of Materials", "Inventory Management",
 	"Material Requirements Planning", "Production Orders", "Procurement", "Goods Movements", "Reports and Analytics",
-	"Routing Master", "Work Center Master", "Production Versions"]
+	"Routing Master", "Work Center Master", "Production Versions", "Detailed Scheduling"]
 const INK := Color("#182d42")
 const MUTED := Color("#50677b")
 const BLUE := Color("#1969a4")
@@ -27,9 +30,11 @@ var _page := 0
 var _selected := {}
 var _rows := {}
 var _revision := -1
+var _board_time := -1.0
 var _pending_page := false
 var _suppliers := false
 var _proposals_only := false
+var _schedule_report := false
 var _open := false
 var _root: Control
 var _dimmer: ColorRect
@@ -39,11 +44,14 @@ var _summary: Label
 var _status: Label
 var _clock: Label
 var _pause: Button
+var _auto_release: CheckButton
 var _search: LineEdit
 var _family: LineEdit
 var _date_filter: LineEdit
 var _table: Tree
 var _detail: RichTextLabel
+var _board: VBoxContainer
+var _filters: HBoxContainer
 var _actions: HFlowContainer
 var _nav: Array[Button] = []
 var _tween: Tween
@@ -63,6 +71,7 @@ func _ready() -> void:
 func bind(factory_line: Line) -> void:
 	line = factory_line
 	plan = Plan.new()
+	_board.bind(line)
 	_revision = -1
 	if _open:
 		_render()
@@ -118,6 +127,14 @@ func _poll() -> void:
 		return
 	_clock.text = Book.date(line.elapsed_seconds())
 	_pause.text = "Pause shift" if line.playing else "Play shift"
+	if _page == SCHEDULE_PAGE:
+		if _board_time != line.erp.now or _revision != line.erp.revision:
+			_board_time = line.erp.now
+			_board.refresh()
+		if _revision != line.erp.revision and not _board.picked.is_empty():
+			_select_board_order(_board.picked)
+		_revision = line.erp.revision
+		return
 	if line.erp.revision != _revision and _page not in [1, 2, 4, 9, 11]:
 		_render()
 
@@ -152,6 +169,16 @@ func _build() -> void:
 	_pause = _button(header, "Pause shift", func() -> void:
 		play_requested.emit(not line.playing)
 		_poll())
+	_auto_release = CheckButton.new()
+	_auto_release.text = "Auto Release"
+	_auto_release.tooltip_text = "Release planned orders when their BOM components are in stock. Orders still wait for their scheduled start."
+	Style.button_style(_auto_release)
+	_auto_release.toggled.connect(func(enabled: bool) -> void:
+		line.erp.auto_release = enabled
+		line.erp.changed()
+		notice("Auto Release is on. Orders will release as stock becomes available during the shift." if enabled
+			else "Auto Release is off. Use Release to authorize planned orders."))
+	header.add_child(_auto_release)
 	_button(header, "Save", func() -> void: save_requested.emit())
 	_button(header, "Load", func() -> void:
 		_form("Load saved shift", [], func(_values: Dictionary) -> String:
@@ -186,11 +213,11 @@ func _build() -> void:
 	_summary = _label("", 14, MUTED)
 	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(_summary)
-	var filters := HBoxContainer.new()
-	content.add_child(filters)
-	_search = _filter(filters, "Search by code, description or status")
-	_family = _filter(filters, "Product family")
-	_date_filter = _filter(filters, "Due through sim minute")
+	_filters = HBoxContainer.new()
+	content.add_child(_filters)
+	_search = _filter(_filters, "Search by code, description or status")
+	_family = _filter(_filters, "Product family")
+	_date_filter = _filter(_filters, "Due through sim minute")
 	_actions = HFlowContainer.new()
 	content.add_child(_actions)
 	_table = Tree.new()
@@ -221,6 +248,13 @@ func _build() -> void:
 	_table.add_theme_font_size_override("font_size", 14)
 	_table.item_selected.connect(_on_select)
 	content.add_child(_table)
+	_board = ScheduleBoard.new()
+	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_board.hide()
+	_board.selected.connect(_select_board_order)
+	_board.details_requested.connect(_open_order)
+	_board.feedback.connect(notice)
+	content.add_child(_board)
 	_detail = RichTextLabel.new()
 	_detail.bbcode_enabled = false
 	_detail.custom_minimum_size.y = 88
@@ -228,6 +262,7 @@ func _build() -> void:
 	_detail.add_theme_font_size_override("normal_font_size", 14)
 	content.add_child(_detail)
 	_status = _label("Ready", 14, BLUE)
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(_status)
 
 
@@ -257,6 +292,11 @@ func _set_page(index: int, clear_search: bool = true) -> void:
 	for child in _actions.get_children():
 		_actions.remove_child(child)
 		child.queue_free()
+	var scheduling := _page == SCHEDULE_PAGE
+	_board.visible = scheduling
+	_table.visible = not scheduling
+	_filters.visible = not scheduling
+	_detail.custom_minimum_size.y = 56 if scheduling else 88
 	_family.visible = _page == 4
 	_date_filter.visible = _page == 4
 	_build_actions()
@@ -293,6 +333,11 @@ func _build_actions() -> void:
 			_action("Create order", _new_order)
 			_action("Release", func() -> void: _order_action("release"))
 			_action("Priority / start", _priority)
+			if line.erp.explicit_planning:
+				_action("Check stock", _check_components)
+				_action("Peg supply", _peg_order)
+				_action("Supply orders", _open_supply_order)
+				_action("Component inventory", _component_inventory)
 			_action("Cancel", func() -> void: _confirm_order("Cancelled"))
 			_action("Close order", func() -> void: _order_action("Closed"))
 			_action("Setup times", _setup)
@@ -304,6 +349,14 @@ func _build_actions() -> void:
 				_suppliers = not _suppliers
 				_selected = {}
 				_render())
+		8:
+			_action("Schedule adherence / Shift history", func() -> void:
+				_schedule_report = not _schedule_report
+				_render())
+		SCHEDULE_PAGE:
+			_action("New stage order", _new_order)
+			_action("Release selected", func() -> void: _order_action("release"))
+			_action("Order details", func() -> void: _open_order(String(_selected.get("id", ""))))
 
 
 func _render() -> void:
@@ -314,6 +367,8 @@ func _render() -> void:
 	_title.text = MODULES[_page]
 	_clock.text = Book.date(line.elapsed_seconds())
 	_pause.text = "Pause shift" if line.playing else "Play shift"
+	_auto_release.visible = book.explicit_planning
+	_auto_release.set_pressed_no_signal(book.auto_release)
 	_rows.clear()
 	_table.clear()
 	match _page:
@@ -329,6 +384,12 @@ func _render() -> void:
 		9: _routing_master()
 		10: _work_center_master()
 		11: _production_versions()
+		SCHEDULE_PAGE:
+			_summary.text = "Drag planned bars to move them in time or assign an eligible machine. Double-click for details. Thin bars show actual execution."
+			_board.refresh()
+			if not _board.picked.is_empty():
+				_select_board_order(_board.picked)
+			return
 	var old_key := String(_selected.get("key", ""))
 	if _rows.has(old_key):
 		_rows[old_key].select(0)
@@ -470,6 +531,11 @@ func _inventory() -> void:
 			if qty <= Book.EPS and location != "RM-WH":
 				continue
 			_inventory_row(root, code, location, qty, allocated)
+	for location in Book.SFG_LOCATIONS:
+		for code in b.balances[location]:
+			var qty := b.stock(code, location)
+			if qty > Book.EPS:
+				_inventory_row(root, code, location, qty, minf(qty, b.reservations.get(code, 0.0)))
 	var packaging_wip := line.erp_pack_wip()
 	var upstream_wip := line.erp_wip()
 	for code in packaging_wip:
@@ -516,9 +582,14 @@ func _mrp() -> void:
 
 
 func _orders() -> void:
-	var root := _header(["Order", "Product", "Route", "Plan boxes", "Received", "Priority", "Status"],
-		"Release reserves supplies and freezes the routing. Priority 1 runs first among eligible orders.")
+	var root := _header(["Order", "Material", "Work center / route", "Planned", "Received", "Priority", "Status"],
+		"Each release reserves immediate BOM components. Semi-finished goods use kilograms and packaging orders use shipping boxes.")
 	for order in line.erp.orders.values():
+		if order.has("stage"):
+			_row(root, [order.id, order.code, order.center, "%s %s" % [_qty(order.quantity), order.unit],
+				"%s %s" % [_qty(order.received), order.unit], order.priority, order.status],
+				{"key": order.id, "id": order.id, "detail": _stage_detail(order)})
+			continue
 		var missing := line.erp.shortages(order) if order.status == "Created" else {}
 		var warning: String = "" if order.status == "Created" else order.warning
 		if order.status in ["Created", "Released"]:
@@ -533,6 +604,99 @@ func _orders() -> void:
 			_qty(order.received_kg), order.packed, _amounts(line.order_wip(order.id)), _amounts(order.consumed), warning]
 		_row(root, [order.id, order.code, order.route.id, order.boxes, order.received, order.priority, order.status],
 			{"key": order.id, "id": order.id, "detail": detail})
+
+
+func _stage_detail(order: Dictionary) -> String:
+	var gaps := line.erp.shortages(order) if order.status == "Created" else {}
+	var auto_problem: String = order.get("auto_release_error", "") if order.status == "Created" and gaps.is_empty() else ""
+	var upstream := PackedStringArray()
+	for row in line.erp.orders.values():
+		if order.id in row.get("pegs", []):
+			upstream.append(row.id)
+	var started := Book.date(order.started) if order.started >= 0.0 else "—"
+	var finished := Book.date(order.completed) if order.completed >= 0.0 else "—"
+	var produced: float = order.get("progress", {}).get(order.stage, 0.0)
+	var queue := maxf(0.0, (order.started if order.started >= 0.0 else line.erp.now) - order.start)
+	return ("%s · %s · %s · BOM v%d
+Planned %s → %s · Actual %s → %s
+"
+		+ "Released %s %s · Produced %.2f kg · Received %.2f kg · Remaining %.2f kg · Scrap %.2f kg
+"
+		+ "Components %s · Reserved %s · Consumed %s · WIP %s
+"
+		+ "Supply orders %s · Supplies %s · Queue %.1f min · Logistics %.1f min · Oven wait %.1f min · Material shortage %.1f min
+%s") % [
+		order.id, order.code, order.version, order.recipe.bom_version, Book.date(order.start), Book.date(order.finish),
+		started, finished, _qty(order.released_quantity), order.unit, produced, order.received_kg,
+		maxf(0.0, order.recipe.target - produced), order.scrapped, _amounts(order.recipe.needs),
+		_amounts(order.remaining), _amounts(order.consumed), _amounts(line.order_wip(order.id)), ", ".join(upstream),
+		", ".join(PackedStringArray(order.pegs)), queue / 60.0, order.logistics_seconds / 60.0,
+		order.oven_wait_seconds / 60.0, order.material_wait_seconds / 60.0,
+		" ".join(PackedStringArray([order.delay, "Missing " + _amounts(gaps) if not gaps.is_empty() else "",
+			auto_problem, Scheduling.dependency_warning(line.erp, order)]))]
+
+
+func _select_board_order(id: String) -> void:
+	var order: Dictionary = line.erp.orders.get(id, {})
+	if order.has("stage"):
+		_selected = {"id": id, "key": id}
+		_detail.text = _stage_detail(order)
+
+
+func _open_order(id: String) -> void:
+	if id.is_empty():
+		notice("Select a scheduled order.")
+		return
+	_set_page(5)
+	if _rows.has(id):
+		_rows[id].select(0)
+		_on_select()
+
+
+func _check_components() -> void:
+	var order: Dictionary = line.erp.orders.get(_selected.get("id", ""), {})
+	if order.get("status") != "Created":
+		notice("Select a planned order to check its components.")
+		return
+	var missing := line.erp.shortages(order)
+	notice("All immediate components are available." if missing.is_empty() else "Missing " + _amounts(missing))
+
+
+func _component_inventory() -> void:
+	var order: Dictionary = line.erp.orders.get(_selected.get("id", ""), {})
+	if order.is_empty():
+		notice("Select an order first.")
+		return
+	var gaps := line.erp.shortages(order) if order.status == "Created" else {}
+	var code: String = gaps.keys()[0] if not gaps.is_empty() else order.recipe.needs.keys()[0]
+	_set_page(3)
+	_search.text = code
+	_render()
+
+
+func _open_supply_order() -> void:
+	var id := String(_selected.get("id", ""))
+	var options := []
+	for order in line.erp.orders.values():
+		if id in order.get("pegs", []):
+			options.append([order.id, "%s · %s · %s" % [order.id, order.code, order.status]])
+	if options.is_empty():
+		notice("No upstream orders are pegged to the selection.")
+	elif options.size() == 1:
+		_open_order(options[0][0])
+	else:
+		_form("Open pegged supply", [["order", "Upstream order", options]], func(v: Dictionary) -> String:
+			_open_order(v.order)
+			return "")
+
+
+func _peg_order() -> void:
+	var id := String(_selected.get("id", ""))
+	if id.is_empty():
+		notice("Select the upstream production order first.")
+		return
+	_form("Peg supply from " + id, [["parent", "Downstream order ID", ""]], func(v: Dictionary) -> String:
+		return Scheduling.peg(line.erp, id, v.parent))
 
 
 func _procurement() -> void:
@@ -560,25 +724,50 @@ func _movements() -> void:
 
 
 func _reports() -> void:
+	if _schedule_report:
+		var workload := {}
+		var late := 0
+		for order in line.erp.orders.values():
+			if not order.has("stage") or order.status == "Cancelled":
+				continue
+			if order.status in Book.OPEN:
+				workload[order.center] = float(workload.get(order.center, 0.0)) + order.estimate / 60.0
+			late += int(_is_late(order))
+		var schedule_root := _header(["Order", "Material", "Center", "Plan start", "Actual start", "Plan finish",
+			"Actual finish", "Queue min", "Timing"], "%d late · Open workload in minutes %s" % [late, _amounts(workload)])
+		for order in line.erp.orders.values():
+			if not order.has("stage") or order.status == "Cancelled":
+				continue
+			_row(schedule_root, [order.id, order.code, order.center, Book.date(order.start),
+				Book.date(order.started) if order.started >= 0 else "—", Book.date(order.finish),
+				Book.date(order.completed) if order.completed >= 0 else "—",
+				_qty(maxf(0.0, (order.started if order.started >= 0 else line.erp.now) - order.start) / 60.0),
+				"Late" if _is_late(order) else order.status],
+				{"key": order.id, "detail": _stage_detail(order)})
+		return
 	var root := _header(["Sample time", "Today's FG kg", "Stock kg", "Active order", "Short orders", "Delay min"],
 		"Recorded once per simulated minute. Current utilization  " + _utilization())
 	for row in line.erp.history.slice(maxi(0, line.erp.history.size() - 200)):
 		_row(root, [Book.date(row.time), _qty(row.kg), _qty(row.warehouse), row.order, row.shortages, _qty(row.delay / 60.0)])
 
 
+func _is_late(order: Dictionary) -> bool:
+	return (order.completed if order.completed >= 0 else line.erp.now) > order.finish
+
+
 func _utilization() -> String:
 	var b := line.erp
-	return "Extruder %d%% · Coater 01 %d%% · Coater 02 %d%% · Packing %d%%" % [
-		roundi(100.0 * b.utilization.Extruder / maxf(1.0, b.now)),
-		roundi(100.0 * b.utilization.Coater / maxf(1.0, b.now)),
-		roundi(100.0 * b.utilization.get("Coater02", 0.0) / maxf(1.0, b.now)),
-		roundi(100.0 * b.utilization.Packer / maxf(1.0, b.now))]
+	var parts := PackedStringArray()
+	for center in b.catalog.work_centers.values():
+		parts.append("%s %d%%" % [center.description,
+			roundi(100.0 * b.utilization.get(center.equipment, 0.0) / maxf(1.0, b.now))])
+	return " · ".join(parts)
 
 
 func _routing_master() -> void:
 	var catalog := line.erp.catalog
 	var root := _header(["Routing", "Description", "Version", "Machines", "Validity"],
-		"Operations use work center parameters. Select a routing for its full operation sequence.")
+		"Stage routes execute independently. The WAFER templates retain their full operation sequences for reference.")
 	for route in catalog.routings.values():
 		var resolved: Dictionary = route.duplicate(true)
 		var machine_names := PackedStringArray()
@@ -592,6 +781,15 @@ func _routing_master() -> void:
 				versions.append("%s (%s)" % [version.id, version.product])
 		_row(root, [route.id, route.description, int(route.version), " → ".join(machine_names), _validity(route)],
 			{"key": route.id, "detail": _operation_lines(resolved, {}, true) + "\nVersions · " + ", ".join(versions)})
+
+	if line.erp.explicit_planning:
+		for item in catalog.materials.values():
+			if item.type != "HALB":
+				continue
+			for route in Scheduling.alternatives(catalog, item.code, 1.0, line.erp.now):
+				_row(root, [route.id, item.name, route.version, route.operations[0].description,
+					"Active" if route.operations[0].available else "Offline"],
+					{"key": route.id, "detail": _operation_lines(route, {}, true)})
 
 
 func _work_center_master() -> void:
@@ -621,6 +819,15 @@ func _production_versions() -> void:
 			_validity(version)], {"key": version.id, "detail": "%s · %s\n%s\n%s" % [
 				version.product, catalog.materials[version.product].name, route.description, _validity(version)]})
 
+	if line.erp.explicit_planning:
+		for material in catalog.materials.values():
+			if material.type != "HALB":
+				continue
+			for route in Scheduling.alternatives(catalog, material.code, 1.0, line.erp.now):
+				_row(root, [route.production_version, material.code, "v%d" % route.bom_version,
+					route.operations[0].work_center, "kg", "Active" if route.operations[0].available else "Offline"],
+					{"key": route.production_version, "detail": _operation_lines(route)})
+
 
 func _validity(row: Dictionary) -> String:
 	if not row.active:
@@ -635,7 +842,7 @@ func _operation_lines(route: Dictionary, progress: Dictionary = {}, show_handlin
 		rows.append("%02d %s · %s%s%s" % [op.number, op.description, _technical(op.technical), done,
 			" · Offline" if not op.get("available", true) else ""])
 		if show_handling:
-			rows.append("    %s → %s · %s" % [String(op.input).capitalize(), String(op.output).capitalize(), op.handling])
+			rows.append("    %s → %s · %s" % [op.get("input", ""), op.get("output", ""), op.get("handling", "")])
 	return "\n".join(rows)
 
 
@@ -667,6 +874,9 @@ func _highlight_order() -> void:
 
 
 func _production_form(existing: Dictionary = {}) -> void:
+	if line.erp.explicit_planning:
+		_stage_form(existing)
+		return
 	var fields := [["version", "Production version", []]]
 	if existing.is_empty():
 		fields = [["code", "Finished material", "FG-1002"], ["boxes", "Shipping boxes", "13"],
@@ -681,6 +891,68 @@ func _production_form(existing: Dictionary = {}) -> void:
 				line.erp.now + _number(v.start) * 60.0, v.priority.to_int(), v.version)),
 		func(inputs: Dictionary, preview: Label, refill: bool) -> void:
 			_update_version_picker(inputs, preview, refill, existing))
+
+
+func _stage_form(existing: Dictionary = {}) -> void:
+	if not existing.is_empty() and not existing.has("stage"):
+		notice("Cancel this legacy order and create a stage order.")
+		return
+	var fields := [["start", "Planned start at simulated minute", str(maxf(line.erp.now, existing.get("start", 0.0)) / 60.0)],
+		["version", "Production version / work center", []]]
+	if existing.is_empty():
+		fields = [["code", "Manufactured material", []], ["quantity", "Kilograms for SFG / shipping boxes for FG", "10"],
+			["priority", "Priority 1–9", "5"]] + fields
+	_form("Schedule stage order" if existing.is_empty() else "Reschedule " + existing.id, fields,
+		func(v: Dictionary) -> String:
+			if v.version.is_empty():
+				return "Choose an eligible work center."
+			var start := _number(v.start) * 60.0
+			if not existing.is_empty():
+				return line.erp.reschedule(existing.id, start, v.version)
+			return _result(line.erp.create_order(v.code, _number(v.quantity), start, v.priority.to_int(), v.version)),
+		func(inputs: Dictionary, preview: Label, _refill: bool) -> void:
+			_stage_preview(inputs, preview, existing))
+
+
+func _stage_preview(inputs: Dictionary, preview: Label, existing: Dictionary) -> void:
+	var book := line.erp
+	if existing.is_empty() and inputs.code.item_count == 0:
+		for material in book.catalog.materials.values():
+			if not Scheduling.stage_for(book.catalog, material.code).is_empty():
+				inputs.code.add_item("%s · %s" % [material.code, material.name])
+				inputs.code.set_item_metadata(inputs.code.item_count - 1, material.code)
+		inputs.code.select(0)
+	var code: String = inputs.code.get_selected_metadata() if existing.is_empty() else existing.code
+	var quantity: float = _number(inputs.quantity.text) if existing.is_empty() else existing.quantity
+	var start := maxf(book.now, _number(inputs.start.text) * 60.0)
+	var picker: OptionButton = inputs.version
+	var wanted := String(picker.get_selected_metadata()) if picker.selected >= 0 else String(existing.get("version", ""))
+	picker.clear()
+	for route in Scheduling.alternatives(book.catalog, code, quantity, start):
+		var op: Dictionary = route.operations[0]
+		picker.add_item("%s · %s%s" % [op.description, route.production_version, " · Offline" if not op.available else ""])
+		var index := picker.item_count - 1
+		picker.set_item_metadata(index, route.production_version)
+		picker.set_item_disabled(index, not op.available)
+		if op.available and (picker.selected < 0 or picker.is_item_disabled(picker.selected) or wanted == route.production_version):
+			picker.select(index)
+	if picker.selected < 0 or picker.is_item_disabled(picker.selected):
+		preview.text = "No eligible version for this material, quantity and date."
+		return
+	var data := Scheduling.assignment(book, code, quantity, start, String(picker.get_selected_metadata()))
+	if not data.error.is_empty():
+		preview.text = data.error
+		return
+	var available := Scheduling.next_slot(book, data.center, start, data.duration, existing.get("id", ""))
+	var gaps := book.shortages({"stage": data.recipe.stage, "route": data.route, "recipe": data.recipe})
+	preview.text = "%s · %s
+%.1f sim minutes estimated · first slot %s → %s
+Immediate components %s
+%s" % [
+		data.center, _technical(data.route.operations[0].technical), data.duration / 60.0,
+		Book.date(available) if is_finite(available) else "Unavailable",
+		Book.date(available + data.duration) if is_finite(available) else "Unavailable", _amounts(data.recipe.needs),
+		"Available to reserve" if gaps.is_empty() else "Release blocked · " + _amounts(gaps)]
 
 
 func _update_version_picker(inputs: Dictionary, preview: Label, refill: bool, existing: Dictionary) -> void:
@@ -745,7 +1017,7 @@ func _new_demand() -> void:
 
 func _new_purchase() -> void:
 	_form("Submit purchase order", [["supplier", "Supplier ID", "SUP-02"],
-		["code", "External material", "RM-COAT-1002"], ["qty", "Quantity in base unit", "10.4"]],
+		["code", "External material", "RM-COAT-1002"], ["qty", "Quantity in base unit", "13"]],
 		func(v: Dictionary) -> String: return _result(line.erp.purchase(v.supplier, v.code, _number(v.qty))))
 
 
@@ -761,8 +1033,12 @@ func _priority() -> void:
 			var start := _number(v.start) * 60.0
 			if not is_finite(start) or start < 0.0:
 				return "Enter a nonnegative simulated minute."
+			if order.has("stage") and not is_equal_approx(start, float(order.start)):
+				var conflict := line.erp.reschedule(id, start)
+				if not conflict.is_empty():
+					return conflict
 			var error := line.erp.prioritize(id, v.priority.to_int())
-			if error.is_empty():
+			if error.is_empty() and not order.has("stage"):
 				order.finish += start - order.start
 				order.start = start
 			return error)
@@ -834,8 +1110,25 @@ func _convert() -> void:
 	if key.is_empty():
 		notice("Select a purchase or planned production proposal.")
 		return
-	_form("Convert selected proposal to a document?", [], func(_v: Dictionary) -> String:
-		return _result(plan.convert(key, line.erp, line.erp_fg())))
+	var item: Dictionary = plan.proposals.get(key, {})
+	if line.erp.explicit_planning and not item.is_empty():
+		var fields := [["quantity", "Quantity (shipping boxes for finished goods)", item.get("quantity", item.qty)]]
+		if item.type == "Make":
+			fields.append(["start", "Planned start at simulated minute", maxf(line.erp.now, item.start) / 60.0])
+			fields.append(["version", "Production version", item.version])
+		_form("Schedule planned order" if item.type == "Make" else "Convert purchase proposal", fields,
+			func(v: Dictionary) -> String:
+				var edits := {"quantity": _number(v.quantity)}
+				if v.has("start"):
+					edits.merge({"start": _number(v.start) * 60.0, "version": v.version})
+				var result := plan.convert(key, line.erp, line.erp_fg(), edits)
+				if result.error.is_empty() and item.type == "Make":
+					_set_page(SCHEDULE_PAGE)
+					_board.picked = result.id
+				return _result(result))
+	else:
+		_form("Convert selected proposal to a document?", [], func(_v: Dictionary) -> String:
+			return _result(plan.convert(key, line.erp, line.erp_fg())))
 
 
 func _edit_material() -> void:
@@ -939,10 +1232,15 @@ func _form(title: String, fields: Array, submit: Callable, update: Callable = Ca
 		form.add_child(_label(field[1], 14, Color.WHITE))
 		if field[2] is Array:
 			var picker := OptionButton.new()
+			picker.name = field[0]
+			for option in field[2]:
+				picker.add_item(option[1])
+				picker.set_item_metadata(picker.item_count - 1, option[0])
 			form.add_child(picker)
 			inputs[field[0]] = picker
 		else:
 			var edit := LineEdit.new()
+			edit.name = field[0]
 			edit.text = str(field[2])
 			form.add_child(edit)
 			inputs[field[0]] = edit

@@ -482,6 +482,35 @@
         ]
       },
       "movable": true
+    },
+    {
+      "id": "SFGWarehouse",
+      "kind": "storage",
+      "cell": [
+        49,
+        26
+      ],
+      "size": [
+        7,
+        3
+      ],
+      "height": 2.0,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "movable": false,
+      "ports": {
+        "stock_dock": [
+          0,
+          0,
+          -2.15
+        ]
+      }
     }
   ],
   "size": [

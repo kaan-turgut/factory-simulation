@@ -1,6 +1,8 @@
 extends RefCounted
 ## Time-phased lot-for-lot planning. Rows and proposals never post stock.
 
+const StageMRP = preload("res://erp/stage_mrp.gd")
+
 var rows: Array[Dictionary] = []
 var proposals := {}
 var summary := {}
@@ -14,6 +16,9 @@ func run(book, finished_stock: Dictionary) -> void:
 	proposals.clear()
 	_requirements.clear()
 	summary = {"shortages": {}, "buy": 0, "make": 0, "late": 0, "covered": 0, "requirements": 0}
+	if book.explicit_planning:
+		StageMRP.new().run(self, book, finished_stock)
+		return
 	var future_fg := {}
 	var fg := finished_stock.duplicate()
 	for order in book.orders.values():
@@ -183,13 +188,15 @@ func _row(code: String, date: float, kind: String, incoming: float, outgoing: fl
 		"action_date": action_date, "index": rows.size()})
 
 
-func convert(key: String, book, finished_stock: Dictionary) -> Dictionary:
+func convert(key: String, book, finished_stock: Dictionary, edits: Dictionary = {}) -> Dictionary:
 	run(book, finished_stock)
 	var item: Dictionary = proposals.get(key, {})
 	if item.is_empty():
 		return {"error": "This proposal is no longer required. Run MRP again."}
 	var result: Dictionary
-	if item.type == "Buy":
+	if book.explicit_planning:
+		result = StageMRP.convert(book, item, edits)
+	elif item.type == "Buy":
 		result = book.purchase(item.supplier, item.code, item.qty)
 	else:
 		result = book.create_order(item.code, item.boxes, maxf(book.now, item.start), 5, item.version)

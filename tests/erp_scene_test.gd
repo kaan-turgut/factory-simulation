@@ -12,6 +12,7 @@ func _initialize() -> void:
 func _run() -> void:
 	var factory := SCENE.instantiate()
 	factory.resume_saved = false
+	factory.explicit_planning = false
 	root.add_child(factory)
 	await process_frame
 	var terminal = factory.terminal
@@ -30,7 +31,7 @@ func _run() -> void:
 		_check(button != null, "Workspace exists " + name)
 		if button != null:
 			button.pressed.emit()
-			_check(terminal._title.text == name and terminal._table.get_root() != null, "Workspace loads " + name)
+			_check(terminal._title.text == name and (terminal._table.get_root() != null or terminal._board.visible), "Workspace loads " + name)
 	var book = factory.line.erp
 	var earlier: Dictionary = book.create_order("FG-1001", 1, book.now, 5)
 	if not earlier.error.is_empty() or not book.release(earlier.id).is_empty():

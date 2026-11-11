@@ -2,10 +2,10 @@ extends RefCounted
 ## A reusable raw, cooked or coated tray cart with a physical position and one task owner.
 
 const Storage = preload("res://simulation/storage.gd")
-enum Site { PARKING, EXTRUDER, OVEN_RAW, OVEN_COOKED, COATER, TRANSIT, COATER_OUT, PACK_WIP }
+enum Site { PARKING, EXTRUDER, OVEN_RAW, OVEN_COOKED, COATER, TRANSIT, COATER_OUT, PACK_WIP, SFG_DOCK }
 
 const SITE_NAMES := ["Cart parking", "Extruder output", "Oven loading", "Oven unloading",
-	"Coating intake", "In transit", "Coater outfeed", "Packaging WIP"]
+	"Coating intake", "In transit", "Coater outfeed", "Packaging WIP", "SFG stock dock"]
 
 var id: StringName
 var raw: bool

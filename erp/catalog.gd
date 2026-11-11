@@ -1,10 +1,12 @@
 extends RefCounted
 ## Fictional demonstration master data. Quantities use material base units.
 
+const Scheduling = preload("res://erp/scheduling.gd")
 const Master = preload("res://erp/master_files.gd")
 const OPERATIONS := ["extrude", "bake", "coat", "pack"]
 const MATERIAL_STAGES := ["dough", "raw", "baked", "coated", "finished"]
 const PARAMETERS := {
+	"mix": {"rate": [0.0, 36000.0]},
 	"extrude": {"rate": [0.0, 36000.0]},
 	"bake": {"batch_kg": [1.0, 300.0], "cycle_seconds": [3.0, 1800.0]},
 	"coat": {"rate": [0.0, 36000.0], "input_kg": [1.0, 500.0], "setup_seconds": [0.0, 86400.0]},
@@ -19,6 +21,7 @@ var production_versions := {}
 var work_centers := {}
 var locations := {}
 var opening := {}
+var scheduling := {}
 var error := ""
 
 
@@ -64,11 +67,18 @@ func _load(directory: String) -> String:
 	if not result.data is Dictionary:
 		return "storage_locations.json: expected location identifiers and descriptions."
 	locations = result.data
-	return _validate()
+	result = Master.read("scheduling", directory)
+	if not result.error.is_empty():
+		return result.error
+	if not result.data is Dictionary:
+		return "scheduling.json: expected an object."
+	scheduling = result.data
+	var problem := _validate()
+	return _validate_scheduling() if problem.is_empty() else problem
 
 
 func _validate() -> String:
-	for location in ["RM-WH", "RM-STAGE", "COAT-IN", "PACK-IN", "TRANSIT", "WIP", "PACK-WIP", "FG-WH"]:
+	for location in ["RM-WH", "RM-STAGE", "COAT-IN", "PACK-IN", "TRANSIT", "WIP", "PACK-WIP", "FG-WH", "SFG-WH", "SFG-DECK"]:
 		if not locations.get(location) is String:
 			return "storage_locations.json [%s]: description required." % location
 	for code in materials:
@@ -151,6 +161,65 @@ func _validate() -> String:
 		var incompatibility := _compatibility(routings[item.routing], materials[item.product])
 		if not incompatibility.is_empty():
 			return "production_versions.json [%s].routing: %s" % [id, incompatibility]
+	return ""
+
+
+func _validate_scheduling() -> String:
+	if not scheduling.get("calendar") is Array or not scheduling.get("work_center_calendars") is Dictionary \
+			or not scheduling.get("stages") is Dictionary:
+		return "scheduling.json: calendar, work_center_calendars and stages are required."
+	var calendars: Array = [scheduling.calendar]
+	for id in scheduling.work_center_calendars:
+		if not work_centers.has(id):
+			return "scheduling.json work_center_calendars: unknown center " + id
+		calendars.append(scheduling.work_center_calendars[id])
+	for calendar in calendars:
+		if not calendar is Array or calendar.is_empty():
+			return "scheduling.json: a calendar needs at least one daily interval."
+		var previous := 0.0
+		for window in calendar:
+			if not window is Array or window.size() != 2 or not Master.number(window[0], previous, 86399) \
+					or not Master.number(window[1], float(window[0]) + 1, 86400):
+				return "scheduling.json: calendar intervals must be ordered, disjoint and within a day."
+			previous = window[1]
+	for stage in scheduling.stages:
+		if not PARAMETERS.has(stage):
+			return "scheduling.json: unknown stage " + str(stage)
+	var seen := {}
+	for stage in PARAMETERS:
+		var row: Variant = scheduling.stages.get(stage)
+		if not row is Dictionary or not row.get("materials") is Array or row.materials.is_empty() or not row.get("centers") is Array \
+				or row.centers.is_empty() or not row.get("handling") is String or not Master.number(row.get("handling_seconds")) \
+				or (stage == "bake" and not Master.number(row.get("batch_handling_seconds"))):
+			return "scheduling.json [%s]: invalid stage materials, centers or handling times." % stage
+		for code in row.materials:
+			if not code is String or seen.has(code) or (code == "FERT" and stage != "pack") \
+					or (code != "FERT" and not boms.has(code)):
+				return "scheduling.json [%s].materials: invalid or duplicate %s." % [stage, code]
+			seen[code] = true
+		var listed := {}
+		for id in row.centers:
+			if not id is String or listed.has(id) or work_centers.get(id, {}).get("operation") != stage:
+				return "scheduling.json [%s].centers: invalid or repeated work center %s." % [stage, id]
+			listed[id] = true
+	for code in materials:
+		if materials[code].active and materials[code].procurement == "In-house" and not boms.has(code):
+			return "scheduling.json: no manufacturing BOM for " + code
+	for code in boms:
+		if not materials[code].active or not boms[code].active:
+			continue
+		if not seen.has(code) and (materials[code].type != "FERT" or not seen.has("FERT")):
+			return "scheduling.json: no stage for " + code
+		var recipe := Scheduling.recipe(self, code, 1.0)
+		if not recipe.error.is_empty():
+			return "scheduling.json [%s]: %s" % [code, recipe.error]
+		var output_location := "FG-WH" if recipe.stage == "pack" else ("SFG-DECK" if recipe.stage == "mix" else "SFG-WH")
+		if materials[code].location != output_location:
+			return "materials.json [%s].location: this stage receives stock at %s." % [code, output_location]
+		if not String(recipe.input).is_empty():
+			var input_location := "SFG-DECK" if recipe.stage == "extrude" else "SFG-WH"
+			if materials[recipe.input].location != input_location:
+				return "boms.json [%s].parts: input must be reachable from %s." % [code, input_location]
 	return ""
 
 

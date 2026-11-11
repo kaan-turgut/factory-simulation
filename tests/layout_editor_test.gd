@@ -25,7 +25,7 @@ func _run() -> void:
 
 func _transactions_and_production() -> void:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
 	var editor := Editor.new(line)
 	var id := &"Oven02"
 	var old: Line.Layout.Placement = line.layout.objects[id]
@@ -68,7 +68,7 @@ func _transactions_and_production() -> void:
 	_check(saved_pose[0] == 26 and saved_pose[1] == 16 and saved_pose[2] == 0 and not payload.has("materials"),
 		"Layout file contains stable IDs and poses")
 	var resumed := Line.new()
-	resumed.enable_erp()
+	resumed.enable_erp(false)
 	var new_editor := Editor.new(resumed)
 	_check(new_editor.load_layout(path).is_empty(), "Load the saved layout into a fresh simulation")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
@@ -119,7 +119,7 @@ func _transactions_and_production() -> void:
 
 func _stacked_coaters() -> void:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
 	var editor := Editor.new(line)
 	var layout := line.layout
 	var front: Line.Layout.Placement = layout.objects[&"Coater"]
@@ -163,6 +163,7 @@ func _stacked_coaters() -> void:
 func _mouse_workflow() -> void:
 	_factory = Scene.instantiate()
 	_factory.resume_saved = false
+	_factory.explicit_planning = false
 	root.add_child(_factory)
 	await process_frame
 	_factory.line.set_playing(true)

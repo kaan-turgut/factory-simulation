@@ -7,10 +7,10 @@ A playable 3D chocolate wafer factory built with **Godot 4.7.2** and GDScript. R
 1. Install and open the standard edition of [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/).
 2. In Godot's Project Manager, choose **Import**, select this folder's `project.godot`, then choose **Import & Edit**.
 3. Press **F5** or click **Run Project** in the upper-right corner of the editor. The factory opens paused.
-4. Choose **20×** and open **ERP** in the bottom-right corner, or press **E**. Production starts with demand and a released order.
-5. In **Material Requirements Planning**, click **Create demand**. The default is 13 dark-wafer shipping boxes due in 10 simulated minutes. Run MRP, enable **Proposals only**, and select and convert the **Planned production** row. Then convert the dark-coating **Purchase proposal**. You can see its due time in **Procurement**.
-6. Click **Play shift** and let the purchase arrive. In **Production Orders**, select the order and click **Release**. The line starts at its planned start time when eligible. Close ERP to watch the shuttle, workers, oven, and forklift deliver the order. Select a colored pallet to see its SKU and order.
-7. Select the FG warehouse or its dashboard card. **Dispatch one** or **Dispatch all** frees physical storage slots. Use **Save** in ChocoERP before stopping the game from the editor.
+4. Choose **20×** and open **ERP** in the bottom-right corner, or press **E**. In **Material Requirements Planning**, choose **Create demand**. For a first run, use **FG-1001**, **10 shipping boxes**, and a due time **40 simulated minutes** ahead.
+5. Run MRP and enable **Proposals only**. Select each **Production proposal** and choose **Convert proposal**. Accept or edit its quantity, version, and start. This puts a planned order on **Detailed Scheduling**. Return to MRP for the next proposal. If ingredients are short, convert the relevant purchase proposal and wait for the receipt in **Procurement**.
+6. Release orders as their components arrive. The sequence is **DOUGH-01** → **RAW-01** → **BAKED-01** → **COATED-1001** → **FG-1001**. Release dough first and click **Play shift**. Once dough has been received at the deck, release raw wafers. Continue with the other orders as their input stock arrives. A released order waits for its scheduled start. To automate release, turn on **Auto Release** in the ChocoERP header and play the shift.
+7. Close ERP to follow the crew and carts. A forklift receipt puts the finished pallets in the warehouse. Select a pallet to see its SKU and order. **Dispatch one** and **Dispatch all** free warehouse slots. Use **Save** in ChocoERP before stopping a run from the editor.
 
 The game defaults to a 30 FPS rendering cap and redraws the view as needed. The simulation runs on fixed quarter-second ticks.
 
@@ -48,7 +48,7 @@ Hover over the floor or mezzanine to read the cell's X and Z coordinates and ele
 3. Use **Undo** or **Redo** to revisit the last 32 confirmed edits. Click **Save Layout** to reuse the arrangement. **Load Layout** reads that file, and **Default** restores the master-data positions.
 4. Exit with **B**, then press **Play** to resume.
 
-The editor waits for active production and transport jobs to finish. An occupied finished-goods warehouse can move after dispatch. The extruder moves with the elevated hopper under the fixed mezzanine. Packaging, Packaging WIP, and palletizing move together to retain their connections. The raw warehouse, mezzanine structure, and parking bays are fixed.
+The editor waits for active production and transport jobs to finish. An occupied finished-goods warehouse can move after dispatch. The extruder moves with the elevated hopper under the fixed mezzanine. Packaging, Packaging WIP, and palletizing move together to retain their connections. The raw and wafer stock warehouses, mezzanine structure, and parking bays are fixed.
 
 Equipment can move along both floor axes. Workers, carts, and the supply shuttle can take short detours from their main aisles to reach docks. On the default floor plan, move **Coater 02** to **X 35, Z 24** to place it directly behind **Coater 01**.
 
@@ -56,7 +56,7 @@ Equipment can move along both floor axes. Workers, carts, and the supply shuttle
 
 ### Defining a floor plan
 
-The origin is the building's front-left interior corner. Grid X increases to the right, grid Z increases toward the rear, and Y is elevation. Each cell is 1 × 1 m. The default grid is 88 × 32. Both ovens and both coaters sit on the production side of the cart aisle. Change `size` in the layout file or set the **Building Cells** override on the **Factory** scene root. Leave the override at zero to use the file. The supplied equipment plan requires at least 88 × 25 cells.
+The origin is the building's front-left interior corner. Grid X increases to the right, grid Z increases toward the rear, and Y is elevation. Each cell is 1 × 1 m. The default grid is 88 × 32. Both ovens and both coaters sit on the production side of the cart aisle. Change `size` in the layout file or set the **Building Cells** override on the **Factory** scene root. Leave the override at zero to use the file. The supplied equipment plan requires at least 88 × 29 cells.
 
 The definitions live in `master_data/factory_layout.json`. The example below has a 4 × 2 cell footprint, a height of 2.2 m, and a 90° orientation. Its rotated footprint occupies X cells 20–21 and Z cells 14–17.
 
@@ -77,36 +77,37 @@ For conversion, `layout.grid.to_world(Vector2(20.5, 14.5))` returns the center o
 
 ## ChocoERP
 
-- **Materials and BOMs.** Five finished products ship with fictional demonstration recipes. The material master distinguishes kilograms from eaches, consumer packs from shipping boxes, and boxes from pallets. Master edits and hierarchical BOM edits affect new orders. Created orders retain their validated recipe and packaging snapshot. BOM explosion applies component scrap and rejects cycles. Executable recipes use the supplied mass-conserving wafer routing.
-- **Orders and setup.** Release reserves all required external materials. Orders run by priority and planned start. Orders can overlap on separate ovens and coaters. The extruder finishes feeding one order before feeding the next, and packaging handles one SKU at a time. Each coater remembers its own last coating. Setup defaults for future releases are editable in **Production Orders**. The last oven batch and shipping pallet may be partial. Pending orders can cancel, and completed orders can close.
-- **Purchasing and planning.** MRP uses unreserved stock, timed PO receipts, lot-for-lot proposals, supplier minimums, and safety stock. It flags a scheduled receipt that will arrive late and allocates it before suggesting more purchases. Make proposals create pending production orders. Buy proposals create timed purchases. Time and lead values are simulated.
-- **Inventory and movements.** The raw warehouse owns raw balances. A timed supply shuttle carries stock to the mezzanine freight-lift point, both coaters, and the packing intake. Workers feed the mezzanine's ingredients into the line. WIP and FG stock reports read the physical buffers and pallets. The journal groups continuous flow postings into 15-second windows and records discrete receipts and dispatches individually.
-- **Save and load.** The terminal saves one versioned local slot in Godot's user data directory. It restores paused, with stock, order and PO state, route progress, the movement journal, and station placements. Closing the game window saves automatically. Use the terminal's **Save** button before stopping an editor run.
+- **Materials and BOMs.** Five finished products ship with fictional demonstration recipes. The material master distinguishes kilograms from eaches, consumer packs from shipping boxes, and boxes from pallets. Hierarchical BOM edits affect future planning. Executable stage BOMs must fit the physical process and preserve food mass.
+- **Production Orders.** Select a manufactured material, quantity, work center, and simulated start. Use kilograms for dough and wafer stock, and shipping boxes for finished goods. **Check stock** lists immediate component shortages. **Component inventory** opens the relevant stock report. **Peg supply** links an upstream order to a downstream BOM requirement. **Supply orders** opens the linked documents. Release checks physical stock and freezes the route, BOM, and technical parameters. Released orders can be cancelled before commitment. Completed orders can close.
+- **MRP.** Planning nets unreserved stock, purchase receipts, and scheduled stage output. It creates dated proposals for missing material at each BOM level, applies supplier minimums and safety stock, and flags late receipts and proposal dates. A converted make proposal is a planned order. Convert or release proposals explicitly. Scheduled receipts and pegging appear in planning while physical receipts determine release eligibility.
+- **Inventory.** The timed shuttle carries purchased supplies from **RM-WH**. Prepared dough is received into **SFG-DECK**. Workers move raw, baked, and coated wafers through **SFG-WH** by cart. The inventory report also shows controlled **WIP**, the packaging bay, and **FG-WH**. Goods movements link stock issues and receipts to their orders.
+- **Save and load.** ChocoERP saves the active catalog, schedules, release snapshots, actual progress, stock, reservations, pegging, in-flight logistics, purchases, and journal. Loads open paused. Closing the game window saves automatically. Use the terminal's **Save** before stopping an editor run.
 
-## Alternative routings
+**Auto Release** is off by default and saved with the shift. When it is on, the running shift releases planned orders once their immediate BOM components are physically available and unreserved. Eligible orders are considered by scheduled start, then priority. MRP proposals must still be converted into orders, and a released order waits for its scheduled start.
 
-Open **Production Versions** in ChocoERP and search for a SKU. **Routing Master** shows the operations in order. **Work Center Master** shows each station’s technical settings, supported coatings, and current commitment.
+### Detailed Scheduling
 
-In **Production Orders**, select a version in the **Create order** form. The preview shows the station sequence, BOM, parameters, and possible conflicts. **Select version** changes a created order. **Show route** draws that order’s assigned route in the factory. Choose the same order again to clear its highlight.
+- Each row represents a work center from the master data. The timeline uses simulated factory days. Choose the scale, scroll, or click **Jump to now**. The horizontal scrollbar or **Shift + mouse wheel** moves through time. Use the vertical scrollbar or regular wheel to move through machines.
+- Filter by material or order, work center, status, and day or day range. Select a bar for the order summary, or double-click it for the order details. The thin strip under a bar shows actual start and progress. The red line shows current simulation time. A selected order draws dependency lines to visible pegged orders.
+- Drag a planned bar horizontally to set its start. Drag it to another eligible row to select that machine. Green previews can be placed. Red previews show a calendar, capacity, or eligibility conflict. Released assignments stay frozen.
+- A new order is scheduled in the first slot that fits on the selected center. Rescheduling an existing order requires an open interval. Estimates include machine rates, oven batch cycles, a handling allowance, and setup allowance. Actual progress also depends on the shuttle, crew, carts, and forklift. **Reports and Analytics** includes a schedule-adherence view with scheduled workload, actual times, wait times, and late orders.
 
-| Routing | Batch oven | Coating |
-| --- | --- | --- |
-| WAFER-01 | Oven 01 | Coater 01 |
-| WAFER-02 | Oven 02 | Coater 02 |
-| WAFER-03 | Oven 01 | Coater 02 |
-| WAFER-04 | Oven 02 | Coater 01 |
+### Alternatives and shared resources
 
-Coater 02 supports milk, dark, and white coatings. All four routes share the extruder, packer, crew, carts, forklift, and finished-goods warehouse. The scheduler commits the oven and coater pair to an order through warehouse delivery and cart cleanup. Disjoint pairs can overlap after the extruder finishes feeding the older order. Shared work and the order’s own bounded stock buffers can delay delivery beyond the processing estimate.
+Choose Oven 01 or Oven 02 for baking. Choose an eligible coater for a coated wafer material. Coater 02 supports milk, dark, and white. The prep station and extruder share the staging crew. The two ovens and the two coaters can work on separate orders concurrently, with each order retaining its own carts and buffers. One stock dock and the main cart aisle are shared.
+
+**Routing Master** lists stage assignments alongside the WAFER-01 through WAFER-04 templates. Current orders execute a single stage with a selected work center and frozen parameters. **Production Versions** lists SFG alternatives alongside the existing finished-SKU versions. Finished-goods production uses the packaging operation and version's lot and date limits. **Show route** highlights the selected order’s assigned equipment.
 
 ## Editing master data
 
-- `materials.json`, `products.json`, and `boms.json` define the material IDs, product specs, opening balances, and multilevel recipes. Carton mass and pallet mass derive from product specs.
+- `materials.json`, `products.json`, and `boms.json` define the material IDs, product specs, opening balances, and multilevel recipes. Carton mass and pallet mass derive from product specs. The finished BOMs use a 5 kg base with one carton, one label, and one-eighth of a pallet.
 - `routings.json` lists operation numbers and work center references. `work_centers.json` holds equipment IDs, eligibility, availability, and technical settings. `production_versions.json` ties each SKU to a BOM version and routing version with lot and date limits. Dates are simulated seconds from shift start. A zero `valid_to` means open-ended.
+- `scheduling.json` defines stage-to-material and work-center eligibility, handling estimates, and simulated daily availability intervals. The shipped calendar is 24/7.
 - `factory_layout.json` contains positions, footprints, ports, and the packaging WIP receiving bay. `storage_locations.json`, `suppliers.json`, and `simulation_defaults.json` contain locations, supplier offers, and operating defaults.
 
 Keep existing identifiers stable. To add an alternative, add a routing using supported operations and existing centers. Add a production version with the matching routing and BOM version numbers. Restart after editing. A validation error reports the offending file and, where available, the record and field.
 
-Saved shifts preserve their active catalog and layout along with frozen orders. Older saves open in the enlarged hall. Cart and vehicle jobs are replanned from safe positions, and any coated stock left on the former conveyors is recovered into the same order’s coater outfeed. Phase 3 saves keep their original Oven 01 and Coater 01 assignments. Start a fresh shift to use edited files while keeping the saved shift available. From the project directory, run:
+Saved shifts preserve their active catalog and layout along with frozen orders. On first load, older shifts update the original demo packaging sizes and BOMs while keeping custom sizes, frozen orders, and physical stock. Re-select the production version on an older draft order to use the new quantities. Older saves open in the enlarged hall. Cart and vehicle jobs are replanned from safe positions, and any coated stock left on the former conveyors is recovered into the same order’s coater outfeed. Orders already in progress from an earlier combined-route save can finish on their original assignments. Older created or released combined-route orders are held with their reservations and can be cancelled before re-planning as individual stages. Start a fresh shift to use edited files while keeping the saved shift available. From the project directory, run:
 
 ```sh
 godot --path . -- --fresh-shift
@@ -118,14 +119,14 @@ This starts from the current JSON and disables automatic save on close for that 
 
 | Stage | What happens |
 | --- | --- |
-| Ingredients and extrusion | Two mezzanine workers reserve hopper room, collect staged recipe ingredients as sacks, unload, and walk back. The extruder uses hopper stock and fills the cart at its output. A full cart waits for a worker and a free oven berth. |
-| Raw carts and oven | Floor workers push carts along the marked aisle. The selected oven starts at batch capacity or when the final partial batch is ready. It uses the released order’s frozen cooking time. Excess raw wafers stay on their cart for a later batch. |
-| Cooked carts and coating | A worker unloads the oven into a cooked tray. If the cart is smaller than the batch, another trip is required. At coating, a cart can unload as much as fits and wait with the remainder. Empty carts return for reuse. |
-| Coated wafer delivery | Floor workers load purple tray carts at the coaters and push them to the **Packaging WIP** bay in front of the packer. Carts wait or unload partially when the bay is full. The shared bay holds stock for the order currently assigned to packaging. |
-| Packaging and pallets | The packer draws from the WIP bay. A box appears once its configured mass is reached, then the carton conveyor carries output to the palletizing bays. A box or pallet already started retains its original target after an edit. |
-| Forklift and warehouse | The forklift reserves an open storage slot before leaving for a full pallet. It takes time to drive, pick up, and unload. Warehouse capacity controls how many of the marked slots can be used. Warehouse and palletizing space eventually limit upstream production. |
+| Dough preparation | The supply shuttle replenishes recipe ingredients. Two mezzanine workers collect sacks and deposit the prepared blend into stock at the deck. |
+| Raw wafer extrusion | The platform crew feeds reserved dough into the hopper. The extruder fills raw carts up to the order target. Floor workers carry them to the wafer stock dock for receipt. |
+| Baking | Workers load reserved raw wafers at the stock dock and push the carts to the assigned oven. Full batches and the final partial batch use the frozen cooking duration. A cooked cart returns the output to stock. |
+| Coating | Workers deliver baked wafers from the stock dock to the selected coater. The shuttle delivers coating ingredients. Workers collect the coated wafers in purple tray carts for receipt back into stock. |
+| Packaging and pallets | Workers deliver reserved coated stock to **Packaging WIP**. The packer forms boxes and palletizes them. A final partial pallet may be sealed and dispatched to the warehouse. |
+| Forklift and warehouse | The forklift reserves an open storage slot, drives to the pallet, picks it up, and unloads. The warehouse receipt completes the finished order. Full storage delays the order and may block packaging. |
 
-The default floor crew has two workers, two raw carts, and two cooked carts. Raw carts hold 50 kg and cooked carts hold 45 kg. Oven 01 starts at 75 kg and 36 seconds per batch. Oven 02 starts at 60 kg and 42 seconds per batch. The warehouse starts with space for four pallets. Carton and pallet sizes vary by SKU. Two coated carts start at 24 kg each, and Packaging WIP starts at 60 kg. Select **Packaging WIP** to change capacity, inspect its receiving dock, or open the **PACK-WIP** inventory in ChocoERP.
+The default floor crew has two workers, two raw carts, and two cooked carts. Raw carts hold 50 kg and cooked carts hold 45 kg. Oven 01 starts at 75 kg and 36 seconds per batch. Oven 02 starts at 60 kg and 42 seconds per batch. The warehouse starts with space for four pallets. All five wafer flavors use 100 g consumer packs, 50 packs per 5 kg shipping box, and eight boxes per 40 kg full pallet. Two coated carts start at 24 kg each, and Packaging WIP starts at 60 kg. Select **Packaging WIP** to change capacity, inspect its receiving dock, or open the **PACK-WIP** inventory in ChocoERP.
 
 Rates are in kilograms per simulated hour. The engine advances in fixed quarter-second ticks, including travel and handling. Ingredient supply comes from opening stock and purchasing. Baking preserves mass and coating adds the actual chocolate consumed. The mass ledger includes material in sacks being carried, every buffer and cart, the oven, partial cartons, pallets on the floor and forklift, and dispatched stock.
 
@@ -149,7 +150,7 @@ Capacity reductions must cover current stock and any incoming reservations. An o
 Run these commands from the project folder with the Godot executable on your PATH.
 
 ```sh
-godot --headless --path . --editor --import
+godot --headless --path . --editor --import --quit
 godot --headless --path . --script res://tests/factory_grid_test.gd
 godot --headless --path . --script res://tests/production_line_test.gd
 godot --headless --path . --script res://tests/factory_scene_test.gd
@@ -157,6 +158,7 @@ godot --headless --path . --script res://tests/erp_integration_test.gd
 godot --headless --path . --script res://tests/erp_scene_test.gd
 godot --headless --path . --script res://tests/routing_integration_test.gd
 godot --headless --path . --script res://tests/layout_editor_test.gd
+godot --headless --path . --script res://tests/detailed_scheduling_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

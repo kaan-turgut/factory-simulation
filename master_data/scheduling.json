@@ -1,0 +1,68 @@
+{
+  "calendar": [
+    [
+      0,
+      86400
+    ]
+  ],
+  "work_center_calendars": {},
+  "stages": {
+    "mix": {
+      "materials": [
+        "DOUGH-01"
+      ],
+      "centers": [
+        "WC-MIX-01"
+      ],
+      "handling_seconds": 60,
+      "handling": "Shuttle replenishes the deck. Platform workers prepare sacks."
+    },
+    "extrude": {
+      "materials": [
+        "RAW-01"
+      ],
+      "centers": [
+        "WC-EXT-01"
+      ],
+      "handling_seconds": 90,
+      "handling": "Platform workers feed the hopper. Raw carts receive to wafer stock."
+    },
+    "bake": {
+      "materials": [
+        "BAKED-01"
+      ],
+      "centers": [
+        "WC-OVN-01",
+        "WC-OVN-02"
+      ],
+      "handling_seconds": 90,
+      "batch_handling_seconds": 16,
+      "handling": "Raw and baked carts move through the wafer stock dock."
+    },
+    "coat": {
+      "materials": [
+        "COATED-1001",
+        "COATED-1002",
+        "COATED-1003",
+        "COATED-1004",
+        "COATED-1005"
+      ],
+      "centers": [
+        "WC-COT-01",
+        "WC-COT-02"
+      ],
+      "handling_seconds": 110,
+      "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+    },
+    "pack": {
+      "materials": [
+        "FERT"
+      ],
+      "centers": [
+        "WC-PKG-01"
+      ],
+      "handling_seconds": 120,
+      "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+    }
+  }
+}

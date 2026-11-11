@@ -95,5 +95,19 @@
       "setup_seconds": 300
     },
     "available": true
+  },
+  {
+    "id": "WC-MIX-01",
+    "description": "Ingredient prep 01",
+    "equipment": "Hopper",
+    "operation": "mix",
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "rate": 9000
+    },
+    "available": true
   }
 ]

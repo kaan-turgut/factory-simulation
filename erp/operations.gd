@@ -1,13 +1,19 @@
 extends RefCounted
 ## Stock ledger, documents and line execution policy. Physical WIP and FG remain in the line.
 
+const Scheduling = preload("res://erp/scheduling.gd")
 const Catalog = preload("res://erp/catalog.gd")
 const Operator = preload("res://simulation/operator.gd")
 const EPS := 1e-7
 const RAW_LOCATIONS := ["RM-WH", "RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN", "TRANSIT"]
+const SFG_LOCATIONS := ["SFG-WH", "SFG-DECK"]
 const OPEN := ["Created", "Released", "In Progress"]
 const LINE := "LINE-01"
 
+var explicit_planning := true
+var auto_release := false
+var planning_conversions := {}
+var dispatch_queue := {}
 var catalog := Catalog.new()
 var balances := {}
 var orders := {}
@@ -20,6 +26,7 @@ var day_output := {}
 var pending_events := {}
 var now := 0.0
 var revision := 0
+var schedule_revision := 0
 var warehouse_revision := 0
 var sequence := 0
 var active_id := ""
@@ -36,13 +43,14 @@ var shipment := {}
 var manual_shipments: Array[Dictionary] = []
 var _next_sample := 60.0
 var _next_flush := 15.0
+var _auto_release_checked := -1
 var utilization := {"Extruder": 0.0, "Coater": 0.0, "Coater02": 0.0, "Packer": 0.0}
 var delay_seconds := 0.0
 var warning := ""
 
 
 func _init() -> void:
-	for location in RAW_LOCATIONS:
+	for location in RAW_LOCATIONS + SFG_LOCATIONS:
 		balances[location] = {}
 	if not catalog.error.is_empty():
 		return
@@ -70,7 +78,7 @@ func stock(code: String, location: String) -> float:
 
 func total_stock(code: String) -> float:
 	var total := 0.0
-	for location in RAW_LOCATIONS:
+	for location in RAW_LOCATIONS + SFG_LOCATIONS:
 		total += stock(code, location)
 	return total
 
@@ -165,7 +173,10 @@ func _quantity(code: String, qty: float) -> bool:
 		and is_finite(qty) and qty > EPS and (catalog.materials[code].unit != "ea" or absf(qty - roundf(qty)) < EPS)
 
 
-func create_order(code: String, boxes: int, start: float, priority: int, version: String = "") -> Dictionary:
+func create_order(code: String, quantity: float, start: float, priority: int, version: String = "") -> Dictionary:
+	if explicit_planning:
+		return Scheduling.create(self, code, quantity, start, priority, version)
+	var boxes := int(quantity)
 	if not is_finite(start) or start < 0.0 or boxes > 100000:
 		return {"error": "Invalid planned time or quantity."}
 	var recipe := catalog.recipe(code, boxes)
@@ -189,6 +200,8 @@ func select_version(id: String, version: String) -> String:
 	var order: Dictionary = orders.get(id, {})
 	if order.is_empty() or order.status != "Created":
 		return "Select a created order."
+	if order.has("stage"):
+		return reschedule(id, maxf(now, order.start), version)
 	var route := catalog.route_for(order.code, order.boxes, maxf(now, order.start), version)
 	if not route.error.is_empty():
 		return route.error
@@ -201,6 +214,10 @@ func select_version(id: String, version: String) -> String:
 	return ""
 
 
+func reschedule(id: String, start: float, version: String = "") -> String:
+	return Scheduling.reschedule(self, id, start, version)
+
+
 func _apply_route(order: Dictionary, route: Dictionary) -> void:
 	order.route = route
 	order.version = route.production_version
@@ -208,10 +225,29 @@ func _apply_route(order: Dictionary, route: Dictionary) -> void:
 	order.finish = order.start + maxf(float(order.recipe.spec.lead), order.estimate + 120.0)
 
 
+func component_available(order: Dictionary, code: String) -> float:
+	if not order.has("stage"):
+		return available(code)
+	var locations := ["RM-WH", "RM-STAGE"]
+	match order.stage:
+		"extrude":
+			locations = ["SFG-DECK"]
+		"bake":
+			locations = ["SFG-WH"]
+		"coat":
+			locations = ["SFG-WH"] if code == order.recipe.input else ["RM-WH", order.route.operations[0].supply_location]
+		"pack":
+			locations = ["SFG-WH"] if code == order.recipe.input else ["RM-WH", "PACK-IN"]
+	var accessible := 0.0
+	for location in locations:
+		accessible += stock(code, location)
+	return maxf(0.0, accessible - float(reservations.get(code, 0.0)))
+
+
 func shortages(order: Dictionary) -> Dictionary:
 	var missing := {}
 	for code in order.recipe.needs:
-		var gap := float(order.recipe.needs[code]) - available(code)
+		var gap := float(order.recipe.needs[code]) - component_available(order, code)
 		if gap > EPS:
 			missing[code] = gap
 	return missing
@@ -225,7 +261,11 @@ func release(id: String) -> String:
 		if not catalog.materials[code].active:
 			return "Inactive component " + code
 	if not catalog.materials[order.code].active:
-		return "The finished product is inactive."
+		return "The manufactured material is inactive."
+	if order.has("stage"):
+		return _release_stage(order)
+	if explicit_planning:
+		return "This legacy order uses the old combined route. Cancel it and schedule independent stages."
 	var route := catalog.route_for(order.code, order.boxes, maxf(now, order.start), order.get("version", ""))
 	if not route.error.is_empty():
 		return route.error
@@ -251,18 +291,85 @@ func release(id: String) -> String:
 	return ""
 
 
+func _release_stage(order: Dictionary) -> String:
+	var assignment := Scheduling.assignment(self, order.code, order.quantity, order.start, order.version)
+	if not assignment.error.is_empty():
+		return assignment.error
+	if assignment.recipe.bom_snapshot != order.recipe.bom_snapshot or assignment.route != order.route:
+		return "BOM or routing changed. Confirm the production version again."
+	var conflict := Scheduling.conflict(self, order.center, order.start, order.finish, order.id)
+	if not conflict.is_empty():
+		return conflict
+	var missing := shortages(order)
+	if not missing.is_empty():
+		var reasons := PackedStringArray()
+		for code in missing:
+			reasons.append("%s %.3f %s required, %.3f available, %.3f short" % [
+				code, order.recipe.needs[code], catalog.materials[code].unit, component_available(order, code), missing[code]])
+		order.warning = ", ".join(reasons)
+		changed()
+		return order.warning
+	order.recipe = order.recipe.duplicate(true)
+	order.route = order.route.duplicate(true)
+	order.remaining = order.recipe.needs.duplicate()
+	for code in order.remaining:
+		reservations[code] = float(reservations.get(code, 0.0)) + float(order.remaining[code])
+	order.released_quantity = order.quantity
+	order.status = "Released"
+	dispatch_queue[order.id] = true
+	order.erase("auto_release_error")
+	order.warning = ""
+	changed()
+	return ""
+
+
+func _auto_release_orders() -> void:
+	var ready: Array[Dictionary] = []
+	for order in orders.values():
+		if order.status == "Created" and order.has("stage") and shortages(order).is_empty():
+			ready.append(order)
+	ready.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a.start != b.start:
+			return a.start < b.start
+		return a.priority < b.priority if a.priority != b.priority else a.id < b.id)
+	for order in ready:
+		var problem := release(order.id)
+		if not problem.is_empty() and problem != String(order.get("auto_release_error", "")):
+			order.auto_release_error = problem
+			changed()
+
+
+func receive_stage(order: Dictionary, quantity: float) -> void:
+	var location: String = order.recipe.spec.location
+	flush_flows()
+	_post(order.code, quantity, "WIP", location, "SFG Receipt", order.id, "Stage output received")
+	order.received_kg += quantity
+	order.received = order.received_kg
+	if order.received_kg + EPS >= order.recipe.target:
+		_release_remainder(order)
+		order.status = "Completed"
+		order.completed = now
+		order.delay = ""
+	changed()
+
+
 func transition(id: String, status: String) -> String:
 	var order: Dictionary = orders.get(id, {})
 	if order.is_empty():
 		return "Order does not exist."
 	if status == "Cancelled" and order.status in ["Created", "Released"]:
+		dispatch_queue.erase(id)
 		_release_remainder(order)
 		var demand: Dictionary = demands.get(order.get("demand", ""), {})
 		if not demand.is_empty():
-			demand.converted = ""
+			if demand.has("converted_orders"):
+				demand.converted_orders.erase(id)
+			if demand.converted == id:
+				demand.converted = ""
 	elif status != "Closed" or order.status != "Completed":
 		return "Invalid order transition. In-progress orders must finish."
 	order.status = status
+	schedule_revision += 1
 	changed()
 	return ""
 
@@ -279,7 +386,7 @@ func prioritize(id: String, priority: int) -> String:
 func create_demand(code: String, boxes: int, due: float) -> Dictionary:
 	if not is_finite(due) or due < 0.0 or boxes > 100000:
 		return {"error": "Invalid requirement date or quantity."}
-	var recipe := catalog.recipe(code, boxes)
+	var recipe := Scheduling.recipe(catalog, code, boxes) if explicit_planning else catalog.recipe(code, boxes)
 	if not recipe.error.is_empty():
 		return recipe
 	var id := _id("DEM")
@@ -319,11 +426,14 @@ func active() -> Dictionary:
 
 func clock(seconds: float) -> void:
 	now = seconds
-	# Scheduled receipts are evaluated once per simulated second.
+	# Check scheduled receipts and optional release once per simulated second.
 	if fposmod(seconds, 1.0) < EPS:
 		for po in purchases.values():
 			if po.status != "Received" and po.due <= now:
 				receive(po.id, po.qty - po.received)
+		if explicit_planning and auto_release and revision != _auto_release_checked:
+			_auto_release_orders()
+			_auto_release_checked = revision
 	if now >= _next_flush:
 		flush_flows()
 		_next_flush = now + 15.0
@@ -338,12 +448,20 @@ func sample_kpis(line, seconds: float) -> void:
 		if line.coaters[id].actual_rate > EPS:
 			var name := String(id)
 			utilization[name] = float(utilization.get(name, 0.0)) + seconds
+	for id in line.ovens:
+		if line.ovens[id].state == line.Oven.State.COOKING:
+			utilization[String(id)] = float(utilization.get(String(id), 0.0)) + seconds
+	if explicit_planning and line.platform_crew.any(func(worker: Operator) -> bool:
+		return worker.state == Operator.State.UNLOADING) and orders.get(feeder_id, {}).get("stage") == "mix":
+		utilization.Hopper = float(utilization.get("Hopper", 0.0)) + seconds
 	if now < _next_sample:
 		return
 	var short_orders := 0
 	for order in orders.values():
 		if order.status == "Created" and order.start <= now and not shortages(order).is_empty():
 			short_orders += 1
+			if order.has("stage"):
+				order.material_wait_seconds += minf(60.0, now - order.start)
 	if short_orders > 0 and active_id.is_empty():
 		delay_seconds += 60.0
 	history.append({"time": now, "kg": today_kg(), "warehouse": line.warehouse_mass(),
@@ -361,6 +479,8 @@ func feed_limit(waiting: float) -> float:
 	if order.is_empty():
 		return 0.0
 	var capacity := float(order.recipe.dough_target) - float(order.dough_issued)
+	if order.get("stage") == "extrude":
+		return maxf(0.0, minf(capacity, stock(order.recipe.input, "SFG-DECK")) - waiting)
 	for code in order.recipe.mix:
 		var staged := stock(code, "RM-STAGE") - _planned_pickups(code, "RM-STAGE")
 		capacity = minf(capacity, staged / float(order.recipe.mix[code]))
@@ -371,10 +491,16 @@ func issue_dough(kg: float) -> bool:
 	var order := active()
 	if order.is_empty() or feed_limit(0.0) + EPS < kg:
 		return false
-	for code in order.recipe.mix:
-		_consume(order, code, kg * order.recipe.mix[code], "RM-STAGE", "Dough blend")
+	if order.get("stage") == "extrude":
+		_consume(order, order.recipe.input, kg, "SFG-DECK", "Feed prepared dough")
+	else:
+		for code in order.recipe.mix:
+			_consume(order, code, kg * order.recipe.mix[code], "RM-STAGE", "Dough blend")
 	order.dough_issued += kg
-	flow(order.recipe.dough, kg, "", "WIP", "SFG Receipt", "Mixed dough sack")
+	if not order.has("stage"):
+		flow(order.recipe.dough, kg, "", "WIP", "SFG Receipt", "Mixed dough sack")
+	elif order.stage == "mix":
+		flow(order.code, kg, "", "WIP", "WIP Produced", "Mixed dough sack")
 	return true
 
 
@@ -385,12 +511,12 @@ func dough_finished() -> bool:
 
 func coating_limit() -> float:
 	var order := active()
-	return stock(order.recipe.coating, order.route.operations[2].supply_location) / order.recipe.coat_rate if not order.is_empty() else 0.0
+	return stock(order.recipe.coating, order.route.operations[0 if order.has("stage") else 2].supply_location) / order.recipe.coat_rate if not order.is_empty() else 0.0
 
 
 func coat(kg: float) -> void:
 	var order := active()
-	_consume(order, order.recipe.coating, kg * order.recipe.coat_rate, order.route.operations[2].supply_location, "Coating input")
+	_consume(order, order.recipe.coating, kg * order.recipe.coat_rate, order.route.operations[0 if order.has("stage") else 2].supply_location, "Coating input")
 
 
 func can_pack(pallet_needed: bool) -> bool:
@@ -435,6 +561,8 @@ func receive_pallet(pallet) -> void:
 		_release_remainder(order)
 		order.status = "Completed"
 		order.completed = now
+		if order.has("stage"):
+			order.delay = ""
 		last_product = order.recipe
 	changed()
 
@@ -527,8 +655,10 @@ func _supply_request(order: Dictionary, sack: float) -> Dictionary:
 	var pack := {"PK-PALLET": 5.0}
 	for code in recipe.packaging:
 		pack[code] = 32.0
-	var groups := [[order.route.operations[2].supply_location, {recipe.coating: 48.0}]]
-	if order.id == feeder_id:
+	var groups := []
+	if not order.has("stage") or order.stage == "coat":
+		groups.append([order.route.operations[0 if order.has("stage") else 2].supply_location, {recipe.coating: 48.0}])
+	if order.id == feeder_id and not mixture.is_empty():
 		groups.push_front(["RM-STAGE", mixture])
 	if order.id == pack_id:
 		groups.append(["PACK-IN", pack])

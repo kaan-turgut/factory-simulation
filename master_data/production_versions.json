@@ -14,7 +14,7 @@
   {
     "id": "PV-1002-01",
     "product": "FG-1002",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-01",
     "routing_version": 1,
     "min_boxes": 1,
@@ -26,7 +26,7 @@
   {
     "id": "PV-1003-01",
     "product": "FG-1003",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-01",
     "routing_version": 1,
     "min_boxes": 1,
@@ -38,7 +38,7 @@
   {
     "id": "PV-1004-01",
     "product": "FG-1004",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-01",
     "routing_version": 1,
     "min_boxes": 1,
@@ -50,7 +50,7 @@
   {
     "id": "PV-1005-01",
     "product": "FG-1005",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-01",
     "routing_version": 1,
     "min_boxes": 1,
@@ -74,7 +74,7 @@
   {
     "id": "PV-1002-02",
     "product": "FG-1002",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-02",
     "routing_version": 1,
     "min_boxes": 1,
@@ -86,7 +86,7 @@
   {
     "id": "PV-1003-02",
     "product": "FG-1003",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-02",
     "routing_version": 1,
     "min_boxes": 1,
@@ -110,7 +110,7 @@
   {
     "id": "PV-1002-03",
     "product": "FG-1002",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-03",
     "routing_version": 1,
     "min_boxes": 1,
@@ -122,7 +122,7 @@
   {
     "id": "PV-1003-03",
     "product": "FG-1003",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-03",
     "routing_version": 1,
     "min_boxes": 1,
@@ -146,7 +146,7 @@
   {
     "id": "PV-1002-04",
     "product": "FG-1002",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-04",
     "routing_version": 1,
     "min_boxes": 1,
@@ -158,7 +158,7 @@
   {
     "id": "PV-1003-04",
     "product": "FG-1003",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-04",
     "routing_version": 1,
     "min_boxes": 1,
@@ -170,7 +170,7 @@
   {
     "id": "PV-1004-04",
     "product": "FG-1004",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-04",
     "routing_version": 1,
     "min_boxes": 1,
@@ -182,7 +182,7 @@
   {
     "id": "PV-1005-04",
     "product": "FG-1005",
-    "bom_version": 1,
+    "bom_version": 2,
     "routing": "WAFER-04",
     "routing_version": 1,
     "min_boxes": 1,

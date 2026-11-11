@@ -13,6 +13,7 @@ signal dispatch_requested(all_stock: bool)
 
 const STATIONS := {
 	&"RawWarehouse": ["Raw material warehouse", "ERP  ·  RM-WH", []],
+	&"SFGWarehouse": ["Wafer stock", "ERP  ·  SFG-WH", []],
 	&"Platform": ["Ingredient platform", "LAYOUT  ·  ELEVATED FLOOR", []],
 	&"Stairs": ["Platform stairs", "LAYOUT  ·  ACCESS", []],
 	&"RawParking": ["Raw cart parking", "LAYOUT  ·  PARKING", []],
@@ -69,7 +70,7 @@ func configure(bold: Font) -> void:
 	_place = _button(top, "Place", func() -> void: placement_requested.emit())
 	_place.tooltip_text = "Reposition and rotate this station before starting a shift"
 	_erp_link = _button(top, "ERP stock", func() -> void:
-		var location := {&"RawWarehouse": "RM-WH", &"PackagingWIP": "PACK-WIP", &"Warehouse": "FG-WH"}
+		var location := {&"RawWarehouse": "RM-WH", &"SFGWarehouse": "SFG-WH", &"PackagingWIP": "PACK-WIP", &"Warehouse": "FG-WH"}
 		erp_requested.emit(3, location[_selection]))
 	_erp_link.hide()
 	var close := _button(top, "×", func() -> void: closed.emit())
@@ -109,7 +110,7 @@ func select(id: StringName, line: Line) -> void:
 	_title.text = data[0]
 	_tag.text = data[1]
 	_shipping.visible = id == &"Warehouse"
-	_erp_link.visible = line.erp != null and id in [&"Warehouse", &"RawWarehouse", &"PackagingWIP"]
+	_erp_link.visible = line.erp != null and id in [&"Warehouse", &"RawWarehouse", &"SFGWarehouse", &"PackagingWIP"]
 	_feedback.text = ""
 	for row in _settings.get_children():
 		_settings.remove_child(row)
@@ -154,6 +155,12 @@ func refresh(line: Line) -> void:
 			pallet.id, pallet.sku, pallet.order_id, pallet.boxes, pallet.mass] if pallet != null else "Pallet dispatched."
 		return
 	match _selection:
+		&"SFGWarehouse":
+			var total := 0.0
+			for quantity in line.erp.balances["SFG-WH"].values():
+				total += float(quantity)
+			_status("SFG-WH · Wafer stock", Palette.SFG)
+			_readout.text = "%.1f kg received at the tray-cart dock." % total
 		&"RawWarehouse":
 			_status("RM-WH · Raw inventory", Palette.SFG)
 			_readout.text = "Flour and sugar · Oils and inputs · Coatings · Cartons · Labels\nOpen ERP stock to inspect and manage balances."
@@ -176,7 +183,7 @@ func refresh(line: Line) -> void:
 			var run: Dictionary = line.runs.get(order.get("id", ""), {})
 			var input: Line.Storage = line.coater_inputs.get(_selection, line.cooked_input)
 			var output: Line.Storage = run.get("output", line.coated_input if line.erp == null else null)
-			_machine(line.coaters.get(_selection, line.coater), "Cooked buffer   %s\nCoated outfeed   %s" % [
+			_machine(line.coaters.get(_selection, line.coater), "Staging Area   %s\nCoated outfeed   %s" % [
 				_stock(input), _stock(output) if output != null else "Empty"])
 		&"PackagingWIP":
 			_status("Cart receiving buffer", Palette.SFG)
@@ -225,7 +232,7 @@ func refresh(line: Line) -> void:
 				_status(item.kind.capitalize(), Palette.SFG)
 				_readout.text = "%.2f m high" % item.height
 
-	if line.erp != null and _selection in [&"Extruder", &"Oven", &"Oven02", &"Coater", &"Coater02", &"Packer"]:
+	if line.erp != null and _selection in [&"Hopper", &"Extruder", &"Oven", &"Oven02", &"Coater", &"Coater02", &"Packer"]:
 		var order := line.order_at(_selection)
 		_readout.text += "\nOrder %s · SKU %s" % [order.get("id", "—"), order.get("code", "—")]
 		if _selection == &"Packer" and not order.is_empty():

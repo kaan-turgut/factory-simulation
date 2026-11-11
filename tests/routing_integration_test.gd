@@ -23,13 +23,20 @@ func _master_data() -> void:
 	var catalog := Catalog.new()
 	var plan := Line.Layout.new()
 	_check(catalog.error.is_empty() and plan.validate().is_empty(), "External catalog and layout are valid")
-	_check(catalog.routings.size() == 4 and catalog.work_centers.size() == 6, "Four routes and six work centers")
+	_check(catalog.routings.size() == 4 and catalog.work_centers.size() == 7, "Four legacy routes and seven work centers")
 	var folder := "user://routing-fixtures-%d" % OS.get_process_id()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(folder))
 	for file in DirAccess.get_files_at(Master.PROJECT_PATH):
 		if file.ends_with(".json"):
 			DirAccess.copy_absolute(ProjectSettings.globalize_path(Master.PROJECT_PATH.path_join(file)),
 				ProjectSettings.globalize_path(folder.path_join(file)))
+	var schedule_path := folder.path_join("scheduling.json")
+	var schedule_copy := FileAccess.get_file_as_string(schedule_path)
+	var broken_calendar: Dictionary = JSON.parse_string(schedule_copy)
+	broken_calendar.stages.bake = null
+	_write(schedule_path, JSON.stringify(broken_calendar))
+	_check("scheduling.json [bake]" in Catalog.new(folder).error, "Report an invalid stage definition")
+	_write(schedule_path, schedule_copy)
 	var external := Catalog.new(folder)
 	var path := folder.path_join("work_centers.json")
 	var centers: Array = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -60,6 +67,7 @@ func _master_data() -> void:
 	var versions: Array = JSON.parse_string(FileAccess.get_file_as_string(path))
 	versions[0].routing = "WAFER-02"
 	versions[0].product = "FG-1005"
+	versions[0].bom_version = versions[4].bom_version
 	_write(path, JSON.stringify(versions))
 	_check("does not support this product" in Catalog.new(folder).error, "Reject incompatible product assignment")
 	path = folder.path_join("boms.json")
@@ -83,7 +91,7 @@ func _master_data() -> void:
 
 func _versions() -> void:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
 	var book := line.erp
 	var denied := book.create_order("FG-1004", 8, 0, 1, "PV-1004-02")
 	_check(not denied.error.is_empty(), "Invalid product version is rejected")
@@ -109,7 +117,8 @@ func _versions() -> void:
 
 func _parallel() -> void:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
+	line.set_setting(&"warehouse_capacity", 5)
 	var book := line.erp
 	# Use crossed assignments to ensure worker delivery follows the routing, not machine pairing.
 	var first := book.create_order("FG-1001", 16, 0, 1, "PV-1001-03")
@@ -128,7 +137,7 @@ func _parallel() -> void:
 	var raw_destinations := {}
 	var cooked_destinations := {}
 	var snapshot := {}
-	for tick in 5600:
+	for tick in 7200:
 		line.advance(Line.STEP_SECONDS)
 		if tick % 4 == 0:
 			var coated := 0.0
@@ -156,8 +165,8 @@ func _parallel() -> void:
 		and raw_destinations.get(second.id) == line.layout.port(&"Oven02", &"raw_dock"), "Raw carts reach selected ovens")
 	_check(cooked_destinations.get(first.id) == line.layout.port(&"Coater02", &"cooked_dock")
 		and cooked_destinations.get(second.id) == line.layout.port(&"Coater", &"cooked_dock"), "Cooked carts reach crossed coating assignments")
-	_check(is_equal_approx(book.orders[first.id].received_kg, 80.0) and is_equal_approx(book.orders[second.id].received_kg, 48.0)
-		and is_equal_approx(line.warehouse_mass(), 168.0) and line.erp_wip().is_empty(), "All order mass is delivered separately")
+	_check(is_equal_approx(book.orders[first.id].received_kg, 80.0) and is_equal_approx(book.orders[second.id].received_kg, 50.0)
+		and is_equal_approx(line.warehouse_mass(), 170.0) and line.erp_wip().is_empty(), "All order mass is delivered separately")
 	for order in [book.orders[first.id], book.orders[second.id], book.orders[waiting.id]]:
 		var movements := book.movements.filter(func(row: Dictionary) -> bool:
 			return row.document == order.id and row.type == "FG Receipt")
@@ -176,7 +185,7 @@ func _parallel() -> void:
 
 func _coated_transport() -> void:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
 	line.set_setting(&"pack_wip_capacity", 8.0)
 	line.set_setting(&"coated_cart_capacity", 17.0)
 	var order := line.erp.create_order("FG-1001", 13, 0, 1, "PV-1001-02")
@@ -265,7 +274,7 @@ func _legacy_outfeed_fixture(line: Line, order_id: String) -> Dictionary:
 
 func _legacy_execution() -> void:
 	var line := Line.new()
-	line.enable_erp()
+	line.enable_erp(false)
 	var order := line.erp.create_order("FG-1001", 8, 0, 1)
 	if not order.error.is_empty() or not line.erp.release(order.id).is_empty():
 		_check(false, "Create a legacy migration fixture")

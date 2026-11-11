@@ -75,6 +75,7 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	if _erp_enabled:
 		_build_pack_wip()
 		_build_raw_warehouse()
+		_build_sfg_warehouse()
 		_build_shuttle()
 	_draw.batch_static(self, _warehouse_markers)
 	for station in _equipment.values():
@@ -107,8 +108,13 @@ func refresh(line: Line) -> void:
 		buffer.update_machine("Packaging WIP", "%.0f / %.0f kg" % [line.pack_wip.quantity, line.pack_wip.capacity], Palette.SFG)
 		buffer.fill_slots(line.pack_wip.occupancy())
 	_machine(&"Packer", "05  Packaging", line.packer)
-	_equipment[&"Hopper"].update_machine("01  Ingredients", "%0.0f / %0.0f kg" % [
-		line.hopper.quantity, line.hopper.capacity], Color("#b7cef0"))
+	var hopper_text := "%0.0f / %0.0f kg" % [line.hopper.quantity, line.hopper.capacity]
+	if _erp_enabled and line.erp.explicit_planning:
+		var prepared := 0.0
+		for quantity in line.erp.balances["SFG-DECK"].values():
+			prepared += float(quantity)
+		hopper_text = "%.0f kg dough stock · %s in hopper" % [prepared, hopper_text]
+	_equipment[&"Hopper"].update_machine("01  Ingredients", hopper_text, Color("#b7cef0"))
 	_equipment[&"Hopper"].fill_slots(line.hopper.occupancy())
 	_equipment[&"Coater"].fill_slots(line.cooked_input.occupancy())
 	_refresh_oven(&"Oven", "Oven 01", line.oven)
@@ -546,6 +552,24 @@ func _build_raw_warehouse() -> void:
 	_rail(node.position + Vector3(-7.85, 0, -1.82), node.position + Vector3(7.85, 0, -1.82))
 
 
+func _build_sfg_warehouse() -> void:
+	var node := _station(&"SFGWarehouse", "SFG  WAFER STOCK", TEAL)
+	_draw.box(node, Vector3(0, 0.055, 0), Vector3(6.9, 0.11, 2.9), Color("#687f8b"))
+	for x: float in [-3.2, -1.1, 1.1, 3.2]:
+		_draw.box(node, Vector3(x, 1.1, 0.1), Vector3(0.12, 2.2, 0.15), STEEL)
+	for y: float in [0.35, 1.25, 2.14]:
+		_draw.box(node, Vector3(0, y, 0.1), Vector3(6.5, 0.10, 1.45), TEAL)
+	for index in 6:
+		var at := Vector3(-2.15 + (index % 3) * 2.15, 0.55 + floorf(index / 3.0) * 0.9, 0.1)
+		var stock := Node3D.new()
+		stock.position = at
+		node.add_child(stock)
+		_stock.carton(stock, Vector3.ZERO, Vector3(1.8, 0.32, 1.0))
+		node.inventory_slots.append(stock)
+	_bay(layout.cart_body_center(layout.port(&"SFGWarehouse", &"stock_dock")) + Vector3.UP * 0.033,
+		Vector2(1.51, 1.46), TEAL)
+
+
 func _build_shuttle() -> void:
 	_shuttle = Equipment.new()
 	add_child(_shuttle)
@@ -582,6 +606,12 @@ func _refresh_erp(line: Line) -> void:
 		for index in _raw_groups.size():
 			_raw_groups[index].visible = qty[index] > Line.EPSILON
 		_equipment[&"RawWarehouse"].update_machine("RM  Raw materials", "ChocoERP stock", Palette.SFG)
+	var sfg := _equipment[&"SFGWarehouse"]
+	var kg := 0.0
+	for quantity in book.balances["SFG-WH"].values():
+		kg += float(quantity)
+	sfg.update_machine("SFG  WAFER STOCK", "%0.1f kg on hand" % kg, Palette.SFG)
+	sfg.fill_slots(clampf(kg / 150.0, 0.0, 1.0))
 	_tint_coating(line.order_at(&"Packer"), &"PackagingWIP", _equipment[&"PackagingWIP"].inventory_slots)
 
 
