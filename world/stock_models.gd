@@ -41,11 +41,11 @@ class PalletView:
 var _draw: Primitives
 var _wood: Dictionary[Color, StandardMaterial3D] = {}
 var _board: Dictionary[Color, StandardMaterial3D] = {}
-var _woven: Dictionary[Color, StandardMaterial3D] = {}
 var _wafer: Dictionary[Color, StandardMaterial3D] = {}
 var _grain: ImageTexture
 var _flutes: ImageTexture
-var _weave: ImageTexture
+var _sack_mesh: ArrayMesh
+var _sack_surface: StandardMaterial3D
 var _waffle: ImageTexture
 var _tape: StandardMaterial3D
 
@@ -70,12 +70,6 @@ func cardboard(color: Color) -> StandardMaterial3D:
 	if not _board.has(color):
 		_board[color] = _textured(color, _flutes, 0.9, 3.0)
 	return _board[color]
-
-
-func _woven_bag(color: Color) -> StandardMaterial3D:
-	if not _woven.has(color):
-		_woven[color] = _textured(color, _weave, 0.95, 6.0)
-	return _woven[color]
 
 
 func _wafer_sheet(color: Color) -> StandardMaterial3D:
@@ -116,13 +110,6 @@ func _build_textures() -> void:
 		for x in 32:
 			flutes.set_pixel(x, y, Color(shade, shade * 0.99, shade * 0.97))
 	_flutes = _tile(flutes)
-	var weave := Image.create_empty(16, 16, false, Image.FORMAT_RGBA8)
-	for y in 16:
-		for x in 16:
-			var over := ((x >> 1) + (y >> 1)) % 2 == 0
-			var shade := 1.0 if over else 0.86
-			weave.set_pixel(x, y, Color(shade, shade, shade))
-	_weave = _tile(weave)
 	var waffle := Image.create_empty(16, 16, false, Image.FORMAT_RGBA8)
 	waffle.fill(Color(1, 1, 1))
 	for i in 16:
@@ -138,19 +125,113 @@ func _tile(image: Image) -> ImageTexture:
 
 
 func sack(parent: Node3D, at: Vector3, scale_factor: float = 1.0) -> Node3D:
-	# 25 kg woven bag: a flattened pillow with a sewn top seam and a printed label.
+	# 25 kg woven sack lying flat. One shared mesh and material, so stacks merge cheaply.
 	var bag := Node3D.new()
 	bag.position = at
 	bag.scale = Vector3.ONE * scale_factor
 	parent.add_child(bag)
-	var pillow := _draw.capsule(bag, Vector3.ZERO, 0.3, 1.08, SACK)
-	pillow.material_override = _woven_bag(SACK)
-	# Lay the capsule along X and flatten it.
-	pillow.basis = Basis.from_scale(Vector3(1.0, 0.6, 1.0)) * Basis(Vector3.BACK, PI * 0.5)
-	_draw.box(bag, Vector3(0.53, 0.0, 0), Vector3(0.06, 0.16, 0.5), Color("#c4b28a")).material_override = _woven_bag(Color("#c4b28a"))
-	_draw.box(bag, Vector3(0.08, 0.186, 0.0), Vector3(0.34, 0.006, 0.36), PAPER)
-	_draw.box(bag, Vector3(0.08, 0.19, 0.0), Vector3(0.2, 0.004, 0.08), Color("#8d3a2a"))
+	if _sack_mesh == null:
+		_build_sack()
+	var body := MeshInstance3D.new()
+	body.mesh = _sack_mesh
+	body.material_override = _sack_surface
+	bag.add_child(body)
 	return bag
+
+
+## Filled sack: a slumped pillow whose thickness falls to the stitched seams at both
+## ends, with pinched corners, a slightly flatter underside and a short seam flange.
+func _build_sack() -> void:
+	const LENGTH := 1.0
+	const WIDTH := 0.6
+	const THICK := 0.34
+	const FLANGE := 0.025
+	const COLUMNS := 14
+	const ROWS := 9
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_smooth_group(0)
+	for face: float in [1.0, -1.0]:
+		var grid: Array[Vector3] = []
+		var uvs: Array[Vector2] = []
+		for row in ROWS + 1:
+			var v := lerpf(-1.0, 1.0, float(row) / ROWS)
+			for column in COLUMNS + 1:
+				var u := lerpf(-1.0, 1.0, float(column) / COLUMNS)
+				# Fuller in the middle, pinched to the seam at the ends, rounded at the sides.
+				var fill := pow(maxf(0.0, 1.0 - pow(absf(u), 4.0)), 0.55) \
+					* pow(maxf(0.0, 1.0 - pow(absf(v), 2.6)), 0.5)
+				var slump := 1.0 - 0.1 * (1.0 - u * u) * (1.0 - v * v)
+				var height := THICK * 0.5 * fill * slump * (1.0 if face > 0.0 else 0.82)
+				var x := u * LENGTH * 0.5 * (1.0 - 0.07 * v * v)
+				var z := v * WIDTH * 0.5 * (1.0 - 0.1 * pow(absf(u), 6.0))
+				grid.append(Vector3(x, height * face, z))
+				uvs.append(Vector2((u + 1.0) * 0.5, (v + 1.0) * 0.25 + (0.0 if face > 0.0 else 0.5)))
+		for row in ROWS:
+			for column in COLUMNS:
+				var a := row * (COLUMNS + 1) + column
+				var quad := [a, a + 1, a + COLUMNS + 2, a + COLUMNS + 1]
+				var order := [0, 1, 2, 0, 2, 3] if face > 0.0 else [0, 2, 1, 0, 3, 2]
+				for index in order:
+					tool.set_uv(uvs[quad[index]])
+					tool.add_vertex(grid[quad[index]])
+	# Stitched seam flanges at both ends, visible from above and below.
+	tool.set_smooth_group(1)
+	for end: float in [-1.0, 1.0]:
+		for face: float in [1.0, -1.0]:
+			var inner := end * LENGTH * 0.5
+			var outer := end * (LENGTH * 0.5 + FLANGE)
+			var y := 0.004 * face
+			var corners := [Vector3(inner, y, -WIDTH * 0.36), Vector3(outer, y, -WIDTH * 0.34),
+				Vector3(outer, y, WIDTH * 0.34), Vector3(inner, y, WIDTH * 0.36)]
+			var order := [0, 1, 2, 0, 2, 3] if (end * face) > 0.0 else [0, 2, 1, 0, 3, 2]
+			for index in order:
+				tool.set_uv(Vector2(0.985, 0.985))
+				tool.add_vertex(corners[index])
+	tool.generate_normals()
+	_sack_mesh = tool.commit()
+	_sack_mesh.set_meta("mergeable", true)
+	_sack_surface = StandardMaterial3D.new()
+	_sack_surface.albedo_texture = _sack_texture()
+	_sack_surface.roughness = 0.92
+	_sack_surface.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+
+
+func _sack_texture() -> ImageTexture:
+	# Top half of the image is the printed face, bottom half the plain back.
+	const W := 256
+	const H := 256
+	var image := Image.create_empty(W, H, false, Image.FORMAT_RGBA8)
+	var noise := FastNoiseLite.new()
+	noise.seed = 5
+	noise.frequency = 0.035
+	var base := Color("#d6c8a6")
+	for y in H:
+		for x in W:
+			# Fine woven tape: alternating warp and weft every 2 px, plus faint soiling.
+			var weave := 0.035 if ((x >> 1) + (y >> 1)) % 2 == 0 else -0.035
+			var soil := (noise.get_noise_2d(x, y) + 1.0) * 0.5
+			var shade := 1.0 + weave - soil * 0.08
+			var edge := minf(minf(x, W - 1 - x) / 10.0, 1.0)
+			shade -= (1.0 - edge) * 0.12
+			image.set_pixel(x, y, Color(base.r * shade, base.g * shade, base.b * shade))
+	# Printed panel on the face: coloured bands, a product block and text lines.
+	var ink := Color("#a23a2c")
+	var navy := Color("#22406b")
+	image.fill_rect(Rect2i(70, 20, 116, 6), ink)
+	image.fill_rect(Rect2i(70, 102, 116, 6), ink)
+	image.fill_rect(Rect2i(88, 36, 80, 22), navy)
+	for line in 3:
+		image.fill_rect(Rect2i(92 + line * 4, 66 + line * 9, 72 - line * 8, 4), navy.lightened(0.15))
+	image.fill_rect(Rect2i(150, 88, 22, 8), Color("#1d1d1d"))
+	# Stitch lines near both ends.
+	for y in range(0, H, 6):
+		for x in [6, W - 7]:
+			image.fill_rect(Rect2i(x, y, 2, 3), Color("#9a8a66"))
+	# Swatch used by the seam flanges: folded, stitched edge.
+	image.fill_rect(Rect2i(W - 8, H - 8, 8, 8), Color("#a99a76"))
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)
 
 
 func wafer(parent: Node3D, at: Vector3, color: Color, size: Vector3) -> Node3D:

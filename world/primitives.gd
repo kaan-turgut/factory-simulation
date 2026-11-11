@@ -70,8 +70,8 @@ func batch_static(parent: Node3D, dynamic_parts: Array[MeshInstance3D] = []) -> 
 	var groups: Dictionary[Material, Array] = {}
 	for child in parent.get_children():
 		var piece := child as MeshInstance3D
-		if piece == null or piece in dynamic_parts or not piece.mesh is PrimitiveMesh \
-				or piece.get_child_count() != 0:
+		if piece == null or piece in dynamic_parts or piece.get_child_count() != 0 \
+				or not (piece.mesh is PrimitiveMesh or (piece.mesh != null and piece.mesh.has_meta("mergeable"))):
 			continue
 		var surface := piece.material_override
 		if not groups.has(surface):
