@@ -9,6 +9,8 @@ const Logistics = preload("res://world/logistics_view.gd")
 const Stock = preload("res://world/stock_models.gd")
 const Processing = preload("res://world/processing_models.gd")
 const WarehouseView = preload("res://world/warehouse_view.gd")
+const Industrial = preload("res://world/industrial_models.gd")
+const Hall = preload("res://world/hall_models.gd")
 const Palette = preload("res://ui/status_colors.gd")
 
 const INK := Color("#253541")
@@ -32,6 +34,7 @@ const CELL_ART := {
 var layout: Layout
 var _draw := Primitives.new()
 var _stock := Stock.new(_draw)
+var _industrial := Industrial.new(_draw, _stock)
 var _equipment: Dictionary[StringName, Equipment] = {}
 var _logistics: Logistics
 var _staged: Array[Stock.PalletView] = []
@@ -40,7 +43,8 @@ var _warehouse_markers: Array[MeshInstance3D] = []
 var _oven_doors := {}
 var _oven_heaters := {}
 var _auger: Node3D
-var _coating_drums := {}
+var _enrobers := {}
+var _hall: Hall
 var _route_overlay: Node3D
 var _raw_groups: Array[Node3D] = []
 var _pallet_picks: Array[Equipment] = []
@@ -63,7 +67,7 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	_route_overlay = null
 	_oven_doors.clear()
 	_oven_heaters.clear()
-	_coating_drums.clear()
+	_enrobers.clear()
 	_processing_models.clear()
 	_warehouse_views.clear()
 	_cooling_marks.clear()
@@ -98,6 +102,12 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	for station in _equipment.values():
 		_draw.batch_static(station, [station.beacon])
 	_logistics = Logistics.new(self, _draw, _stock, _erp_enabled)
+
+
+func update_view(camera: Camera3D) -> void:
+	# Cut away the walls and roof bays that would block the camera.
+	if _hall != null:
+		_hall.update_view(camera)
 
 
 func equipment_at(origin: Vector3, end: Vector3) -> StringName:
@@ -165,6 +175,11 @@ func refresh(line: Line) -> void:
 	if line.erp != null and _erp_enabled:
 		_refresh_erp(line)
 		_refresh_cells(line)
+		for id: StringName in _enrobers:
+			var order := line.order_at(id)
+			var coating: String = order.get("recipe", {}).get("spec", {}).get("coating_color", "")
+			if Color.html_is_valid(coating):
+				_enrobers[id].tint(Color(coating))
 
 
 func animate(line: Line, delta: float) -> void:
@@ -189,7 +204,7 @@ func _refresh_oven(id: StringName, title: String, machine: Line.Oven) -> void:
 
 
 func _animate_station(line: Line, oven_id: StringName, coat_id: StringName, oven: Line.Oven, coater: Line.Machine, delta: float) -> void:
-	_coating_drums[coat_id].rotation.x = fposmod(coater.total_output * 0.23, TAU)
+	_enrobers[coat_id].animate(coater.total_output, coater.state == Line.Machine.State.RUNNING)
 	var worker := line.find_operator(oven.owner) if oven.owner != &"" else null
 	var opening := worker != null and worker.state in [Line.Operator.State.LOADING, Line.Operator.State.UNLOADING]
 	var door: Node3D = _oven_doors[oven_id]
@@ -243,24 +258,8 @@ func _machine(id: StringName, title: String, machine: Line.Machine) -> void:
 
 
 func _build_hall() -> void:
-	var atmosphere := Environment.new()
-	atmosphere.background_mode = Environment.BG_COLOR
-	atmosphere.background_color = Color("#172532")
-	atmosphere.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	atmosphere.ambient_light_color = Color("#d6e0eb")
-	atmosphere.ambient_light_energy = 0.48
-	var environment := WorldEnvironment.new()
-	environment.environment = atmosphere
-	add_child(environment)
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-58, -28, 0)
-	light.light_color = Color("#fff1dc")
-	light.light_energy = 0.85
-	light.shadow_enabled = true
-	light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	light.shadow_blur = 1.4
-	light.directional_shadow_max_distance = 133
-	add_child(light)
+	_hall = Hall.new(_industrial)
+	_hall.light(self)
 
 	var grid := layout.grid
 	var width := grid.size.x
@@ -273,7 +272,7 @@ func _build_hall() -> void:
 			var tile := Vector2(mini(4, width - x), mini(4, length - z))
 			var slab := CONCRETE.lightened(float((x * 3 + z * 2) % 5) * 0.013)
 			_draw.box(self, grid.to_world(Vector2(x, z) + tile * 0.5, -0.055),
-				Vector3(tile.x - 0.02, 0.11, tile.y - 0.02), slab)
+				Vector3(tile.x - 0.02, 0.11, tile.y - 0.02), slab).material_override = _industrial.concrete(slab)
 	for z: float in [-0.155, length + 0.155]:
 		var height := 1.66 if z > 0.0 else 1.05
 		_draw.box(self, grid.to_world(Vector2(middle.x, z), height * 0.5),
@@ -288,6 +287,7 @@ func _build_hall() -> void:
 		_draw.box(self, grid.to_world(Vector2(x, middle.y), 1.36), Vector3(0.42, 0.14, length), METAL)
 		for z in range(3, length, 6):
 			_draw.box(self, grid.to_world(Vector2(x, z), 0.7), Vector3(0.44, 1.56, 0.36), INK)
+	_hall.build(self, grid, layout)
 	var aisle_end := layout.cart_aisle_end()
 	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end, layout.lane_z(Layout.CART_LANE),
 		1.65, Color("#637b7d"))
@@ -429,58 +429,16 @@ func _build_extruder() -> void:
 
 func _build_oven(id: StringName, title: String) -> void:
 	var node := _station(id, title, OVEN_RED)
-	_base(node, Vector2(0.40, 0.16))
-	_draw.box(node, Vector3(0, 1.70, -0.03), Vector3(4.24, 2.78, 2.76), OVEN_RED)
-	_draw.box(node, Vector3(0, 1.60, 1.42), Vector3(3.52, 2.32, 0.21), INK)
-	_draw.box(node, Vector3(0, 0.60, 1.61), Vector3(3.40, 0.14, 0.62), METAL)
-	var door := _pivot(node, Vector3(-1.67, 1.61, 1.67))
-	_draw.box(door, Vector3(1.67, 0, 0), Vector3(3.34, 2.10, 0.17), METAL)
-	_draw.box(door, Vector3(1.67, 0.33, 0.094), Vector3(2.70, 1.08, 0.044), INK)
-	_draw.box(door, Vector3(1.67, 0.35, 0.12), Vector3(2.37, 0.78, 0.02), Color("#59443d"))
-	var heater := _pivot(door, Vector3(1.67, 0.33, 0.14))
-	for index in 3:
-		var glow := _draw.box(heater, Vector3(0, -0.26 + index * 0.26, 0), Vector3(2.25, 0.061, 0.023), AMBER)
-		var emissive := StandardMaterial3D.new()
-		emissive.albedo_color = Color("#e5a15c")
-		emissive.emission_enabled = true
-		emissive.emission = Color("#e58d4b")
-		emissive.emission_energy_multiplier = 0.65
-		glow.material_override = emissive
-	_draw.box(door, Vector3(2.89, -0.33, 0.21), Vector3(0.21, 0.42, 0.23), INK)
-	for x: float in [-1.15, 0.0, 1.15]:
-		_draw.box(node, Vector3(x, 3.13, -0.58), Vector3(0.86, 0.16, 1.10), INK)
-		for index in 4:
-			_draw.box(node, Vector3(x, 3.23, -0.92 + index * 0.22), Vector3(0.73, 0.06, 0.09), METAL)
-	_console(node, Vector3(1.83, 1.77, 1.45), AMBER)
-	_beacon(node, Vector3(1.79, 3.09, 0.8))
-	_oven_doors[id] = door
-	_oven_heaters[id] = heater
+	var model := _industrial.build_oven(node, title, OVEN_RED)
+	_oven_doors[id] = model.door
+	_oven_heaters[id] = model.heater
 	for dock: Vector3 in [layout.port(id, &"raw_dock"), layout.port(id, &"cooked_dock")]:
 		_bay(layout.cart_body_center(dock) + Vector3.UP * 0.027, Vector2(1.48, 1.42), SAFETY)
 
 
 func _build_coater(id: StringName, title: String) -> void:
 	var node := _station(id, title, COCOA)
-	_base(node)
-	_draw.box(node, Vector3(0.08, 0.88, 0), Vector3(4.78, 0.98, 2.76), COCOA)
-	_draw.box(node, Vector3(-1.75, 1.26, 0.53), Vector3(1.08, 0.48, 1.6), METAL)
-	for x: float in [-1.21, 1.21]:
-		_draw.box(node, Vector3(x, 1.95, 0), Vector3(0.30, 1.98, 1.59), COCOA)
-	var rotor := _pivot(node, Vector3(0, 2.18, -0.19))
-	var drum := _draw.cylinder(rotor, Vector3.ZERO, 0.84, 2.13, Color("#9a6d58"))
-	drum.rotation_degrees.z = 90
-	for index in 6:
-		var angle := index * TAU / 6.0
-		var slat := _draw.box(rotor, Vector3(0, sin(angle) * 0.82, cos(angle) * 0.82),
-			Vector3(2.10, 0.09, 0.11), Stock.CHOCOLATE)
-		slat.rotation.x = -angle
-	_draw.box(node, Vector3(0, 1.36, 1.18), Vector3(1.93, 0.2, 0.69), INK)
-	for index in 6:
-		node.inventory_slots.append(_stock.wafer(node, Vector3(-0.73 + index * 0.29, 1.46, 1.15),
-			Stock.COOKED, Vector3(0.23, 0.29, 0.49)))
-	_console(node, Vector3(1.75, 1.46, 1.33), Color("#d7a889"))
-	_beacon(node, Vector3(1.69, 2.15, 0.52))
-	_coating_drums[id] = rotor
+	_enrobers[id] = _industrial.build_enrober(node, title, COCOA)
 	_bay(layout.cart_body_center(layout.port(id, &"cooked_dock")) + Vector3.UP * 0.027, Vector2(1.46, 1.41), SAFETY)
 	if _erp_enabled:
 		_bay(layout.cart_body_center(layout.port(id, &"coated_dock")) + Vector3.UP * 0.027, Vector2(1.46, 1.41), Color("#b88bc7"))

@@ -122,6 +122,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	floor_view.update_view(camera)
 	var previous_tick := line.elapsed_ticks
 	line.advance(delta)
 	if line.elapsed_ticks != previous_tick:
