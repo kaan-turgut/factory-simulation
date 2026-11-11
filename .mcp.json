@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"chocolate-works": {
+			"command": "python3",
+			"args": ["agent/mcp_bridge.py"]
+		}
+	}
+}

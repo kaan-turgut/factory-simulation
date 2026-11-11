@@ -14,6 +14,12 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - Performance rule from the owner: performance comes first, and the machine must not run hot. Prefer emissive materials and merged meshes over real lights, transparency and per-frame updates.
 - Everything in `world/` is visual only and must never write simulation state.
 
+## Agent interface (added Nov 2026)
+- `agent/` exposes the ERP and simulation to AI planning agents: `agent_api.gd` (JSON commands), `work_center_monitor.gd` (read-only state-time buckets), `server.gd` (TCP, newline JSON) and `mcp_bridge.py` (stdlib-only MCP stdio bridge, registered in `.mcp.json`). Scenarios live in `scenarios/`.
+- Agent actions must go through the same ERP functions as the UI. Never give the agent a shortcut that bypasses release checks, reservations or the ledger.
+- Command argument specs follow `"[optional ]<string|number|int|bool|array>[: note]"`. The bridge builds MCP schemas from them.
+- Run `tests/agent_api_test.gd` after changing anything in `agent/`, ERP command signatures, or order/demand fields.
+
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.
 - The simulation is fully deterministic: no breakdowns, random cycle times or supplier variability yet. The owner plans to use it for experiments, so any randomness should be seeded and optional.

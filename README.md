@@ -172,6 +172,35 @@ Production rates use kilograms, pieces, or cartons per simulated hour, or timed 
 
 Capacity reductions must cover current stock and any incoming reservations. An oven batch's capacity is locked through cooking and unloading. Movement speeds can change during a shift. Technical settings on an idle work center apply to future releases. Released orders keep the parameters they reserved. The forklift uses marked waypoints, and cart moves reserve the shared aisle one at a time. People use fixed pedestrian approaches and can pass one another.
 
+## AI planning agent (headless)
+
+An AI agent can plan and run the factory without the game window and without clicking through the ERP. It calls the same ERP functions as the terminal buttons, so it plays by the same rules as a human planner.
+
+- `agent/agent_api.gd` turns JSON commands into ERP actions and returns compact observations: status, stock, orders, demands, the schedule, work-center time breakdowns, MRP proposals and a score.
+- `agent/work_center_monitor.gd` records how long each work center spends working, in setup, starved, blocked, handling oven loads, or without work. These shares are the main evidence for bottleneck analysis. It only reads simulation state.
+- `agent/server.gd` serves those commands as one JSON object per line over TCP on 127.0.0.1.
+- `agent/mcp_bridge.py` starts the server and exposes each command as an MCP tool named `factory_<command>`. It needs only Python 3 and has no packages to install.
+- `scenarios/*.json` set up a shift: demands, stock adjustments, operating factors (50–120%), auto-release and a horizon. `evaluator_notes` is never returned to the agent, but an agent with file access could read it. For blind tests, keep scenarios with answers outside the agent's reach.
+
+Time only moves when the agent calls `advance` or `run_until`. `run_until` stops at events such as a completed order, a received purchase or a missed due date. A 12-hour shift simulates in a few seconds. `snapshot` and `restore` keep whole shifts in memory, so an agent can test a change and then rewind. Runs are deterministic.
+
+**With Claude Code.** `.mcp.json` registers the bridge as the `chocolate-works` server. Open Claude Code in this folder, approve the server, and ask, for example: *Load res://scenarios/constrained_shift.json, plan the shift, run it to the horizon, and report the bottlenecks with evidence and recommendations.* Set `GODOT_BIN` if Godot is not in `/Applications`.
+
+**Without MCP.** Start the server and send lines with any language:
+
+```sh
+godot --headless --path . --script res://agent/server.gd -- --port 8765 --scenario res://scenarios/filled_wafer_shift.json
+```
+
+```json
+{"cmd": "run_mrp", "args": {}}
+{"cmd": "run_until", "args": {"max_seconds": 3600, "stop_on": ["order_completed"]}}
+```
+
+Send `{"cmd": "describe"}` for the full command list and `{"cmd": "shutdown"}` to stop. `python3 agent/mcp_bridge.py --connect 8765` attaches the MCP bridge to a server that is already running.
+
+Current limits: the agent controls planning, purchasing and release. It cannot edit the layout, crews or master data. The simulation has no breakdowns or random variability yet.
+
 ## Project structure
 
 | Path | Responsibility |
@@ -183,6 +212,8 @@ Capacity reductions must cover current stock and any incoming reservations. An o
 | `master_data/` | Editable JSON master definitions and initial floor plan |
 | `world/` | Primitive models, motion interpolation, camera, and picking |
 | `ui/` | ChocoERP, overview, transport controls, and context-sensitive inspector |
+| `agent/` | Headless JSON and MCP interface for AI planning agents |
+| `scenarios/` | Planning scenarios for agent runs |
 | `tests/` | Simulation scenarios and scene interaction checks |
 
 ## Validate the project
@@ -200,6 +231,7 @@ godot --headless --path . --script res://tests/routing_integration_test.gd
 godot --headless --path . --script res://tests/layout_editor_test.gd
 godot --headless --path . --script res://tests/detailed_scheduling_test.gd
 godot --headless --path . --script res://tests/product_standards_test.gd
+godot --headless --path . --script res://tests/agent_api_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

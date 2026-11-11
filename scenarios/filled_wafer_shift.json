@@ -1,0 +1,12 @@
+{
+	"name": "Filled wafer shift",
+	"description": "Twelve-hour shift with three filled wafer demands and one milk wafer demand. Plan production and purchasing so every demand is stored as finished goods by its due time.",
+	"horizon_seconds": 43200,
+	"auto_release": false,
+	"demands": [
+		{"code": "FG-2001", "boxes": 48, "due": 14400},
+		{"code": "FG-1001", "boxes": 30, "due": 21600},
+		{"code": "FG-2004", "boxes": 60, "due": 28800},
+		{"code": "FG-2002", "boxes": 120, "due": 43200}
+	]
+}

@@ -1,0 +1,17 @@
+{
+	"name": "Constrained shift",
+	"description": "Twelve-hour shift with mixed wafer demand. Plan production and purchasing, find what limits output, and recommend improvements.",
+	"horizon_seconds": 43200,
+	"auto_release": false,
+	"evaluator_notes": "Not returned to the agent. Planted constraints: Oven 01 runs at 50% of its standard rate, and wheat flour opening stock is cut to 500 kg so batter needs a timely purchase.",
+	"operating_factors": {"Oven": 50},
+	"stock_adjustments": [
+		{"code": "RM-FLOUR", "qty": -3000, "reason": "Scenario: low flour stock"}
+	],
+	"demands": [
+		{"code": "FG-1001", "boxes": 40, "due": 10800},
+		{"code": "FG-1002", "boxes": 40, "due": 21600},
+		{"code": "FG-2001", "boxes": 48, "due": 28800},
+		{"code": "FG-1001", "boxes": 60, "due": 39600}
+	]
+}
