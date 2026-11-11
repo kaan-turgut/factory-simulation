@@ -12,7 +12,12 @@
 		"unit": "kg",
 		"family": "Supplies",
 		"flavor": "",
-		"cleaning_group": "plain"
+		"cleaning_group": "plain",
+		"planning": {
+			"lot_size": "EX",
+			"min_lot": 100,
+			"rounding": 25
+		}
 	},
 	{
 		"active": true,
@@ -27,7 +32,11 @@
 		"unit": "kg",
 		"family": "Supplies",
 		"flavor": "",
-		"cleaning_group": "plain"
+		"cleaning_group": "plain",
+		"planning": {
+			"lot_size": "EX",
+			"rounding": 25
+		}
 	},
 	{
 		"active": true,
@@ -72,7 +81,12 @@
 		"unit": "kg",
 		"family": "Chocolate wafers",
 		"flavor": "",
-		"cleaning_group": "plain"
+		"cleaning_group": "plain",
+		"planning": {
+			"lot_size": "PB",
+			"period_seconds": 14400,
+			"rounding": 10
+		}
 	},
 	{
 		"active": true,
@@ -87,7 +101,11 @@
 		"unit": "kg",
 		"family": "Chocolate wafers",
 		"flavor": "",
-		"cleaning_group": "plain"
+		"cleaning_group": "plain",
+		"planning": {
+			"lot_size": "PB",
+			"period_seconds": 14400
+		}
 	},
 	{
 		"active": true,
@@ -102,7 +120,11 @@
 		"unit": "kg",
 		"family": "Chocolate wafers",
 		"flavor": "",
-		"cleaning_group": "plain"
+		"cleaning_group": "plain",
+		"planning": {
+			"lot_size": "PB",
+			"period_seconds": 14400
+		}
 	},
 	{
 		"active": true,

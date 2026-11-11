@@ -20,7 +20,8 @@ const STOCK_FIELDS := ["capacity", "quantity"]
 const ERP_FIELDS := ["balances", "orders", "purchases", "demands", "reservations", "movements",
 	"history", "day_output", "pending_events", "now", "sequence", "active_id", "last_product", "feeder_id", "pack_id",
 	"coat_setup_seconds", "pack_setup_seconds", "coat_remaining", "pack_remaining", "shipment", "manual_shipments",
-	"_next_sample", "_next_flush", "utilization", "delay_seconds", "explicit_planning", "planning_conversions", "auto_release"]
+	"_next_sample", "_next_flush", "utilization", "delay_seconds", "explicit_planning", "planning_conversions", "auto_release",
+	"planned_orders", "planned_sequence"]
 
 
 static func save(line: Line, path: String = PATH) -> String:

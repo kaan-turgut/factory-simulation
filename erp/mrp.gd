@@ -6,6 +6,8 @@ const StageMRP = preload("res://erp/stage_mrp.gd")
 var rows: Array[Dictionary] = []
 var proposals := {}
 var summary := {}
+var exceptions: Array[Dictionary] = []
+var coverage := {}
 var _book
 var _requirements := {}
 
@@ -14,6 +16,8 @@ func run(book, finished_stock: Dictionary) -> void:
 	_book = book
 	rows.clear()
 	proposals.clear()
+	exceptions.clear()
+	coverage.clear()
 	_requirements.clear()
 	summary = {"shortages": {}, "buy": 0, "make": 0, "late": 0, "covered": 0, "requirements": 0}
 	if book.explicit_planning:
@@ -182,15 +186,27 @@ func _receipt(code: String, receipt: Dictionary, balance: float, future_allocate
 
 
 func _row(code: String, date: float, kind: String, incoming: float, outgoing: float, projected: float,
-		short: float, doc: String, family: String, proposal: String = "", action_date: float = -1.0) -> void:
-	rows.append({"code": code, "date": date, "kind": kind, "in": incoming, "out": outgoing,
+		short: float, doc: String, family: String, proposal: String = "", action_date: float = -1.0) -> Dictionary:
+	var row := {"code": code, "date": date, "kind": kind, "in": incoming, "out": outgoing,
 		"projected": projected, "short": short, "doc": doc, "family": family, "proposal": proposal,
-		"action_date": action_date, "index": rows.size()})
+		"action_date": action_date, "index": rows.size()}
+	rows.append(row)
+	return row
+
+
+## A proposal by planning key or planned order number.
+func find(key: String) -> Dictionary:
+	if proposals.has(key):
+		return proposals[key]
+	for item in proposals.values():
+		if item.get("number", "") == key:
+			return item
+	return {}
 
 
 func convert(key: String, book, finished_stock: Dictionary, edits: Dictionary = {}) -> Dictionary:
 	run(book, finished_stock)
-	var item: Dictionary = proposals.get(key, {})
+	var item: Dictionary = find(key)
 	if item.is_empty():
 		return {"error": "This proposal is no longer required. Run MRP again."}
 	var result: Dictionary
@@ -206,3 +222,73 @@ func convert(key: String, book, finished_stock: Dictionary, edits: Dictionary = 
 	if result.error.is_empty():
 		run(book, finished_stock)
 	return result
+
+
+## Convert every proposal accepted by the filter, parents before components so pegging links.
+## Returns the created documents and the proposals that failed.
+func convert_all(book, finished_stock: Dictionary, accept: Callable = Callable()) -> Dictionary:
+	var created: Array[String] = []
+	var failed: Array[Dictionary] = []
+	var tried := {}
+	run(book, finished_stock)
+	for attempt in 500:
+		var next: Dictionary = {}
+		for item in proposals.values():
+			if not tried.has(item.id) and (not accept.is_valid() or accept.call(item)):
+				next = item
+				break
+		if next.is_empty():
+			break
+		tried[next.id] = true
+		var result := self.convert(next.id, book, finished_stock)
+		if result.error.is_empty():
+			created.append(result.id)
+		else:
+			failed.append({"proposal": next.get("number", next.id), "code": next.code, "error": result.error})
+	return {"created": created, "failed": failed}
+
+
+## Firm or unfirm a planned order. MRP never changes a firmed order.
+func firm(number: String, enabled: bool, book, finished_stock: Dictionary) -> String:
+	if not book.planned_orders.has(number):
+		return "Select a planned order. Run MRP to refresh numbers."
+	book.planned_orders[number].firmed = enabled
+	book.changed()
+	run(book, finished_stock)
+	return ""
+
+
+## Change the quantity or start of a planned order. The change firms it, as in SAP.
+func change(number: String, quantity: float, start: float, book, finished_stock: Dictionary) -> String:
+	var item: Dictionary = book.planned_orders.get(number, {})
+	if item.is_empty():
+		return "Select a planned order. Run MRP to refresh numbers."
+	if not is_finite(quantity) or quantity <= 0.0 or not is_finite(start) or start < book.now - 0.000001:
+		return "Use a positive quantity and a start at or after the current time."
+	var material: Dictionary = book.catalog.materials[item.code]
+	if item.type == "Make":
+		if material.type == "FERT" and not is_equal_approx(quantity, roundf(quantity)):
+			return "Finished goods are planned in whole shipping boxes."
+		var assignment: Dictionary = StageMRP.Scheduling.assignment(book, item.code, quantity, start, item.version)
+		if not assignment.error.is_empty():
+			return assignment.error
+		item.quantity = quantity
+		item.qty = assignment.recipe.target
+		item.boxes = quantity if material.type == "FERT" else 0
+		item.start = start
+		item.duration = assignment.duration
+		item.due = start + assignment.duration
+		item.finish = item.due
+	else:
+		if quantity + 0.000001 < float(item.get("minimum", 0.0)):
+			return "Below the supplier minimum of %s." % item.minimum
+		item.qty = ceilf(quantity - 0.000001) if material.unit == "ea" else quantity
+		item.quantity = item.qty
+		item.start = start
+		item.due = start + float(item.lead)
+		item.finish = item.due
+	item.erase("earliest_finish")
+	item.firmed = true
+	book.changed()
+	run(book, finished_stock)
+	return ""

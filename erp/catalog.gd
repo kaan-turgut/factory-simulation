@@ -6,6 +6,10 @@ const Scheduling = preload("res://erp/scheduling.gd")
 const Master = preload("res://erp/master_files.gd")
 const OPERATIONS := ["extrude", "bake", "coat", "pack"]
 const MATERIAL_STAGES := ["dough", "raw", "baked", "coated", "finished"]
+## MRP lot-sizing procedures. Finished goods stay lot-for-lot because each order is linked to one demand.
+const LOT_PROCEDURES := {"EX": "Lot-for-lot", "FX": "Fixed lot", "PB": "Period lot"}
+const PLANNING_DEFAULTS := {"lot_size": "EX", "fixed_lot": 0.0, "period_seconds": 0.0, "min_lot": 0.0,
+	"max_lot": 0.0, "rounding": 0.0, "safety_time": 0.0}
 const PARAMETERS := {
 	"mix": {"rate": [0.0, 36000.0]},
 	"extrude": {"rate": [0.0, 36000.0]},
@@ -132,6 +136,10 @@ func _validate() -> String:
 		item.erase("opening")
 		if item.type == "FERT" and not item.has("box_kg"):
 			return "products.json [%s]: finished material needs a product specification." % code
+		if item.has("planning"):
+			var problem := _planning_error(code, item.planning)
+			if not problem.is_empty():
+				return "materials.json [%s].planning: %s" % [code, problem]
 	for code in boms:
 		var bom: Dictionary = boms[code]
 		if not materials.has(code) or materials[code].procurement != "In-house" or not Master.number(bom.base, 0.000001) \
@@ -572,6 +580,70 @@ func edit_material(code: String, name: String, minimum: float, lead: float, acti
 	item.lead = lead
 	item.active = active
 	return ""
+
+
+## MRP settings for a material, with defaults for anything not set.
+func planning(code: String) -> Dictionary:
+	var values := PLANNING_DEFAULTS.duplicate()
+	values.merge(materials.get(code, {}).get("planning", {}), true)
+	return values
+
+
+func lot_caption(code: String) -> String:
+	var p := planning(code)
+	var text: String = p.lot_size
+	match p.lot_size:
+		"FX":
+			text += " %s" % _short(p.fixed_lot)
+		"PB":
+			text += " %s min" % _short(p.period_seconds / 60.0)
+	for key in ["min_lot", "max_lot", "rounding"]:
+		if p[key] > 0.0:
+			text += " · %s %s" % [{"min_lot": "min", "max_lot": "max", "rounding": "round"}[key], _short(p[key])]
+	return text
+
+
+func set_planning(code: String, values: Dictionary) -> String:
+	if not materials.has(code):
+		return "Unknown material."
+	var merged := planning(code)
+	merged.merge(values, true)
+	var problem := _planning_error(code, merged)
+	if not problem.is_empty():
+		return problem
+	for key in merged:
+		if key != "lot_size":
+			merged[key] = float(merged[key])
+	materials[code].planning = merged
+	return ""
+
+
+func _planning_error(code: String, values: Variant) -> String:
+	if not values is Dictionary:
+		return "expected an object."
+	for key in values:
+		if not PLANNING_DEFAULTS.has(key):
+			return "unknown setting %s." % key
+	var p := PLANNING_DEFAULTS.duplicate()
+	p.merge(values, true)
+	if not LOT_PROCEDURES.has(p.lot_size):
+		return "lot_size must be one of " + ", ".join(PackedStringArray(LOT_PROCEDURES.keys())) + "."
+	for key in p:
+		if key != "lot_size" and (not (p[key] is float or p[key] is int) or not is_finite(float(p[key])) or float(p[key]) < 0.0):
+			return "%s must be a nonnegative number." % key
+	if materials[code].type == "FERT" and (p.lot_size != "EX" or p.min_lot > 0 or p.max_lot > 0 or p.rounding > 0):
+		return "finished goods are planned lot-for-lot per demand; use safety_time only."
+	if p.lot_size == "FX" and p.fixed_lot <= 0.0:
+		return "a fixed lot needs fixed_lot above zero."
+	if p.lot_size == "PB" and p.period_seconds <= 0.0:
+		return "a period lot needs period_seconds above zero."
+	if p.max_lot > 0.0 and (p.max_lot < p.min_lot or (p.lot_size == "FX" and p.fixed_lot > p.max_lot)):
+		return "max_lot must cover min_lot and the fixed lot."
+	return ""
+
+
+static func _short(value: float) -> String:
+	return str(snappedf(value, 0.01)).trim_suffix(".0")
 
 
 func clone_product(source: String, code: String, name: String) -> String:

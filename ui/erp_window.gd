@@ -35,6 +35,8 @@ var _board_time := -1.0
 var _pending_page := false
 var _suppliers := false
 var _proposals_only := false
+var _exceptions_only := false
+var _mrp_material := ""
 var _schedule_report := false
 var _open := false
 var _root: Control
@@ -248,6 +250,7 @@ func _build() -> void:
 	_table.add_theme_constant_override("v_separation", 7)
 	_table.add_theme_font_size_override("font_size", 14)
 	_table.item_selected.connect(_on_select)
+	_table.item_activated.connect(_on_activate)
 	content.add_child(_table)
 	_board = ScheduleBoard.new()
 	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -281,6 +284,8 @@ func _filter(parent: Control, hint: String) -> LineEdit:
 
 
 func _set_page(index: int, clear_search: bool = true) -> void:
+	if index != _page:
+		_mrp_material = ""
 	_page = index
 	_selected = {}
 	_suppliers = false
@@ -304,6 +309,13 @@ func _set_page(index: int, clear_search: bool = true) -> void:
 	_render()
 
 
+func _refresh_actions() -> void:
+	for child in _actions.get_children():
+		_actions.remove_child(child)
+		child.queue_free()
+	_build_actions()
+
+
 func _build_actions() -> void:
 	match _page:
 		1:
@@ -323,15 +335,29 @@ func _build_actions() -> void:
 			_action("Locate stock", _locate)
 		4:
 			_action("Run MRP", _run_mrp)
+			if _mrp_material.is_empty():
+				_action("Stock/Requirements list", func() -> void: _open_material(String(_selected.get("material", ""))))
+			else:
+				_action("← Coverage list", func() -> void: _open_material(""))
 			_action("Create demand", _new_demand)
 			if line.erp.explicit_planning:
 				_action("Load filled-wafer example", _example_demands)
 			_action("Convert proposal", _convert)
-			var proposals := _button(_actions, "Proposals only", func() -> void:
-				_proposals_only = not _proposals_only
+			if line.erp.explicit_planning:
+				_action("Convert all shown", _convert_shown)
+				_action("Firm / unfirm", _toggle_firm)
+				_action("Change planned order", _change_planned)
+			if not _mrp_material.is_empty():
+				var proposals := _button(_actions, "Proposals only", func() -> void:
+					_proposals_only = not _proposals_only
+					_render())
+				proposals.toggle_mode = true
+				proposals.button_pressed = _proposals_only
+			var exceptions := _button(_actions, "Exceptions only", func() -> void:
+				_exceptions_only = not _exceptions_only
 				_render())
-			proposals.toggle_mode = true
-			proposals.button_pressed = _proposals_only
+			exceptions.toggle_mode = true
+			exceptions.button_pressed = _exceptions_only
 		5:
 			_action("Create order", _new_order)
 			_action("Release", func() -> void: _order_action("release"))
@@ -411,7 +437,9 @@ func _header(columns: Array, summary: String) -> TreeItem:
 		_table.set_column_expand(index, true)
 		_table.set_column_clip_content(index, true)
 		var minimum := {"Material": 116, "Description": 114, "Need date": 98, "MRP element": 124,
-			"Receipt": 65, "Demand": 66, "Projected": 80, "Short": 54, "Document": 84}
+			"Receipt": 65, "Demand": 66, "Projected": 80, "Short": 54, "Document": 84, "Date": 98,
+			"Element data": 120, "Requirement": 80, "Available qty": 90, "Start / order": 98, "Exception": 230,
+			"Lot size": 110, "Uncovered from": 104, "Top exception": 240}
 		_table.set_column_custom_minimum_width(index, int(minimum.get(columns[index], 50)))
 	_summary.text = summary
 	return _table.create_item()
@@ -442,6 +470,11 @@ func _on_select() -> void:
 	if row != null:
 		_selected = row.get_metadata(0)
 		_detail.text = String(_selected.get("detail", ""))
+
+
+func _on_activate() -> void:
+	if _page == 4 and _mrp_material.is_empty() and _selected.has("material"):
+		_open_material(_selected.material)
 
 
 func _dashboard() -> void:
@@ -475,11 +508,13 @@ func _dashboard() -> void:
 
 func _materials() -> void:
 	var b := line.erp
-	var root := _header(["Material", "Description", "Type", "Unit", "Supply", "Location", "Status"],
+	var root := _header(["Material", "Description", "Type", "Unit", "Supply", "Location", "Lot size", "Status"],
 		"Search across material codes, categories and descriptions.")
 	for code in b.catalog.materials:
 		var item: Dictionary = b.catalog.materials[code]
-		var detail := "%s · Safety stock %s %s · Lead %s min" % [item.name, _qty(item.minimum), item.unit, _qty(item.lead / 60.0)]
+		var settings: Dictionary = b.catalog.planning(code)
+		var detail := "%s · Safety stock %s %s · Lead %s min · Lot size %s · Safety time %s min" % [item.name, _qty(item.minimum),
+			item.unit, _qty(item.lead / 60.0), b.catalog.lot_caption(code), _qty(settings.safety_time / 60.0)]
 		if item.type == "FERT":
 			detail += "\n%s / %s · %s · Pack %s kg × %d = %s kg per shipping box\n%d boxes per pallet · %s kg net per pallet · BOM %s · %s\nShelf life %d days · Standard batch %s kg" % [
 				item.coating, item.wafer, item.family, _qty(item.pack_kg), item.packs_per_box, _qty(item.box_kg),
@@ -508,7 +543,8 @@ func _materials() -> void:
 				detail += "\nPackaging alternatives · " + ", ".join(options)
 		if item.has("dimensions_mm"):
 			detail += "\nCut dimensions %s mm · %s kg per piece" % [str(item.dimensions_mm), _qty(item.piece_kg)]
-		_row(root, [code, item.name, item.type, item.unit, item.procurement, item.location, "Active" if item.active else "Inactive"],
+		_row(root, [code, item.name, item.type, item.unit, item.procurement, item.location, b.catalog.lot_caption(code),
+			"Active" if item.active else "Inactive"],
 			{"key": code, "code": code, "location": item.location, "detail": detail})
 
 
@@ -587,12 +623,128 @@ func _inventory_row(root: TreeItem, code: String, location: String, qty: float, 
 
 
 func _mrp() -> void:
+	if not line.erp.explicit_planning:
+		_mrp_flat()
+	elif _mrp_material.is_empty():
+		_mrp_coverage()
+	else:
+		_mrp_material_list(_mrp_material)
+
+
+func _mrp_note() -> String:
 	var summary := plan.summary
-	var note := "Create demand or an order, then run MRP. Convert selected buy or make proposals explicitly."
-	if not summary.is_empty():
-		note = "%d shortage materials   ·   %d buy proposals   ·   %d make proposals   ·   %d late risks   ·   %d/%d covered" % [
-			summary.shortages.size(), summary.buy, summary.make, summary.late, summary.covered, summary.requirements]
-	var root := _header(["Material", "Description", "Need date", "MRP element", "Receipt", "Demand", "Projected", "Short", "Document"], note)
+	if summary.is_empty():
+		return "Create demand or an order, then run MRP. Convert selected buy or make proposals explicitly."
+	return "%d shortage materials   ·   %d buy proposals   ·   %d make proposals   ·   %d late risks   ·   %d/%d covered   ·   %d exceptions" % [
+		summary.shortages.size(), summary.buy, summary.make, summary.late, summary.covered, summary.requirements, plan.exceptions.size()]
+
+
+## Collective view, like MD06 / Monitor Material Coverage: one line per planned material, worst exception first.
+func _mrp_coverage() -> void:
+	var root := _header(["Material", "Description", "Type", "Lot size", "Safety stock", "Available", "Uncovered from",
+		"Planned", "Exceptions", "Top exception"], _mrp_note() + "\nDouble-click a material for its stock/requirements list.")
+	var catalog := line.erp.catalog
+	var lines: Array = plan.coverage.values()
+	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a.severity != b.severity:
+			return a.severity > b.severity
+		var ua: float = a.uncovered_from if a.uncovered_from >= 0.0 else INF
+		var ub: float = b.uncovered_from if b.uncovered_from >= 0.0 else INF
+		return ua < ub if ua != ub else a.code < b.code)
+	for entry in lines:
+		var item: Dictionary = catalog.materials[entry.code]
+		if _exceptions_only and entry.exceptions == 0:
+			continue
+		if not _family.text.is_empty() and not String(item.get("family", "")).to_lower().contains(_family.text.to_lower()):
+			continue
+		if _date_filter.text.is_valid_float() and (entry.uncovered_from < 0.0 or entry.uncovered_from > _date_filter.text.to_float() * 60.0):
+			continue
+		var settings: Dictionary = catalog.planning(entry.code)
+		var row := _row(root, [entry.code, item.name, item.type, entry.lot, _qty(entry.safety), _qty(entry.available),
+			Book.date(entry.uncovered_from) if entry.uncovered_from >= 0.0 else "Covered", entry.planned, entry.exceptions, entry.message],
+			{"key": entry.code, "material": entry.code, "code": entry.code,
+				"detail": "%s · %s · %s %s available · safety stock %s · safety time %s min\nLot size %s (%s) · %d requirements · %d receipts · %d planned orders" % [
+					entry.code, item.name, _qty(entry.available), entry.unit, _qty(entry.safety), _qty(settings.safety_time / 60.0),
+					entry.lot, catalog.LOT_PROCEDURES[settings.lot_size], entry.requirements, entry.receipts, entry.planned]})
+		_severity_color(row, entry.severity, 9)
+
+
+## Single-material view, like MD04: dated MRP elements with a running available quantity.
+func _mrp_material_list(code: String) -> void:
+	var catalog := line.erp.catalog
+	var item: Dictionary = catalog.materials.get(code, {})
+	var settings: Dictionary = catalog.planning(code)
+	var entry: Dictionary = plan.coverage.get(code, {})
+	var note := "%s · %s · %s · Lot size %s · Safety stock %s %s · Safety time %s min · Lead %s min · Available %s" % [
+		code, item.get("name", ""), item.get("type", ""), catalog.lot_caption(code), _qty(item.get("minimum", 0.0)), item.get("unit", ""),
+		_qty(settings.safety_time / 60.0), _qty(item.get("lead", 0.0) / 60.0), _qty(entry.get("available", 0.0))]
+	var root := _header(["Date", "MRP element", "Element data", "Receipt", "Requirement", "Available qty", "Start / order", "Exception"],
+		note + "\nPlOrd.* and PurRqs* are firmed: MRP keeps them unchanged.")
+	var i := 0
+	for row in plan.rows:
+		i += 1
+		if row.code != code:
+			continue
+		if _proposals_only and row.proposal.is_empty():
+			continue
+		if _exceptions_only and String(row.get("exception", "")).is_empty():
+			continue
+		if _date_filter.text.is_valid_float() and float(row.date) > _date_filter.text.to_float() * 60.0:
+			continue
+		var proposal: Dictionary = plan.proposals.get(row.proposal, {})
+		var data: String = row.get("number", "")
+		if row.kind == "Requirement":
+			data = row.doc
+		elif not proposal.is_empty():
+			data = "%s · for %s" % [proposal.number, ", ".join(PackedStringArray(proposal.get("docs", [proposal.doc])))]
+		elif row.element == "Error":
+			data = row.kind
+		var start := ""
+		if not proposal.is_empty():
+			start = Book.date(proposal.get("start", row.date))
+		elif row.action_date >= 0.0:
+			start = Book.date(row.action_date)
+		var tree_row := _row(root, [Book.date(row.date), row.element, data, _qty(row["in"]) if row["in"] > 0 else "",
+			_qty(row["out"]) if row["out"] > 0 else "", _qty(row.projected), start, row.get("exception", "")],
+			{"key": row.proposal if not row.proposal.is_empty() else str(i), "proposal": row.proposal, "code": code,
+				"number": proposal.get("number", ""), "detail": _mrp_row_detail(row, proposal)})
+		_severity_color(tree_row, int(row.get("severity", 0)), 7)
+
+
+func _mrp_row_detail(row: Dictionary, proposal: Dictionary) -> String:
+	if proposal.is_empty():
+		var text := "%s · %s · %s" % [row.element, row.kind, row.doc]
+		if row.kind == "Requirement":
+			text += "\nRequired %s for %s · short before new proposals %s" % [Book.date(row.date), row.doc, _qty(row.short)]
+		if not String(row.get("exception", "")).is_empty():
+			text += "\n" + row.exception
+		return text
+	var lines := PackedStringArray()
+	lines.append("%s %s · %s · %s %s%s" % ["Planned order" if proposal.type == "Make" else "Purchase requisition", proposal.number,
+		proposal.code, _qty(proposal.get("quantity", proposal.qty)), "boxes" if proposal.get("boxes", 0) > 0 else line.erp.catalog.materials[proposal.code].unit,
+		" · FIRMED" if proposal.firmed else ""])
+	if proposal.type == "Make":
+		lines.append("Start %s · available %s · %s on %s" % [Book.date(proposal.start), Book.date(proposal.finish),
+			proposal.get("version", ""), proposal.get("center", "")])
+	else:
+		lines.append("Order by %s · delivery %s · supplier %s" % [Book.date(proposal.start), Book.date(proposal.finish), proposal.get("supplier", "")])
+	lines.append("Covers " + ", ".join(PackedStringArray(proposal.get("docs", [proposal.doc]))))
+	for message in proposal.get("exceptions", []):
+		lines.append("⚠ " + message)
+	return "\n".join(lines)
+
+
+func _severity_color(row: TreeItem, severity: int, column: int) -> void:
+	if row == null or severity <= 0:
+		return
+	row.set_custom_color(column, Color("#a14532") if severity >= 3 else Color("#9a6a00") if severity == 2 else Color("#50677b"))
+	if severity >= 3:
+		row.set_custom_color(0, Color("#a14532"))
+
+
+## The original flat list, kept for the legacy combined-route planning mode.
+func _mrp_flat() -> void:
+	var root := _header(["Material", "Description", "Need date", "MRP element", "Receipt", "Demand", "Projected", "Short", "Document"], _mrp_note())
 	var b := line.erp
 	var i := 0
 	for row in plan.rows:
@@ -609,6 +761,16 @@ func _mrp() -> void:
 				"detail": "%s · %s · need %s\nAction date %s · unit %s · %s" % [
 					row.kind, row.doc, Book.date(row.date), Book.date(row.action_date) if row.action_date >= 0 else "Past / none",
 					b.catalog.materials[row.code].unit, "Short / late risk" if row.short > 0 else "Covered"]})
+
+
+func _open_material(code: String) -> void:
+	if not code.is_empty() and not plan.coverage.has(code):
+		notice("Select a material in the coverage list. Run MRP first.")
+		return
+	_mrp_material = code
+	_selected = {}
+	_refresh_actions()
+	_render()
 
 
 func _orders() -> void:
@@ -1227,6 +1389,73 @@ func _convert() -> void:
 			return _result(plan.convert(key, line.erp, line.erp_fg())))
 
 
+## Keys of the proposals visible in the current MRP view.
+func _shown_proposals() -> Array:
+	var keys := []
+	for item in plan.proposals.values():
+		if not _mrp_material.is_empty() and item.code != _mrp_material:
+			continue
+		if _mrp_material.is_empty():
+			var entry: Dictionary = plan.coverage.get(item.code, {})
+			var material: Dictionary = line.erp.catalog.materials[item.code]
+			if _exceptions_only and entry.get("exceptions", 0) == 0:
+				continue
+			if not _family.text.is_empty() and not String(material.get("family", "")).to_lower().contains(_family.text.to_lower()):
+				continue
+		elif _exceptions_only and item.get("exceptions", []).is_empty():
+			continue
+		if _date_filter.text.is_valid_float() and float(item.get("start", 0.0)) > _date_filter.text.to_float() * 60.0:
+			continue
+		keys.append(item.id)
+	return keys
+
+
+func _convert_shown() -> void:
+	var keys := _shown_proposals()
+	if keys.is_empty():
+		notice("No planned orders in this view. Run MRP or clear the filters.")
+		return
+	_form("Convert %d planned orders and requisitions?" % keys.size(), [], func(_values: Dictionary) -> String:
+		var result: Dictionary = plan.convert_all(line.erp, line.erp_fg(), func(item: Dictionary) -> bool: return item.id in keys)
+		var message := "Created %d documents." % result.created.size()
+		if not result.failed.is_empty():
+			message += " %d failed: %s" % [result.failed.size(), "; ".join(PackedStringArray(result.failed.map(
+				func(row: Dictionary) -> String: return "%s %s" % [row.proposal, row.error])))]
+		notice(message)
+		return "")
+
+
+func _selected_planned() -> Dictionary:
+	var item: Dictionary = plan.proposals.get(String(_selected.get("proposal", "")), {})
+	if item.is_empty() or not line.erp.planned_orders.has(item.get("number", "")):
+		notice("Select a planned order or requisition in a stock/requirements list.")
+		return {}
+	return item
+
+
+func _toggle_firm() -> void:
+	var item := _selected_planned()
+	if item.is_empty():
+		return
+	var error: String = plan.firm(item.number, not item.firmed, line.erp, line.erp_fg())
+	notice(error if not error.is_empty() else "%s %s." % [item.number, "unfirmed: MRP may change or delete it" if item.firmed else "firmed: MRP keeps it unchanged"])
+	_render()
+
+
+func _change_planned() -> void:
+	var item := _selected_planned()
+	if item.is_empty():
+		return
+	var unit := "shipping boxes" if item.get("boxes", 0) > 0 else line.erp.catalog.materials[item.code].unit
+	_form("Change %s · %s" % [item.number, item.code], [["quantity", "Quantity in " + unit, _qty(item.get("quantity", item.qty))],
+		["start", "%s at simulated minute" % ("Start" if item.type == "Make" else "Order date"), _qty(maxf(line.erp.now, item.start) / 60.0)]],
+		func(v: Dictionary) -> String:
+			var error: String = plan.change(item.number, _number(v.quantity), _number(v.start) * 60.0, line.erp, line.erp_fg())
+			if error.is_empty():
+				notice("%s changed and firmed." % item.number)
+			return error)
+
+
 func _edit_material() -> void:
 	var code := String(_selected.get("code", ""))
 	var catalog := line.erp.catalog
@@ -1240,12 +1469,35 @@ func _edit_material() -> void:
 		fields.append_array([["pack", "Net kg per consumer pack", _qty(item.pack_kg)],
 			["packs", "Packs per shipping box", str(item.packs_per_box)],
 			["pallet", "Shipping boxes per pallet", str(item.boxes_per_pallet)]])
+	var settings: Dictionary = catalog.planning(code)
+	var procedures := [[settings.lot_size, "%s · %s" % [settings.lot_size, catalog.LOT_PROCEDURES[settings.lot_size]]]]
+	for key in catalog.LOT_PROCEDURES:
+		if key != settings.lot_size:
+			procedures.append([key, "%s · %s" % [key, catalog.LOT_PROCEDURES[key]]])
+	fields.append_array([["lot_size", "MRP lot size", procedures],
+		["fixed_lot", "Fixed lot (FX) in base unit", _qty(settings.fixed_lot)],
+		["period", "Period length (PB) · simulated minutes", _qty(settings.period_seconds / 60.0)],
+		["min_lot", "Minimum lot", _qty(settings.min_lot)], ["max_lot", "Maximum lot (0 = none)", _qty(settings.max_lot)],
+		["rounding", "Rounding value (0 = none)", _qty(settings.rounding)],
+		["safety_time", "Safety time · simulated minutes", _qty(settings.safety_time / 60.0)]])
 	_form("Edit " + code, fields, func(v: Dictionary) -> String:
+		var planning := {"lot_size": v.lot_size, "fixed_lot": _number(v.fixed_lot), "period_seconds": _number(v.period) * 60.0,
+			"min_lot": _number(v.min_lot), "max_lot": _number(v.max_lot), "rounding": _number(v.rounding),
+			"safety_time": _number(v.safety_time) * 60.0}
+		for key in planning:
+			if key != "lot_size" and not is_finite(planning[key]):
+				return "Enter numbers for the MRP settings."
+		var backup: Dictionary = catalog.planning(code)
+		var problem := catalog.set_planning(code, planning)
+		if not problem.is_empty():
+			return "MRP settings: " + problem
 		var error := catalog.edit_material(code, v.name, _number(v.minimum), _number(v.lead) * 60.0,
 			v.active.to_lower() == "yes", _number(v.get("pack", "0")),
 			String(v.get("packs", "0")).to_int(), String(v.get("pallet", "0")).to_int())
 		if error.is_empty():
 			line.erp.changed()
+		else:
+			catalog.set_planning(code, backup)
 		return error)
 
 
