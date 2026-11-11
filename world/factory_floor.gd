@@ -381,25 +381,41 @@ func _build_platform() -> void:
 	_rail(Vector3(left, y, front), Vector3(right, y, front))
 	var stairs := _station(&"Stairs", "", SAFETY, false, false)
 	var stair_plan := layout.objects[&"Stairs"]
-	var stair_width := stair_plan.size.x - 0.26
 	var stair_depth := stair_plan.size.y
 	var rise := stair_plan.height
-	_rail(Vector3(right, y, rear), Vector3(right, y, stairs.position.z - stair_depth * 0.5))
+	# The stair footprint can straddle the deck edge. Keep the flight in the part that is
+	# clear of the deck, so no tread runs underneath it.
+	var footprint := Vector2(-stair_plan.size.x * 0.5, stair_plan.size.x * 0.5)
+	var deck_edge := deck.position.x + half.x - stairs.position.x
+	if deck_edge > footprint.x and deck_edge < footprint.y - 0.6:
+		footprint.x = deck_edge + 0.08
+	var stair_x := (footprint.x + footprint.y) * 0.5
+	var stair_width := footprint.y - footprint.x - 0.16
+	var top_z := stairs.position.z - stair_depth * 0.5
+	# Deck edge rail with an opening where the flight arrives.
+	_rail(Vector3(right, y, rear), Vector3(right, y, top_z - 0.05))
+	if front > top_z + 1.2:
+		_rail(Vector3(right, y, top_z + 1.05), Vector3(right, y, front))
 	# The deck itself is the landing above the twelve treads.
 	for index in 12:
 		var step_y := rise * (12.0 - index) / 13.0
 		var z := -stair_depth * 0.5 + (index + 0.5) * stair_depth / 12.0
 		var size := Vector3(stair_width, 0.22, stair_depth / 12.0)
-		_industrial.box(stairs, Vector3(0, step_y - 0.03, z), Vector3(size.x, 0.05, size.z), _industrial.grating)
-		_industrial.box(stairs, Vector3(0, step_y - 0.03, z + size.z * 0.5 - 0.02), Vector3(size.x, 0.052, 0.04), _industrial.safety)
-		stairs.add_hitbox(size, Vector3(0, step_y - 0.22, z))
-	for x: float in [-stair_width * 0.5, stair_width * 0.5]:
-		var stringer := _industrial.box(stairs, Vector3(x, rise * 0.5 - 0.1, 0),
+		_industrial.box(stairs, Vector3(stair_x, step_y - 0.03, z), Vector3(size.x, 0.05, size.z), _industrial.grating)
+		_industrial.box(stairs, Vector3(stair_x, step_y - 0.03, z + size.z * 0.5 - 0.02), Vector3(size.x, 0.052, 0.04), _industrial.safety)
+		stairs.add_hitbox(size, Vector3(stair_x, step_y - 0.22, z))
+	for side: float in [-0.5, 0.5]:
+		var stringer := _industrial.box(stairs, Vector3(stair_x + side * stair_width, rise * 0.5 - 0.1, 0),
 			Vector3(0.06, 0.3, sqrt(stair_depth * stair_depth + rise * rise)), _industrial.frame_dark)
 		stringer.rotation.x = atan2(rise, stair_depth)
-	for x: float in [-stair_width * 0.55, stair_width * 0.55]:
-		_rail(stairs.position + Vector3(x, rise, -stair_depth * 0.5),
-			stairs.position + Vector3(x, 0.25, stair_depth * 0.5))
+		# The deck-side rail starts below the opening so people can step across onto the deck.
+		var start := 1.05 if side < 0.0 and footprint.x > -stair_plan.size.x * 0.5 else 0.0
+		var rail_x := stair_x + side * (stair_width + 0.1)
+		_rail(stairs.position + Vector3(rail_x, lerpf(rise, 0.25, start / stair_depth), -stair_depth * 0.5 + start),
+			stairs.position + Vector3(rail_x, 0.25, stair_depth * 0.5))
+	# Guard across the open top end of the flight.
+	_rail(stairs.position + Vector3(stair_x - stair_width * 0.55, rise, -stair_depth * 0.5),
+		stairs.position + Vector3(stair_x + stair_width * 0.55, rise, -stair_depth * 0.5))
 	for index in 4:
 		for tier in 3:
 			_stock.sack(deck, Vector3(-4.12 + index * 1.21, 0.22 + tier * 0.31,
