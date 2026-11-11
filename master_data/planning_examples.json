@@ -1,0 +1,22 @@
+[
+  {
+    "id": "Filled wafer demonstration",
+    "demands": [
+      {
+        "code": "FG-2001",
+        "boxes": 500,
+        "due": 86400
+      },
+      {
+        "code": "FG-2002",
+        "boxes": 300,
+        "due": 129600
+      },
+      {
+        "code": "FG-2004",
+        "boxes": 250,
+        "due": 172800
+      }
+    ]
+  }
+]

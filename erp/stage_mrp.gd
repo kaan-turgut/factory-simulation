@@ -185,7 +185,21 @@ func _proposal(code: String, need: Dictionary, gap: float, projected: float) -> 
 		"code": code, "qty": gap, "family": need.family, "due": due}
 	if make:
 		data.quantity = ceilf(gap / item.box_kg - EPS) if item.type == "FERT" else gap
-		var assignment := Scheduling.assignment(book, code, data.quantity, maxf(book.now, due), "")
+		var date := maxf(book.now, due)
+		var assignment := Scheduling.assignment(book, code, data.quantity, date, "")
+		if not assignment.error.is_empty() and item.type != "FERT":
+			for route in Scheduling.alternatives(book.catalog, code, data.quantity, date):
+				var op: Dictionary = route.operations[0]
+				if not op.available or op.standard.model != "batch":
+					continue
+				var std: Dictionary = op.standard
+				var batches := ceili(data.quantity / (std.batch_kg * std.yield_factor) - EPS)
+				var lot := maxf(data.quantity, batches * std.min_batch_kg * std.yield_factor)
+				var option := Scheduling.assignment(book, code, lot, date, route.production_version)
+				if option.error.is_empty():
+					data.quantity = lot
+					assignment = option
+					break
 		if not assignment.error.is_empty():
 			report._row(code, due, assignment.error, 0.0, 0.0, projected, gap, need.doc, need.family)
 			return 0.0

@@ -63,8 +63,10 @@ static func load_values(directory: String = "") -> Dictionary:
 			value = null
 			var ref: Array = TECHNICAL[key]
 			var technical: Variant = equipment.get(ref[0], {})
-			if technical is Dictionary and Master.number(technical.get(ref[1])):
-				value = float(technical[ref[1]]) / (ref[2] if ref.size() == 3 else 1.0)
+			if technical is Dictionary:
+				var source: Variant = technical.get("max_rate_kg_h", technical.get(ref[1])) if ref[1] == "rate" else technical.get(ref[1])
+				if Master.number(source):
+					value = float(source) / (ref[2] if ref.size() == 3 else 1.0)
 		var whole: bool = key in [&"floor_count", &"raw_count", &"cooked_count", &"coated_cart_count", &"warehouse_capacity", &"pallet_boxes"]
 		if not Master.number(value, spec[1], spec[2], whole):
 			return {"error": "%s.json [%s]: missing or outside permitted range." % [

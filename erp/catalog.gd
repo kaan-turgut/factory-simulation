@@ -1,6 +1,7 @@
 extends RefCounted
 ## Fictional demonstration master data. Quantities use material base units.
 
+const Standards = preload("res://erp/production_standards.gd")
 const Scheduling = preload("res://erp/scheduling.gd")
 const Master = preload("res://erp/master_files.gd")
 const OPERATIONS := ["extrude", "bake", "coat", "pack"]
@@ -10,6 +11,10 @@ const PARAMETERS := {
 	"extrude": {"rate": [0.0, 36000.0]},
 	"bake": {"batch_kg": [1.0, 300.0], "cycle_seconds": [3.0, 1800.0]},
 	"coat": {"rate": [0.0, 36000.0], "input_kg": [1.0, 500.0], "setup_seconds": [0.0, 86400.0]},
+	"cream": {"batch_kg": [1.0, 300.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
+	"spread": {"rate": [1.0, 36000.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
+	"cut": {"rate": [1.0, 36000.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
+	"cool": {"rate": [1.0, 36000.0], "internal_kg": [1.0, 500.0]},
 	"pack": {"rate": [0.0, 36000.0], "setup_seconds": [0.0, 86400.0]}
 }
 
@@ -22,6 +27,9 @@ var work_centers := {}
 var locations := {}
 var opening := {}
 var scheduling := {}
+var standards := {}
+var changeovers := {}
+var planning_examples := {}
 var error := ""
 
 
@@ -36,10 +44,13 @@ func _load(directory: String) -> String:
 			"packs_per_box", "boxes_per_pallet", "shelf_days"]],
 		["boms", "parent", ["base", "version", "active", "parts"]],
 		["suppliers", "id", ["name", "codes", "lead", "minimum", "price"]],
-		["work_centers", "id", ["description", "equipment", "operation", "categories", "coatings", "technical", "available"]],
+		["production_standards", "id", ["material", "operation", "work_center", "model"]],
+		["changeovers", "id", ["operation", "dimension", "from_value", "to_value", "seconds"]],
+		["planning_examples", "id", ["demands"]],
+		["work_centers", "id", ["description", "equipment", "operation", "categories", "coatings", "technical", "available", "materials", "models"]],
 		["routings", "id", ["description", "version", "categories", "active", "valid_from", "valid_to", "operations"]],
-		["production_versions", "id", ["product", "bom_version", "routing", "routing_version", "min_boxes",
-			"max_boxes", "valid_from", "valid_to", "active"]]
+		["production_versions", "id", ["product", "bom_version", "routing", "routing_version", "min_quantity",
+			"max_quantity", "lot_unit", "valid_from", "valid_to", "active"]]
 	]:
 		var result := Master.index(table[0], table[1], table[2], directory)
 		if not result.error.is_empty():
@@ -60,13 +71,16 @@ func _load(directory: String) -> String:
 				materials[code].merge({"box_kg": item.pack_kg * item.packs_per_box, "bom": code,
 					"batch_kg": item.pack_kg * item.packs_per_box * item.boxes_per_pallet}, true)
 		else:
-			set(table[0], result.data)
+			set("standards" if table[0] == "production_standards" else table[0], result.data)
 	var result := Master.read("storage_locations", directory)
 	if not result.error.is_empty():
 		return result.error
 	if not result.data is Dictionary:
 		return "storage_locations.json: expected location identifiers and descriptions."
 	locations = result.data
+	for center in work_centers.values():
+		if center.technical is Dictionary and center.technical.has("max_rate_kg_h"):
+			center.technical.rate = center.technical.max_rate_kg_h
 	result = Master.read("scheduling", directory)
 	if not result.error.is_empty():
 		return result.error
@@ -74,7 +88,28 @@ func _load(directory: String) -> String:
 		return "scheduling.json: expected an object."
 	scheduling = result.data
 	var problem := _validate()
-	return _validate_scheduling() if problem.is_empty() else problem
+	if problem.is_empty():
+		problem = _validate_scheduling()
+	return Standards.validate(self) if problem.is_empty() else problem
+
+
+func reload_standards() -> String:
+	var directory := Master.source_directory()
+	var rates := Master.index("production_standards", "id", ["material", "operation", "work_center", "model"], directory)
+	if not rates.error.is_empty():
+		return rates.error
+	var rules := Master.index("changeovers", "id", ["operation", "dimension", "from_value", "to_value", "seconds"], directory)
+	if not rules.error.is_empty():
+		return rules.error
+	var prior_rates := standards
+	var prior_rules := changeovers
+	standards = rates.data
+	changeovers = rules.data
+	var problem := Standards.validate(self)
+	if not problem.is_empty():
+		standards = prior_rates
+		changeovers = prior_rules
+	return problem
 
 
 func _validate() -> String:
@@ -130,8 +165,13 @@ func _validate() -> String:
 				or not item.description is String or not item.categories is Array or item.categories.is_empty() \
 				or not item.coatings is Array or not item.technical is Dictionary or not item.available is bool:
 			return "work_centers.json [%s]: invalid or duplicate equipment, capabilities or availability." % id
-		if item.operation == "coat" and not locations.has(item.get("supply_location")):
+		if not item.materials is Array or not item.models is Array:
+			return "work_centers.json [%s]: invalid material or processing-model capability." % id
+		if item.operation in ["coat", "cream", "pack"] and not locations.has(item.get("supply_location")):
 			return "work_centers.json [%s].supply_location: unknown storage location." % id
+		if item.has("input_port") and (not item.input_port is String or not item.get("output_port") is String \
+				or not Master.number(item.technical.get("input_kg"), 1.0) or not Master.number(item.technical.get("output_kg"), 1.0)):
+			return "work_centers.json [%s]: invalid cell ports or staging capacity." % id
 		equipment[item.equipment] = true
 		for field in PARAMETERS[item.operation]:
 			var bounds: Array = PARAMETERS[item.operation][field]
@@ -140,25 +180,40 @@ func _validate() -> String:
 	for id in routings:
 		var route: Dictionary = routings[id]
 		if not _valid_dates(route) or not Master.number(route.version, 1, INF, true) or not route.description is String \
-				or not route.categories is Array or not route.operations is Array or route.operations.size() != OPERATIONS.size():
+				or not route.categories is Array or not route.operations is Array or route.operations.is_empty():
 			return "routings.json [%s]: invalid header or operation sequence." % id
 		var previous := 0.0
-		for index in OPERATIONS.size():
+		for index in route.operations.size():
 			var op: Variant = route.operations[index]
-			if not op is Dictionary or op.get("type") != OPERATIONS[index] or not op.get("handling") is String \
-					or not Master.number(op.get("number"), previous + 1.0, INF, true) \
-					or op.get("input") != MATERIAL_STAGES[index] or op.get("output") != MATERIAL_STAGES[index + 1] \
+			if not op is Dictionary or not PARAMETERS.has(op.get("type")) or not op.get("handling") is String \
+					or not Master.number(op.get("number"), previous + 1, INF, true) \
 					or not work_centers.has(op.get("work_center")) or work_centers[op.work_center].operation != op.type:
 				return "routings.json [%s].operations[%d]: invalid work center, operation or material stage." % [id, index]
+			if route.operations.size() == 1:
+				if not op.get("input") is Array or op.input.is_empty() or not materials.has(op.get("output")):
+					return "routings.json [%s].operations[%d]: missing material input/output." % [id, index]
+				for code in op.input:
+					if not materials.has(code):
+						return "routings.json [%s].input: unknown material %s." % [id, code]
+			elif route.operations.size() != OPERATIONS.size() or op.type != OPERATIONS[index] \
+					or op.get("input") != MATERIAL_STAGES[index] or op.get("output") != MATERIAL_STAGES[index + 1]:
+				return "routings.json [%s].operations[%d]: invalid legacy sequence." % [id, index]
 			previous = float(op.number)
 	for id in production_versions:
 		var item: Dictionary = production_versions[id]
-		if not _valid_dates(item) or not boms.has(item.product) or not materials[item.product].has("box_kg") \
+		if not _valid_dates(item) or not boms.has(item.product) or materials[item.product].procurement != "In-house" \
 				or not routings.has(item.routing) or item.bom_version != boms[item.product].version \
-				or item.routing_version != routings[item.routing].version or not Master.number(item.min_boxes, 1, 100000, true) \
-				or not Master.number(item.max_boxes, item.min_boxes, 100000, true):
+				or item.routing_version != routings[item.routing].version \
+				or item.lot_unit != ("cartons" if materials[item.product].type == "FERT" else "kg") \
+				or not Master.number(item.min_quantity, 0.001, 100000) \
+				or not Master.number(item.max_quantity, item.min_quantity, 100000):
 			return "production_versions.json [%s]: invalid product, BOM, routing version or lot range." % id
-		var incompatibility := _compatibility(routings[item.routing], materials[item.product])
+		var version_route: Dictionary = routings[item.routing]
+		if version_route.operations.size() == 1:
+			var op: Dictionary = version_route.operations[0]
+			if op.output != item.product or item.product not in work_centers[op.work_center].materials:
+				return "production_versions.json [%s]: product and resource do not match the stage routing." % id
+		var incompatibility := _compatibility(version_route, materials[item.product])
 		if not incompatibility.is_empty():
 			return "production_versions.json [%s].routing: %s" % [id, incompatibility]
 	return ""
@@ -220,6 +275,13 @@ func _validate_scheduling() -> String:
 			var input_location := "SFG-DECK" if recipe.stage == "extrude" else "SFG-WH"
 			if materials[recipe.input].location != input_location:
 				return "boms.json [%s].parts: input must be reachable from %s." % [code, input_location]
+	for example in planning_examples.values():
+		if not example.demands is Array or example.demands.is_empty():
+			return "planning_examples.json [%s].demands: expected a list." % example.id
+		for item in example.demands:
+			if not item is Dictionary or materials.get(item.get("code"), {}).get("type") != "FERT" \
+					or not Master.number(item.get("boxes"), 1, 100000, true) or not Master.number(item.get("due")):
+				return "planning_examples.json [%s].demands: invalid product, cartons or due time." % example.id
 	return ""
 
 
@@ -237,7 +299,7 @@ func _compatibility(route: Dictionary, product: Dictionary) -> String:
 		return "Routing does not support this product family."
 	for op in route.operations:
 		var center: Dictionary = work_centers[op.work_center]
-		if product.family not in center.categories or (not center.coatings.is_empty() and product.coating not in center.coatings):
+		if product.get("family", "") not in center.categories or (not center.coatings.is_empty() and product.get("coating", "") not in center.coatings):
 			return "%s does not support this product." % center.description
 	return ""
 
@@ -249,10 +311,10 @@ func route_for(product: String, boxes: int, when: float, requested: String = "",
 	for id in ids:
 		var version: Dictionary = production_versions.get(id, {})
 		if version.get("product", "") != product or not _in_effect(version, when) \
-				or boxes < version.min_boxes or boxes > version.max_boxes or boms[product].version != version.bom_version:
+				or boxes < version.min_quantity or boxes > version.max_quantity or boms[product].version != version.bom_version:
 			continue
 		var route: Dictionary = routings[version.routing].duplicate(true)
-		if not _in_effect(route, when) or not _compatibility(route, materials[product]).is_empty():
+		if route.operations.size() != OPERATIONS.size() or not _in_effect(route, when) or not _compatibility(route, materials[product]).is_empty():
 			continue
 		var eligible := true
 		for operation in route.operations:
@@ -363,11 +425,15 @@ func recipe(code: String, boxes: int) -> Dictionary:
 	var packaging := _by_type(finished, "VERP")
 	if coated.size() != 1 or packaging.size() != 3 or finished.size() != 4:
 		return {"error": "This BOM needs one coated wafer and three packaging components for the wafer line."}
-	var coated_code: String = coated.keys()[0]
+	var finished_input: String = coated.keys()[0]
+	var coated_code := finished_input
+	if Scheduling.stage_for(self, coated_code) == "cool":
+		var cooled := _rates(coated_code)
+		coated_code = cooled.keys()[0]
 	var coating_mix := _rates(coated_code)
 	var baked := _by_type(coating_mix, "HALB")
 	var chocolate := _by_type(coating_mix, "ROH")
-	if baked.size() != 1 or chocolate.size() != 1 or coating_mix.size() != 2 or not is_equal_approx(float(coated[coated_code]), 1.0):
+	if baked.size() != 1 or chocolate.size() != 1 or coating_mix.size() != 2 or not is_equal_approx(float(coated[finished_input]), 1.0):
 		return {"error": "Coating requires one baked wafer and one coating component."}
 	var baked_code: String = baked.keys()[0]
 	var raw := _rates(baked_code)
@@ -406,6 +472,17 @@ func recipe(code: String, boxes: int) -> Dictionary:
 		"coating": coating_code, "coat_rate": coat_rate, "baked_rate": baked_rate,
 		"packaging": packaging.keys(), "needs": needs, "bom_version": boms[code].version,
 		"bom_snapshot": _freeze_bom(code)}
+
+
+func manufacturing_flow(code: String, seen: Dictionary = {}) -> PackedStringArray:
+	var result := PackedStringArray()
+	if seen.has(code) or not boms.has(code):
+		return result
+	seen[code] = true
+	for part in boms[code].parts:
+		result.append_array(manufacturing_flow(part.code, seen))
+	result.append(code)
+	return result
 
 
 func _freeze_bom(product: String) -> Dictionary:
@@ -494,11 +571,35 @@ func clone_product(source: String, code: String, name: String) -> String:
 	header.parent = code
 	header.version = 1
 	boms[code] = header
+	var versions := {}
+	var route_ids := {}
 	for version in production_versions.values():
 		if version.product == source:
 			var copy: Dictionary = version.duplicate()
 			copy.id = "%s-%s" % [code, copy.routing]
 			copy.product = code
 			copy.bom_version = header.version
+			var route: Dictionary = routings[copy.routing]
+			if route.operations.size() == 1:
+				var clone: Dictionary = route.duplicate(true)
+				clone.id = "%s-%s" % [route.id, code]
+				clone.operations[0].output = code
+				routings[clone.id] = clone
+				route_ids[route.id] = clone.id
+				copy.routing = clone.id
+			versions[version.id] = copy.id
 			production_versions[copy.id] = copy
+	for source_standard in standards.values():
+		if source_standard.material != source:
+			continue
+		var standard: Dictionary = source_standard.duplicate(true)
+		standard.id = "%s-%s" % [standard.id, code]
+		standard.material = code
+		if standard.has("production_version"):
+			standard.production_version = versions[standard.production_version]
+		if standard.has("routing"):
+			standard.routing = route_ids.get(standard.routing, standard.routing)
+		standards[standard.id] = standard
+		if code not in work_centers[standard.work_center].materials:
+			work_centers[standard.work_center].materials.append(code)
 	return ""

@@ -23,7 +23,7 @@ func _master_data() -> void:
 	var catalog := Catalog.new()
 	var plan := Line.Layout.new()
 	_check(catalog.error.is_empty() and plan.validate().is_empty(), "External catalog and layout are valid")
-	_check(catalog.routings.size() == 4 and catalog.work_centers.size() == 7, "Four legacy routes and seven work centers")
+	_check(catalog.routings.has("WAFER-01") and catalog.work_centers.size() == 12, "Legacy routes and twelve work centers")
 	var folder := "user://routing-fixtures-%d" % OS.get_process_id()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(folder))
 	for file in DirAccess.get_files_at(Master.PROJECT_PATH):
@@ -238,7 +238,7 @@ func _coated_transport() -> void:
 		_check(migrated.error.is_empty(), "Load previous factory with coated stock already on the old conveyor")
 		if migrated.error.is_empty():
 			var refitted: Line = migrated.line
-			_check(refitted.layout.grid.size == Vector2i(88, 32) and refitted.pack_wip.quantity == 0.0,
+			_check(refitted.layout.grid.size == Line.Layout.DEFAULT_SIZE and refitted.pack_wip.quantity == 0.0,
 				"Previous shift adopts the expanded factory and cart-fed WIP")
 			_check(is_equal_approx(refitted.material_on_site(), legacy.mass),
 				"Legacy ready and in-transit stock are conserved without double counting")

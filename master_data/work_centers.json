@@ -9,9 +9,15 @@
     ],
     "coatings": [],
     "technical": {
-      "rate": 9000
+      "max_rate_kg_h": 9000
     },
-    "available": true
+    "available": true,
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "RAW-01"
+    ]
   },
   {
     "id": "WC-OVN-01",
@@ -26,7 +32,13 @@
       "batch_kg": 75,
       "cycle_seconds": 36
     },
-    "available": true
+    "available": true,
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "BAKED-01"
+    ]
   },
   {
     "id": "WC-OVN-02",
@@ -41,7 +53,13 @@
       "batch_kg": 60,
       "cycle_seconds": 42
     },
-    "available": true
+    "available": true,
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "BAKED-01"
+    ]
   },
   {
     "id": "WC-COT-01",
@@ -49,16 +67,30 @@
     "equipment": "Coater",
     "operation": "coat",
     "categories": [
-      "Chocolate wafers"
+      "Chocolate wafers",
+      "Filled wafers"
     ],
     "coatings": [],
     "technical": {
-      "rate": 7800,
       "input_kg": 65,
-      "setup_seconds": 600
+      "setup_seconds": 600,
+      "max_rate_kg_h": 7800
     },
     "available": true,
-    "supply_location": "COAT-IN"
+    "supply_location": "COAT-IN",
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "COATED-1001",
+      "COATED-1002",
+      "COATED-1003",
+      "COATED-1004",
+      "COATED-1005",
+      "COATED-2001",
+      "COATED-2002",
+      "COATED-2003"
+    ]
   },
   {
     "id": "WC-COT-02",
@@ -66,7 +98,8 @@
     "equipment": "Coater02",
     "operation": "coat",
     "categories": [
-      "Chocolate wafers"
+      "Chocolate wafers",
+      "Filled wafers"
     ],
     "coatings": [
       "Milk",
@@ -74,12 +107,23 @@
       "White"
     ],
     "technical": {
-      "rate": 6900,
       "input_kg": 55,
-      "setup_seconds": 480
+      "setup_seconds": 480,
+      "max_rate_kg_h": 6900
     },
     "available": true,
-    "supply_location": "COAT-IN-02"
+    "supply_location": "COAT-IN-02",
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "COATED-1001",
+      "COATED-1002",
+      "COATED-1003",
+      "COATED-2001",
+      "COATED-2002",
+      "COATED-2003"
+    ]
   },
   {
     "id": "WC-PKG-01",
@@ -87,14 +131,30 @@
     "equipment": "Packer",
     "operation": "pack",
     "categories": [
-      "Chocolate wafers"
+      "Chocolate wafers",
+      "Filled wafers"
     ],
     "coatings": [],
     "technical": {
-      "rate": 7200,
-      "setup_seconds": 300
+      "setup_seconds": 300,
+      "max_rate_kg_h": 7200
     },
-    "available": true
+    "available": true,
+    "supply_location": "PACK-IN",
+    "models": [
+      "packaging"
+    ],
+    "materials": [
+      "FG-1001",
+      "FG-1002",
+      "FG-1003",
+      "FG-1004",
+      "FG-1005",
+      "FG-2001",
+      "FG-2002",
+      "FG-2003",
+      "FG-2004"
+    ]
   },
   {
     "id": "WC-MIX-01",
@@ -106,8 +166,164 @@
     ],
     "coatings": [],
     "technical": {
-      "rate": 9000
+      "max_rate_kg_h": 9000
     },
-    "available": true
+    "available": true,
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "DOUGH-01"
+    ]
+  },
+  {
+    "id": "WC-CRM-01",
+    "equipment": "CreamMixer",
+    "description": "Cream Mixer 01",
+    "operation": "cream",
+    "categories": [
+      "Filled wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 100,
+      "input_kg": 200,
+      "output_kg": 100
+    },
+    "available": true,
+    "supply_location": "CREAM-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "CREAM-VAN",
+      "CREAM-HAZ",
+      "CREAM-COC"
+    ]
+  },
+  {
+    "id": "WC-SPR-01",
+    "equipment": "Spreader",
+    "description": "Cream Spreader 01",
+    "operation": "spread",
+    "categories": [
+      "Filled wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 150,
+      "output_kg": 60,
+      "max_rate_kg_h": 1500
+    },
+    "available": true,
+    "supply_location": "",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "BLOCK-VAN",
+      "BLOCK-HAZ",
+      "BLOCK-COC"
+    ]
+  },
+  {
+    "id": "WC-CUT-01",
+    "equipment": "Cutter",
+    "description": "Wafer Cutter 01",
+    "operation": "cut",
+    "categories": [
+      "Filled wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 100,
+      "output_kg": 60,
+      "max_rate_kg_h": 1800
+    },
+    "available": true,
+    "supply_location": "",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "CUT-VAN",
+      "CUT-HAZ",
+      "CUT-COC",
+      "CUT-HAZ-MINI"
+    ]
+  },
+  {
+    "id": "WC-CLG-01",
+    "equipment": "CoolingTunnel",
+    "description": "Cooling Tunnel 01",
+    "operation": "cool",
+    "categories": [
+      "Chocolate wafers",
+      "Filled wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 100,
+      "output_kg": 60,
+      "internal_kg": 150,
+      "max_rate_kg_h": 1200
+    },
+    "available": true,
+    "supply_location": "",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "residence"
+    ],
+    "materials": [
+      "COOLED-1001",
+      "COOLED-1002",
+      "COOLED-1003",
+      "COOLED-1004",
+      "COOLED-1005",
+      "COOLED-2001",
+      "COOLED-2002",
+      "COOLED-2003"
+    ]
+  },
+  {
+    "id": "WC-PKG-02",
+    "equipment": "Packer02",
+    "description": "Packaging Line 02",
+    "operation": "pack",
+    "categories": [
+      "Chocolate wafers",
+      "Filled wafers"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 100,
+      "output_kg": 60,
+      "setup_seconds": 300,
+      "max_rate_kg_h": 1500
+    },
+    "available": true,
+    "supply_location": "PACK-IN-02",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "packaging"
+    ],
+    "materials": [
+      "FG-1001",
+      "FG-1002",
+      "FG-1003",
+      "FG-2001",
+      "FG-2002",
+      "FG-2003",
+      "FG-2004",
+      "FG-2005"
+    ]
   }
 ]

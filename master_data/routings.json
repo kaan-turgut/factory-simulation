@@ -178,5 +178,1174 @@
         "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
       }
     ]
+  },
+  {
+    "id": "ROUTE-DOUGH-01-WC-MIX-01",
+    "description": "Wafer dough blend / Ingredient prep 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "mix",
+        "work_center": "WC-MIX-01",
+        "input": [
+          "RM-FLOUR",
+          "RM-SUGAR",
+          "RM-OIL",
+          "RM-WATER"
+        ],
+        "output": "DOUGH-01",
+        "handling": "Shuttle replenishes the deck. Platform workers prepare sacks."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-RAW-01-WC-EXT-01",
+    "description": "Extruded wafer sheets / Extruder 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "extrude",
+        "work_center": "WC-EXT-01",
+        "input": [
+          "DOUGH-01"
+        ],
+        "output": "RAW-01",
+        "handling": "Platform workers feed the hopper. Raw carts receive to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-BAKED-01-WC-OVN-01",
+    "description": "Baked wafer sheets / Oven 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "bake",
+        "work_center": "WC-OVN-01",
+        "input": [
+          "RAW-01"
+        ],
+        "output": "BAKED-01",
+        "handling": "Raw and baked carts move through the wafer stock dock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-BAKED-01-WC-OVN-02",
+    "description": "Baked wafer sheets / Oven 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "bake",
+        "work_center": "WC-OVN-02",
+        "input": [
+          "RAW-01"
+        ],
+        "output": "BAKED-01",
+        "handling": "Raw and baked carts move through the wafer stock dock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1001-WC-COT-01",
+    "description": "Milk coated wafers / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1001"
+        ],
+        "output": "COATED-1001",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1001-WC-COT-02",
+    "description": "Milk coated wafers / Coater 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1001"
+        ],
+        "output": "COATED-1001",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1002-WC-COT-01",
+    "description": "Dark coated wafers / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1002"
+        ],
+        "output": "COATED-1002",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1002-WC-COT-02",
+    "description": "Dark coated wafers / Coater 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1002"
+        ],
+        "output": "COATED-1002",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1003-WC-COT-01",
+    "description": "White coated wafers / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1003"
+        ],
+        "output": "COATED-1003",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1003-WC-COT-02",
+    "description": "White coated wafers / Coater 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1003"
+        ],
+        "output": "COATED-1003",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1004-WC-COT-01",
+    "description": "Hazelnut coated wafers / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1004"
+        ],
+        "output": "COATED-1004",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-1005-WC-COT-01",
+    "description": "Strawberry coated wafers / Coater 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "BAKED-01",
+          "RM-COAT-1005"
+        ],
+        "output": "COATED-1005",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-2001-WC-COT-01",
+    "description": "Milk chocolate vanilla cream wafer / Coater 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "CUT-VAN",
+          "RM-COAT-1001"
+        ],
+        "output": "COATED-2001",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-2001-WC-COT-02",
+    "description": "Milk chocolate vanilla cream wafer / Coater 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": [
+          "CUT-VAN",
+          "RM-COAT-1001"
+        ],
+        "output": "COATED-2001",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-2002-WC-COT-01",
+    "description": "Dark chocolate hazelnut cream wafer / Coater 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "CUT-HAZ",
+          "RM-COAT-1002"
+        ],
+        "output": "COATED-2002",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-2002-WC-COT-02",
+    "description": "Dark chocolate hazelnut cream wafer / Coater 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": [
+          "CUT-HAZ",
+          "RM-COAT-1002"
+        ],
+        "output": "COATED-2002",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-2003-WC-COT-01",
+    "description": "White chocolate cocoa cream wafer / Coater 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-01",
+        "input": [
+          "CUT-COC",
+          "RM-COAT-1003"
+        ],
+        "output": "COATED-2003",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COATED-2003-WC-COT-02",
+    "description": "White chocolate cocoa cream wafer / Coater 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "coat",
+        "work_center": "WC-COT-02",
+        "input": [
+          "CUT-COC",
+          "RM-COAT-1003"
+        ],
+        "output": "COATED-2003",
+        "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CREAM-VAN-WC-CRM-01",
+    "description": "Vanilla cream filling / Cream Mixer 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cream",
+        "work_center": "WC-CRM-01",
+        "input": [
+          "RM-SUGAR",
+          "RM-FAT",
+          "RM-MILK",
+          "RM-VANILLA"
+        ],
+        "output": "CREAM-VAN",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CREAM-HAZ-WC-CRM-01",
+    "description": "Hazelnut cream filling / Cream Mixer 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cream",
+        "work_center": "WC-CRM-01",
+        "input": [
+          "RM-SUGAR",
+          "RM-FAT",
+          "RM-MILK",
+          "RM-HAZELNUT"
+        ],
+        "output": "CREAM-HAZ",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CREAM-COC-WC-CRM-01",
+    "description": "Cocoa cream filling / Cream Mixer 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cream",
+        "work_center": "WC-CRM-01",
+        "input": [
+          "RM-SUGAR",
+          "RM-FAT",
+          "RM-MILK",
+          "RM-COCOA"
+        ],
+        "output": "CREAM-COC",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-BLOCK-VAN-WC-SPR-01",
+    "description": "Vanilla filled wafer block / Cream Spreader 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "spread",
+        "work_center": "WC-SPR-01",
+        "input": [
+          "BAKED-01",
+          "CREAM-VAN"
+        ],
+        "output": "BLOCK-VAN",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-BLOCK-HAZ-WC-SPR-01",
+    "description": "Hazelnut filled wafer block / Cream Spreader 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "spread",
+        "work_center": "WC-SPR-01",
+        "input": [
+          "BAKED-01",
+          "CREAM-HAZ"
+        ],
+        "output": "BLOCK-HAZ",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-BLOCK-COC-WC-SPR-01",
+    "description": "Cocoa filled wafer block / Cream Spreader 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "spread",
+        "work_center": "WC-SPR-01",
+        "input": [
+          "BAKED-01",
+          "CREAM-COC"
+        ],
+        "output": "BLOCK-COC",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CUT-VAN-WC-CUT-01",
+    "description": "Vanilla wafer fingers / Wafer Cutter 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cut",
+        "work_center": "WC-CUT-01",
+        "input": [
+          "BLOCK-VAN"
+        ],
+        "output": "CUT-VAN",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CUT-HAZ-WC-CUT-01",
+    "description": "Hazelnut wafer fingers / Wafer Cutter 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cut",
+        "work_center": "WC-CUT-01",
+        "input": [
+          "BLOCK-HAZ"
+        ],
+        "output": "CUT-HAZ",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CUT-COC-WC-CUT-01",
+    "description": "Cocoa wafer fingers / Wafer Cutter 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cut",
+        "work_center": "WC-CUT-01",
+        "input": [
+          "BLOCK-COC"
+        ],
+        "output": "CUT-COC",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CUT-HAZ-MINI-WC-CUT-01",
+    "description": "Mini hazelnut wafer bites / Wafer Cutter 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cut",
+        "work_center": "WC-CUT-01",
+        "input": [
+          "BLOCK-HAZ"
+        ],
+        "output": "CUT-HAZ-MINI",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-1001-WC-CLG-01",
+    "description": "Cooled milk coated wafers / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-1001"
+        ],
+        "output": "COOLED-1001",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-1002-WC-CLG-01",
+    "description": "Cooled dark coated wafers / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-1002"
+        ],
+        "output": "COOLED-1002",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-1003-WC-CLG-01",
+    "description": "Cooled white coated wafers / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-1003"
+        ],
+        "output": "COOLED-1003",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-1004-WC-CLG-01",
+    "description": "Cooled hazelnut coated wafers / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-1004"
+        ],
+        "output": "COOLED-1004",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-1005-WC-CLG-01",
+    "description": "Cooled strawberry coated wafers / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-1005"
+        ],
+        "output": "COOLED-1005",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-2001-WC-CLG-01",
+    "description": "Cooled milk chocolate vanilla cream wafer / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-2001"
+        ],
+        "output": "COOLED-2001",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-2002-WC-CLG-01",
+    "description": "Cooled dark chocolate hazelnut cream wafer / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-2002"
+        ],
+        "output": "COOLED-2002",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COOLED-2003-WC-CLG-01",
+    "description": "Cooled white chocolate cocoa cream wafer / Cooling Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "cool",
+        "work_center": "WC-CLG-01",
+        "input": [
+          "COATED-2003"
+        ],
+        "output": "COOLED-2003",
+        "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1001-WC-PKG-02",
+    "description": "Classic Milk Chocolate Wafer / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "COOLED-1001",
+          "PK-BOX-1001",
+          "PK-LABEL-1001",
+          "PK-PALLET"
+        ],
+        "output": "FG-1001",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1002-WC-PKG-02",
+    "description": "Dark Chocolate Wafer / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "COOLED-1002",
+          "PK-BOX-1002",
+          "PK-LABEL-1002",
+          "PK-PALLET"
+        ],
+        "output": "FG-1002",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1003-WC-PKG-02",
+    "description": "White Chocolate Wafer / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "COOLED-1003",
+          "PK-BOX-1003",
+          "PK-LABEL-1003",
+          "PK-PALLET"
+        ],
+        "output": "FG-1003",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2001-WC-PKG-01",
+    "description": "Milk Chocolate Vanilla Cream Wafer / Packaging 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-2001",
+          "PK-BOX-2001",
+          "PK-LABEL-2001",
+          "PK-PALLET"
+        ],
+        "output": "FG-2001",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2001-WC-PKG-02",
+    "description": "Milk Chocolate Vanilla Cream Wafer / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "COOLED-2001",
+          "PK-BOX-2001",
+          "PK-LABEL-2001",
+          "PK-PALLET"
+        ],
+        "output": "FG-2001",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2002-WC-PKG-01",
+    "description": "Dark Chocolate Hazelnut Cream Wafer / Packaging 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-2002",
+          "PK-BOX-2002",
+          "PK-LABEL-2002",
+          "PK-PALLET"
+        ],
+        "output": "FG-2002",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2002-WC-PKG-02",
+    "description": "Dark Chocolate Hazelnut Cream Wafer / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "COOLED-2002",
+          "PK-BOX-2002",
+          "PK-LABEL-2002",
+          "PK-PALLET"
+        ],
+        "output": "FG-2002",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2003-WC-PKG-01",
+    "description": "White Chocolate Cocoa Cream Wafer / Packaging 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-2003",
+          "PK-BOX-2003",
+          "PK-LABEL-2003",
+          "PK-PALLET"
+        ],
+        "output": "FG-2003",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2003-WC-PKG-02",
+    "description": "White Chocolate Cocoa Cream Wafer / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "COOLED-2003",
+          "PK-BOX-2003",
+          "PK-LABEL-2003",
+          "PK-PALLET"
+        ],
+        "output": "FG-2003",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2004-WC-PKG-01",
+    "description": "Vanilla Cream Wafer \u2014 Uncoated / Packaging 01",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "CUT-VAN",
+          "PK-BOX-2004",
+          "PK-LABEL-2004",
+          "PK-PALLET"
+        ],
+        "output": "FG-2004",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2004-WC-PKG-02",
+    "description": "Vanilla Cream Wafer \u2014 Uncoated / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "CUT-VAN",
+          "PK-BOX-2004",
+          "PK-LABEL-2004",
+          "PK-PALLET"
+        ],
+        "output": "FG-2004",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-2005-WC-PKG-02",
+    "description": "Mini Hazelnut Wafer Bites / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Filled wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "CUT-HAZ-MINI",
+          "PK-BOX-2005",
+          "PK-LABEL-2005",
+          "PK-PALLET"
+        ],
+        "output": "FG-2005",
+        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      }
+    ]
   }
 ]

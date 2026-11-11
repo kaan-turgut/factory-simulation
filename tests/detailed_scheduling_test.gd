@@ -60,12 +60,12 @@ func _end_to_end() -> void:
 	var demand := book.create_demand("FG-1001", 10, 2400.0)
 	_check(demand.error.is_empty(), "Create milk wafer demand")
 	plan.run(book, {})
-	_check(plan.summary.make == 5 and plan.summary.buy == 0 and book.orders.is_empty(), "MRP proposes five explicit operations without scheduling or releasing")
+	_check(plan.summary.make == 6 and plan.summary.buy == 0 and book.orders.is_empty(), "MRP proposes six explicit operations without scheduling or releasing")
 	var signature := plan.proposals.duplicate(true)
 	plan.run(book, {})
 	_check(signature == plan.proposals, "Repeated MRP preserves proposal identities and amounts")
 	var by_code := {}
-	for code in ["FG-1001", "COATED-1001", "BAKED-01", "RAW-01", "DOUGH-01"]:
+	for code in ["FG-1001", "COOLED-1001", "COATED-1001", "BAKED-01", "RAW-01", "DOUGH-01"]:
 		for proposal in plan.proposals.values():
 			if proposal.code == code:
 				var result := plan.convert(proposal.id, book, {})
@@ -73,17 +73,18 @@ func _end_to_end() -> void:
 				if result.error.is_empty():
 					by_code[code] = book.orders[result.id]
 				break
-	if by_code.size() != 5:
+	if by_code.size() != 6:
 		return
-	_check(plan.summary.make == 0 and book.orders.size() == 5, "Converted documents net future receipts without duplicate proposals")
+	_check(plan.summary.make == 0 and book.orders.size() == 6, "Converted documents net future receipts without duplicate proposals")
 	var pack: Dictionary = by_code["FG-1001"]
 	var coat: Dictionary = by_code["COATED-1001"]
+	var cool: Dictionary = by_code["COOLED-1001"]
 	var bake: Dictionary = by_code["BAKED-01"]
 	var raw: Dictionary = by_code["RAW-01"]
 	var dough: Dictionary = by_code["DOUGH-01"]
-	_check(dough.pegs == [raw.id] and raw.pegs == [bake.id] and bake.pegs == [coat.id] and coat.pegs == [pack.id], "MRP conversion creates immediate-level pegging links")
+	_check(dough.pegs == [raw.id] and raw.pegs == [bake.id] and bake.pegs == [coat.id] and coat.pegs == [cool.id] and cool.pegs == [pack.id], "MRP conversion creates immediate-level pegging links")
 	_check(not Schedule.peg(book, pack.id, dough.id).is_empty(), "Reject incompatible or cyclic pegging")
-	for downstream in [pack, coat, bake, raw]:
+	for downstream in [pack, cool, coat, bake, raw]:
 		var error := book.release(downstream.id)
 		_check("available" in error and "short" in error and downstream.status == "Created", "Planned supply cannot release " + downstream.code)
 	_check(book.reservations.is_empty(), "Failed release reserves no components")
@@ -98,7 +99,7 @@ func _end_to_end() -> void:
 	_check(dough.status == "Released" and dough.started < 0.0 and book.stock("RM-FLOUR", "RM-WH") == flour, "Future release waits without consuming")
 	_finish(line, dough)
 	_check(is_equal_approx(book.stock("DOUGH-01", "SFG-DECK"), 40.0) and line.extruder.total_output == 0.0, "Dough is physically prepared and received separately")
-	for order in [raw, bake, coat, pack]:
+	for order in [raw, bake, coat, cool, pack]:
 		var upstream := [line.extruder.total_output, line.oven.batches, line.coater.total_output]
 		var before: float = order.start
 		_release(line, order)
@@ -143,6 +144,7 @@ func _automatic_release() -> void:
 	var book := line.erp
 	var pack := _order(line, "FG-1001", 2.0, 240.0)
 	var coat := _order(line, "COATED-1001", 10.0, 180.0)
+	var cool := _order(line, "COOLED-1001", 10.0, 210.0)
 	var bake := _order(line, "BAKED-01", 8.0, 90.0)
 	var raw := _order(line, "RAW-01", 8.0, 45.0)
 	var dough := _order(line, "DOUGH-01", 8.0, 15.0)
@@ -157,14 +159,14 @@ func _automatic_release() -> void:
 	line.advance(1.0)
 	_check(dough.status == "Released" and dough.started < 0.0 and book.reservations["RM-FLOUR"] > 0.0,
 		"Auto Release reserves available stock before the planned start")
-	_check([raw, bake, coat, pack].all(func(order: Dictionary) -> bool: return order.status == "Created"),
+	_check([raw, bake, coat, cool, pack].all(func(order: Dictionary) -> bool: return order.status == "Created"),
 		"Scheduled upstream supply cannot release a downstream order")
 	_finish(line, pack)
-	for order in [dough, raw, bake, coat, pack]:
+	for order in [dough, raw, bake, coat, cool, pack]:
 		_check(order.status == "Completed" and order.started >= order.start,
 			"Auto-released order completes at or after scheduled start: " + order.code)
-	_check(is_equal_approx(line.warehouse_mass(), 10.0) and is_equal_approx(book.reservations["COATED-1001"], 0.0),
-		"Auto Release carries all five stages through warehouse receipt")
+	_check(is_equal_approx(line.warehouse_mass(), 10.0) and is_equal_approx(book.reservations["COOLED-1001"], 0.0),
+		"Auto Release carries all six stages through warehouse receipt")
 
 
 func _automatic_release_competition() -> void:
@@ -225,7 +227,7 @@ func _resources() -> void:
 	var c := _order(line, "BAKED-01", 1.0, start, "BAKED-01/WC-OVN-01")
 	_check(a.start == b.start and c.start == a.finish, "Parallel ovens can overlap while one oven is scheduled finitely")
 	var bake_work: Dictionary = book.catalog.scheduling.stages.bake
-	_check(a.estimate == bake_work.handling_seconds + 2 * (36.0 + bake_work.batch_handling_seconds), "Oven duration includes two cycles and handling")
+	_check(a.estimate == bake_work.handling_seconds + 2 * (a.standard.cycle_seconds + a.standard.loading_seconds + a.standard.unloading_seconds), "Oven duration includes two cycles and handling")
 	_check("conflict" in book.reschedule(c.id, a.start), "Reject drag into occupied interval")
 	_check(not book.reschedule(c.id, a.start, "BAKED-01/WC-COT-01").is_empty(), "Reject incompatible machine")
 	_check(not book.create_order("COATED-1005", 2.0, start, 5, "COATED-1005/WC-COT-02").error.is_empty(), "Reject a coater incompatible with strawberry")
@@ -236,7 +238,7 @@ func _resources() -> void:
 	_release(line, c)
 	_check(not book.reschedule(a.id, a.start + 100).is_empty(), "Released routing and time are frozen")
 	var route: Dictionary = a.route.duplicate(true)
-	book.catalog.work_centers["WC-OVN-01"].technical.cycle_seconds = 900.0
+	book.catalog.standards[a.standard.id].cycle_seconds = 900.0
 	line.set_playing(true)
 	var visited := {}
 	var both := false
@@ -309,7 +311,8 @@ func _changeover() -> void:
 	# Existing completed baked stock is a valid starting point for independent coating.
 	book._post("BAKED-01", 16.0, "", "SFG-WH", "Opening", "", "Coating test fixture")
 	book.adjust("RM-COAT-1002", 2.0, "Coating test fixture")
-	book.catalog.work_centers["WC-COT-01"].technical.setup_seconds = 25.0
+	book.catalog.changeovers["COAT"].seconds = 25.0
+	book.catalog.changeovers["MATERIAL"].seconds = 0.0
 	var milk := _order(line, "COATED-1001", 10.0, 0.0, "COATED-1001/WC-COT-01")
 	var dark := _order(line, "COATED-1002", 10.0, 0.0, "COATED-1002/WC-COT-01")
 	_release(line, milk)
@@ -378,7 +381,7 @@ func _planning_board() -> void:
 	_check(first.stage == "bake" and first.quantity == 30.0 and first.start == 120.0,
 		"Stage form preserves quantity and simulated start")
 	terminal.open(9, "BAKED-01")
-	_check(terminal._rows.has("BAKED-01/WC-OVN-02"), "Routing Master shows an independent stage path")
+	_check(terminal._rows.has("ROUTE-BAKED-01-WC-OVN-02"), "Routing Master shows an independent stage path")
 	terminal.open(terminal.SCHEDULE_PAGE)
 	await create_timer(0.35).timeout
 	var board = terminal._board

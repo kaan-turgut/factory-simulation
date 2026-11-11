@@ -81,9 +81,9 @@ func _elevation() -> void:
 
 func _factory_constraints() -> void:
 	var plan := Layout.new()
-	var expanded := Layout.new(Vector2i(107, 37))
+	var expanded := Layout.new(Vector2i(147, 44))
 	_check(plan.validate().is_empty() and expanded.validate().is_empty(), "Default and expanded halls validate")
-	_check(plan.grid.origin == expanded.grid.origin and expanded.grid.size == Vector2i(107, 37),
+	_check(plan.grid.origin == expanded.grid.origin and expanded.grid.size == Vector2i(147, 44),
 		"Changing hall dimensions preserves the origin")
 	_check(expanded.center(&"Warehouse").x - plan.center(&"Warehouse").x == 19.0,
 		"Warehouse stays at the right end of an expanded hall")

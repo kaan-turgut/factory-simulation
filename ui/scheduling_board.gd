@@ -343,7 +343,11 @@ func _drop_target() -> Dictionary:
 		if route.operations[0].work_center != _rows[row] or not route.operations[0].available:
 			continue
 		target.version = route.production_version
-		target.estimate = Scheduling.duration(line.erp.catalog, order.recipe, route.operations[0])
-		target.error = Scheduling.conflict(line.erp, _rows[row], start, start + float(target.estimate), order.id)
+		var assignment := Scheduling.assignment(line.erp, order.code, order.quantity, start, target.version, order.id)
+		if not assignment.error.is_empty():
+			target.error = assignment.error
+			break
+		target.estimate = assignment.duration
+		target.error = Scheduling.placement_conflict(line.erp, assignment, start, order.id)
 		break
 	return target

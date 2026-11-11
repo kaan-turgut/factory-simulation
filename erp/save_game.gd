@@ -3,16 +3,16 @@ extends RefCounted
 
 const Line = preload("res://simulation/production_line.gd")
 const PATH := "user://chocolate-works-erp.save"
-const VERSION := 5
+const VERSION := 6
 const LINE_FIELDS := ["elapsed_ticks", "multiplier", "layout_file_stamp", "ingredients_taken", "dispatched_kg",
 	"dispatched_pallets", "boxes_completed", "raw_deliveries", "cooked_deliveries", "forklift_deliveries",
-	"hopper_reserved", "warehouse_reserved_slot", "box_progress", "box_target", "_pending_seconds",
+	"operating_factors", "resource_last", "scrapped_kg", "hopper_reserved", "warehouse_reserved_slot", "box_progress", "box_target", "_pending_seconds",
 	"_cart_route_owner", "_lift_phase", "_lift_pickup_slot"]
 const ACTOR_FIELDS := ["id", "title", "position", "previous_position", "heading", "state", "task",
 	"destination", "remaining", "cargo_kg", "reserved_kg", "_route"]
-const CART_FIELDS := ["id", "raw", "coated", "site", "home", "position", "previous_position", "heading", "owner", "order_id"]
+const CART_FIELDS := ["id", "raw", "coated", "site", "home", "position", "previous_position", "heading", "owner", "order_id", "material"]
 const PALLET_FIELDS := ["target_boxes", "boxes", "mass", "id", "sku", "order_id", "tint", "sealed"]
-const CATALOG_FIELDS := ["materials", "boms", "suppliers", "routings", "work_centers", "production_versions", "locations", "scheduling"]
+const CATALOG_FIELDS := ["materials", "boms", "suppliers", "routings", "work_centers", "production_versions", "locations", "scheduling", "standards", "changeovers", "planning_examples"]
 const OVEN_FIELDS := ["state", "remaining", "batches", "owner"]
 const MACHINE_FIELDS := ["configured_rate", "actual_rate", "state", "total_output"]
 const STOCK_FIELDS := ["capacity", "quantity"]
@@ -45,7 +45,7 @@ static func load_line(path: String = PATH) -> Dictionary:
 		return {"error": "No saved shift found."}
 	var data: Variant = file.get_var(false)
 	file.close()
-	if not data is Dictionary or data.get("version", -1) not in [1, 2, 3, 4, VERSION]:
+	if not data is Dictionary or data.get("version", -1) not in [1, 2, 3, 4, 5, VERSION]:
 		return {"error": "The save is invalid or uses an unsupported version."}
 	return restore(data)
 
@@ -59,7 +59,7 @@ static func snapshot(line: Line) -> Dictionary:
 	var jobs := {}
 	for owner in line.floor_assignments:
 		var job := line.floor_assignments[owner]
-		jobs[owner] = [job.kind, job.cart.id, job.site, job.point, job.title, job.run]
+		jobs[owner] = [job.kind, job.cart.id, job.site, job.point, job.title, job.run, job.material]
 	var stock := {}
 	for field in ["hopper", "cooked_input", "pack_wip"]:
 		stock[field] = _fields(line.get(field), ["capacity", "quantity"])
@@ -93,7 +93,7 @@ static func restore(data: Dictionary) -> Dictionary:
 		"load", "erp", "catalog", "shuttle"]:
 		if not data.has(key):
 			return {"error": "The save is missing " + key + "."}
-	if data.version not in [1, 2, 3, 4, VERSION] or not data.erp is Dictionary or not data.erp.get("balances") is Dictionary \
+	if data.version not in [1, 2, 3, 4, 5, VERSION] or not data.erp is Dictionary or not data.erp.get("balances") is Dictionary \
 			or not data.size is Vector2i or not data.plan is Dictionary:
 		return {"error": "Invalid save structure."}
 	for location in data.erp.balances.values():
@@ -112,7 +112,10 @@ static func restore(data: Dictionary) -> Dictionary:
 		for id in data.plan:
 			if not plan.objects.has(id) or not plan.objects[id].movable:
 				return {"error": "Unknown saved placement."}
-			plan.objects[id] = plan.objects[id].at(data.plan[id][0], data.plan[id][1])
+			var cell: Vector2i = data.plan[id][0]
+			if id == &"Warehouse":
+				cell.x += plan.grid.size.x - data.size.x
+			plan.objects[id] = plan.objects[id].at(cell, data.plan[id][1])
 	var layout_error := plan.validate()
 	if not layout_error.is_empty():
 		return {"error": layout_error}
@@ -158,19 +161,21 @@ static func restore(data: Dictionary) -> Dictionary:
 		var job: Array = data.jobs[owner]
 		var task := Line.FloorJob.new(job[0], line.find_cart(job[1]), job[2], job[3], job[4])
 		task.run = data.erp.active_id if old else job[5]
+		task.material = job[6] if job.size() > 6 else ""
 		line.floor_assignments[owner] = task
 	line.staged_pallets.assign(data.staged.map(_pallet))
 	line.warehouse.assign(data.warehouse.map(_pallet))
 	line.lift_load = _pallet(data.load)
+	var expansion := _fields(line.erp.catalog, CATALOG_FIELDS)
 	var default_locations := line.erp.catalog.locations.duplicate()
 	var prep_center: Dictionary = line.erp.catalog.work_centers["WC-MIX-01"]
 	_set_fields(line.erp.catalog, data.catalog, ["materials", "boms", "suppliers"] if old else CATALOG_FIELDS)
 	_set_fields(line.erp, data.erp, ERP_FIELDS)
 	line.erp.shuttle = _actor(data.shuttle)
-	for location in ["PACK-WIP"] + Line.ERP.SFG_LOCATIONS:
+	for location in ["PACK-WIP", "CREAM-IN", "PACK-IN-02"] + Line.ERP.SFG_LOCATIONS:
 		if not line.erp.catalog.locations.has(location):
 			line.erp.catalog.locations[location] = default_locations[location]
-	for location in Line.ERP.SFG_LOCATIONS:
+	for location in ["CREAM-IN", "PACK-IN-02"] + Line.ERP.SFG_LOCATIONS:
 		if not line.erp.balances.has(location):
 			line.erp.balances[location] = {}
 	if not data.catalog.has("scheduling"):
@@ -195,10 +200,14 @@ static func restore(data: Dictionary) -> Dictionary:
 			return {"error": error}
 	if refit:
 		_refit_transport(line)
+	elif plan.grid.size.x != data.size.x:
+		_refit_forklift(line)
 	if data.version < 5:
 		_migrate_packaging(line.erp)
+	if not data.catalog.has("standards"):
+		_migrate_expansion(line.erp, expansion)
 	line.set_playing(false)
-	return {"error": "", "line": line, "refitted": refit}
+	return {"error": "", "line": line, "refitted": refit or plan.grid.size != data.size}
 
 
 static func _migrate_packaging(book: Line.ERP) -> void:
@@ -232,6 +241,60 @@ static func _migrate_packaging(book: Line.ERP) -> void:
 				demand.recipe = recipe
 
 
+static func _migrate_expansion(book: Line.ERP, expansion: Dictionary) -> void:
+	var catalog := book.catalog
+	var new_materials: Array = expansion.materials.keys().filter(func(code: String) -> bool: return not catalog.materials.has(code))
+	for field in CATALOG_FIELDS:
+		catalog.get(field).merge(expansion[field].duplicate(true))
+	catalog.scheduling = expansion.scheduling.duplicate(true)
+	for version in catalog.production_versions.values():
+		if version.has("min_boxes"):
+			version.min_quantity = version.min_boxes
+			version.max_quantity = version.max_boxes
+			version.lot_unit = "cartons"
+			version.erase("min_boxes")
+			version.erase("max_boxes")
+	for id in catalog.work_centers:
+		if expansion.work_centers.has(id):
+			if expansion.work_centers[id].technical.has("rate"):
+				catalog.work_centers[id].technical.rate = expansion.work_centers[id].technical.rate
+			for capability in ["materials", "models", "categories", "supply_location"]:
+				if expansion.work_centers[id].has(capability):
+					catalog.work_centers[id][capability] = expansion.work_centers[id][capability]
+	for id in catalog.suppliers:
+		for code in expansion.suppliers.get(id, {}).get("codes", []):
+			if code not in catalog.suppliers[id].codes:
+				catalog.suppliers[id].codes.append(code)
+	for code in new_materials:
+		if catalog.opening.has(code):
+			book._post(code, catalog.opening[code], "", "RM-WH", "Opening", "EXPANSION", "New product family opening stock")
+	for code in catalog.materials:
+		if not expansion.materials.has(code):
+			continue
+		for field in ["family", "coating", "coating_color", "flavor", "cleaning_group"]:
+			if expansion.materials[code].has(field):
+				catalog.materials[code].get_or_add(field, expansion.materials[code][field])
+	for code in catalog.boms:
+		if not expansion.boms.has(code) or not catalog.materials[code].has("box_kg"):
+			continue
+		for part in catalog.boms[code].parts:
+			var cooled := ""
+			for standard_part in expansion.boms[code].parts:
+				if catalog.boms.get(standard_part.code, {}).get("parts", []).any(func(child: Dictionary) -> bool: return child.code == part.code):
+					cooled = standard_part.code
+					break
+			if not cooled.is_empty():
+				part.code = cooled
+				catalog.boms[code].version += 1
+				catalog._update_bom_versions(code)
+				break
+	for demand in book.demands.values():
+		if String(demand.converted).is_empty() and demand.get("converted_orders", []).is_empty():
+			var updated := Line.ERP.Scheduling.recipe(catalog, demand.code, demand.boxes)
+			if updated.error.is_empty():
+				demand.recipe = updated
+
+
 static func _execution(line: Line) -> Dictionary:
 	var ovens := {}
 	for id in line.ovens:
@@ -247,6 +310,8 @@ static func _execution(line: Line) -> Dictionary:
 			"intake": run.intake.id if run.intake != null else &"", "outbound": run.outbound.id if run.outbound != null else &"",
 			"pack": run.pack.id if run.pack != null else &"",
 			"store": run.store.id if run.get("store") != null else &""}
+		if run.has("cell"):
+			runs[id].cell = run.cell.snapshot()
 	return {"ovens": ovens, "coaters": coaters, "runs": runs, "last_coatings": line.last_coatings,
 		"pack_last_recipe": line.pack_last_recipe}
 
@@ -311,7 +376,15 @@ static func _restore_execution(line: Line, data: Dictionary, refit: bool) -> Str
 				if line.sfg_dock != null:
 					return "Saved routes claim the same SFG dock."
 				line.sfg_dock = run.store
-		if run.pack != null:
+		if run.has("cell"):
+			if not saved.has("cell"):
+				return "Saved order is missing its production cell state: " + id
+			run.cell.restore(saved.cell)
+			if run.pack != null:
+				if line.pallet_dock != null:
+					return "Saved routes claim the same palletizing dock."
+				line.pallet_dock = run.pack
+		elif run.pack != null:
 			if line.pack_dock != null:
 				return "Saved routes claim the same packaging dock."
 			line.pack_dock = run.pack

@@ -45,7 +45,10 @@
         "COATED-1002",
         "COATED-1003",
         "COATED-1004",
-        "COATED-1005"
+        "COATED-1005",
+        "COATED-2001",
+        "COATED-2002",
+        "COATED-2003"
       ],
       "centers": [
         "WC-COT-01",
@@ -59,10 +62,65 @@
         "FERT"
       ],
       "centers": [
-        "WC-PKG-01"
+        "WC-PKG-01",
+        "WC-PKG-02"
       ],
       "handling_seconds": 120,
       "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+    },
+    "cream": {
+      "materials": [
+        "CREAM-VAN",
+        "CREAM-HAZ",
+        "CREAM-COC"
+      ],
+      "centers": [
+        "WC-CRM-01"
+      ],
+      "handling_seconds": 90,
+      "handling": "Workers deliver reserved components and return completed product to wafer stock."
+    },
+    "spread": {
+      "materials": [
+        "BLOCK-VAN",
+        "BLOCK-HAZ",
+        "BLOCK-COC"
+      ],
+      "centers": [
+        "WC-SPR-01"
+      ],
+      "handling_seconds": 90,
+      "handling": "Workers deliver reserved components and return completed product to wafer stock."
+    },
+    "cut": {
+      "materials": [
+        "CUT-VAN",
+        "CUT-HAZ",
+        "CUT-COC",
+        "CUT-HAZ-MINI"
+      ],
+      "centers": [
+        "WC-CUT-01"
+      ],
+      "handling_seconds": 90,
+      "handling": "Workers deliver reserved components and return completed product to wafer stock."
+    },
+    "cool": {
+      "materials": [
+        "COOLED-1001",
+        "COOLED-1002",
+        "COOLED-1003",
+        "COOLED-1004",
+        "COOLED-1005",
+        "COOLED-2001",
+        "COOLED-2002",
+        "COOLED-2003"
+      ],
+      "centers": [
+        "WC-CLG-01"
+      ],
+      "handling_seconds": 90,
+      "handling": "Workers deliver reserved components and return completed product to wafer stock."
     }
   }
 }

@@ -24,55 +24,39 @@ static func alternatives(catalog, code: String, quantity: float, when: float) ->
 	var bom: Dictionary = catalog.boms.get(code, {})
 	if bom.is_empty() or not bom.active:
 		return rows
-	var input := "Staged ingredients"
-	for component in catalog._rates(code):
-		if catalog.materials[component].procurement == "In-house":
-			input = component
-			break
-	var handling: String = catalog.scheduling.stages[stage].handling
-	if stage == "pack":
-		if not is_equal_approx(quantity, roundf(quantity)):
-			return rows
-		for id in catalog.production_versions:
-			var item: Dictionary = catalog.production_versions[id]
-			if item.product != code:
-				continue
-			var full: Dictionary = catalog.route_for(code, int(quantity), when, id, false)
-			if not full.error.is_empty():
-				continue
-			var operation: Dictionary = full.operations[3]
-			operation.available = _available(catalog.work_centers[operation.work_center])
-			operation.merge({"input": input, "output": code, "handling": handling}, true)
-			full.operations = [operation]
-			full.description = operation.description
-			rows.append(full)
-		return rows
-	var product := _coated_product(catalog, code)
-	for id in catalog.scheduling.stages[stage].centers:
-		var center: Dictionary = catalog.work_centers[id]
-		if not product.is_empty() and (product.family not in center.categories \
-				or (not center.coatings.is_empty() and product.coating not in center.coatings)):
+	for version in catalog.production_versions.values():
+		if version.product != code or not catalog._in_effect(version, when) or quantity < version.min_quantity or quantity > version.max_quantity \
+				or version.bom_version != bom.version:
 			continue
-		var version := "%s/%s" % [code, id]
-		rows.append({"id": version, "production_version": version, "version": 1,
-			"bom_version": bom.version, "description": center.description, "error": "",
-			"operations": [{"number": 10, "type": stage, "work_center": id, "equipment": center.equipment,
-				"description": center.description, "technical": center.technical.duplicate(true),
-				"input": input, "output": code, "handling": handling,
-				"available": _available(center), "supply_location": center.get("supply_location", "")}]})
+		var route: Dictionary = catalog.routings[version.routing]
+		if not catalog._in_effect(route, when):
+			continue
+		var operation: Dictionary = route.operations.back().duplicate(true)
+		if route.operations.size() != 1 and stage != "pack":
+			continue
+		var center: Dictionary = catalog.work_centers[operation.work_center]
+		if center.operation != stage or code not in center.get("materials", []):
+			continue
+		operation.merge({"equipment": center.equipment, "description": center.description,
+			"available": center.available, "supply_location": center.get("supply_location", ""),
+			"input_port": center.get("input_port", ""), "output_port": center.get("output_port", ""),
+			"technical": center.technical.duplicate(true)}, true)
+		var resolved: Dictionary = catalog.Standards.resolve(catalog, code, operation, when, route.id, version.id)
+		if resolved.error.is_empty():
+			operation.standard = resolved.standard
+			var std: Dictionary = resolved.standard
+			operation.technical.merge({"setup_seconds": std.setup_seconds}, true)
+			if std.model == "batch":
+				operation.technical.merge({"batch_kg": std.batch_kg, "cycle_seconds": std.cycle_seconds}, true)
+			else:
+				operation.technical.design_rate = operation.technical.rate
+				operation.technical.rate = catalog.Standards.kg_per_hour(std, catalog.materials[code])
+		else:
+			operation.available = false
+			operation.standard_error = resolved.error
+		rows.append({"id": route.id, "version": route.version, "description": route.description,
+			"production_version": version.id, "bom_version": bom.version, "error": "", "operations": [operation]})
 	return rows
-
-
-static func _available(center: Dictionary) -> bool:
-	return center.available and float(center.technical.get("rate", 1.0)) > 0
-
-
-static func _coated_product(catalog, code: String) -> Dictionary:
-	for item in catalog.materials.values():
-		if item.type == "FERT" and catalog._rates(item.code).has(code):
-			return item
-	return {}
-
 
 static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 	var stage := stage_for(catalog, code)
@@ -83,16 +67,14 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 		return {"error": "No active BOM for " + code}
 	var spec: Dictionary = catalog.materials[code].duplicate(true)
 	var result := {"error": "", "stage": stage, "target": quantity, "spec": spec, "needs": {},
-		"mix": {}, "dough_target": quantity, "packaging": [], "bom_version": bom.version,
+		"mix": {}, "mass_inputs": {}, "internals": [], "dough_target": quantity, "packaging": [], "bom_version": bom.version,
 		"bom_snapshot": {code: bom.duplicate(true)}}
 	if stage == "pack":
 		if not is_equal_approx(quantity, roundf(quantity)):
 			return {"error": "Packaging quantities must be whole shipping boxes."}
 		# Keep packaging specifications and rounding independent of upstream BOM availability.
 		result.target = quantity * spec.box_kg
-	elif stage == "coat":
-		var product := _coated_product(catalog, code)
-		result.spec.coating_color = product.get("coating_color", "#765346")
+
 	var rates: Dictionary = catalog._rates(code)
 	var internal := ""
 	var mass_rate := 0.0
@@ -104,11 +86,12 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 		result.needs[child] = ceilf(amount - EPS) if component.unit == "ea" else amount
 		if component.unit == "kg":
 			mass_rate += float(rates[child])
+			result.mass_inputs[child] = rates[child]
 		if component.procurement == "In-house":
-			if not internal.is_empty():
-				return {"error": "This physical operation takes one internally produced input."}
-			internal = child
-		elif stage == "mix":
+			result.internals.append(child)
+			if internal.is_empty():
+				internal = child
+		elif stage in ["mix", "cream"]:
 			result.mix[child] = rates[child]
 		elif stage == "coat":
 			result.coating = child
@@ -118,10 +101,12 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 	if not is_equal_approx(mass_rate, 1.0):
 		return {"error": "The stage BOM must conserve food mass."}
 	result.input = internal
-	if stage == "mix" and (not internal.is_empty() or result.mix.size() != rates.size()):
+	if stage in ["mix", "cream"] and (not internal.is_empty() or result.mix.size() != rates.size()):
 		return {"error": "Ingredient preparation requires external kilogram inputs."}
-	if stage in ["extrude", "bake"] and (rates.size() != 1 or internal.is_empty()):
+	if stage in ["extrude", "bake", "cut", "cool"] and (rates.size() != 1 or internal.is_empty()):
 		return {"error": "This operation needs one kilogram input."}
+	if stage == "spread" and (result.internals.size() != 2 or rates.size() != 2):
+		return {"error": "Sandwiching requires a wafer material and a cream material."}
 	if stage == "coat":
 		if rates.size() != 2 or internal.is_empty() or not result.has("coating"):
 			return {"error": "Coating needs baked wafers and one coating material."}
@@ -142,26 +127,56 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 
 
 static func duration(catalog, recipe_data: Dictionary, operation: Dictionary) -> float:
-	var config: Dictionary = catalog.scheduling.stages[operation.type]
-	var tech: Dictionary = operation.technical
-	var seconds: float = config.handling_seconds
-	if operation.type == "bake":
-		seconds += ceilf(recipe_data.target / tech.batch_kg - EPS) * (tech.cycle_seconds + config.batch_handling_seconds)
-	else:
-		seconds += recipe_data.target * 3600.0 / maxf(EPS, tech.rate)
-	return ceilf(seconds + float(tech.get("setup_seconds", 0.0)))
+	if not operation.has("standard"):
+		return INF
+	return ceilf(float(catalog.scheduling.stages[operation.type].handling_seconds)
+		+ catalog.Standards.processing_seconds(operation.standard, recipe_data.spec, recipe_data.target)
+		+ float(operation.get("setup_seconds", operation.standard.setup_seconds)))
 
 
-static func assignment(book, code: String, quantity: float, start: float, version: String) -> Dictionary:
+static func setup_for(book, code: String, op: Dictionary, start: float, ignore: String = "") -> float:
+	var previous := {}
+	for order in book.orders.values():
+		if order.id != ignore and order.get("center", "") == op.work_center and order.status != "Cancelled" \
+				and order.start <= start and (previous.is_empty() or order.start > previous.start):
+			previous = order
+	return book.catalog.Standards.changeover(book.catalog, previous.get("recipe", {}).get("spec", {}),
+		book.catalog.materials[code], op.type, op.standard.setup_seconds)
+
+
+static func assignment(book, code: String, quantity: float, start: float, version: String, ignore: String = "") -> Dictionary:
 	var data := recipe(book.catalog, code, quantity)
 	if not data.error.is_empty():
 		return data
+	var problem := "No eligible production version at this date."
 	for route in alternatives(book.catalog, code, quantity, start):
-		if (version.is_empty() or route.production_version == version) and route.operations[0].available:
-			var op: Dictionary = route.operations[0]
-			return {"error": "", "recipe": data, "route": route,
-				"duration": duration(book.catalog, data, op), "center": op.work_center}
-	return {"error": "No eligible production version at this date."}
+		if not version.is_empty() and route.production_version != version:
+			continue
+		var op: Dictionary = route.operations[0]
+		if not op.available:
+			problem = op.get("standard_error", "The selected resource is unavailable.")
+			continue
+		op.setup_seconds = setup_for(book, code, op, start, ignore)
+		var seconds := duration(book.catalog, data, op)
+		if op.standard.model == "batch":
+			var input_kg: float = data.target / op.standard.yield_factor
+			var batches := ceili(input_kg / op.standard.batch_kg - EPS)
+			if input_kg / batches + EPS < op.standard.min_batch_kg:
+				problem = "Quantity cannot form the required minimum batches on this resource."
+				continue
+		var yield_factor: float = op.standard.yield_factor
+		if yield_factor < 1.0:
+			for component in data.mass_inputs:
+				data.mass_inputs[component] /= yield_factor
+				data.needs[component] /= yield_factor
+			for component in data.mix:
+				data.mix[component] = data.mass_inputs[component]
+			if data.stage == "extrude":
+				data.dough_target /= yield_factor
+			data.baked_rate = data.mass_inputs.get(data.get("baked", ""), 0.0)
+			data.coat_rate = data.mass_inputs.get(data.get("coating", ""), 0.0)
+		return {"error": "", "recipe": data, "route": route, "duration": seconds, "center": op.work_center}
+	return {"error": problem}
 
 
 static func calendar(catalog, center: String) -> Array:
@@ -218,25 +233,76 @@ static func next_slot(book, center: String, start: float, seconds: float, ignore
 	return INF
 
 
+static func fit(book, code: String, quantity: float, start: float, version: String, ignore: String = "") -> Dictionary:
+	var candidate := maxf(start, book.now)
+	for attempt in range(book.orders.size() + 2):
+		var data := assignment(book, code, quantity, candidate, version, ignore)
+		if not data.error.is_empty():
+			return data
+		var available := next_slot(book, data.center, candidate, data.duration, ignore)
+		if not is_finite(available):
+			break
+		if available > candidate + EPS:
+			candidate = available
+			continue
+		var successor := next_order(book, data.center, candidate, ignore)
+		if successor_setup_exceeds(book, data.recipe.spec, successor):
+			candidate = successor.finish
+			continue
+		data.start = candidate
+		return data
+	return {"error": "No open slot fits this operation."}
+
+
+static func next_order(book, center: String, start: float, ignore: String = "") -> Dictionary:
+	var next := {}
+	for order in book.orders.values():
+		if order.id != ignore and order.get("center", "") == center and order.status != "Cancelled" \
+				and order.start > start and (next.is_empty() or order.start < next.start):
+			next = order
+	return next
+
+
+static func successor_setup_exceeds(book, before: Dictionary, successor: Dictionary) -> bool:
+	if not successor.has("standard"):
+		return false
+	var needed: float = book.catalog.Standards.changeover(book.catalog, before, successor.recipe.spec,
+		successor.stage, successor.standard.setup_seconds, successor.get("setup_rules", {}))
+	return needed > float(successor.route.operations[0].get("setup_seconds", 0)) + EPS
+
+
+static func placement_conflict(book, data: Dictionary, start: float, ignore: String) -> String:
+	var problem := conflict(book, data.center, start, start + float(data.duration), ignore)
+	if not problem.is_empty():
+		return problem
+	var next := next_order(book, data.center, start, ignore)
+	if successor_setup_exceeds(book, data.recipe.spec, next):
+		return "This move would require more setup time for %s. Reschedule that order first." % next.id
+	return ""
+
+
 static func create(book, code: String, quantity: float, start: float, priority: int, version: String = "") -> Dictionary:
 	if not is_finite(start) or start < 0:
 		return {"error": "Enter a nonnegative simulated start."}
-	var data := assignment(book, code, quantity, maxf(start, book.now), version)
-	if not data.error.is_empty():
-		return data
-	var scheduled := next_slot(book, data.center, maxf(start, book.now), data.duration)
-	if version.is_empty():
-		for route in alternatives(book.catalog, code, quantity, maxf(start, book.now)):
-			var op: Dictionary = route.operations[0]
-			if not op.available or op.work_center == data.center:
-				continue
-			var estimate := duration(book.catalog, data.recipe, op)
-			var candidate := next_slot(book, op.work_center, maxf(start, book.now), estimate)
-			if candidate + estimate < scheduled + float(data.duration):
-				data.merge({"route": route, "duration": estimate, "center": op.work_center}, true)
-				scheduled = candidate
-	if not is_finite(scheduled):
-		return {"error": "No open slot fits this operation."}
+	var candidate := maxf(start, book.now)
+	var data := {}
+	var error := "No eligible production version at this date."
+	for route in alternatives(book.catalog, code, quantity, candidate):
+		if not version.is_empty() and route.production_version != version:
+			continue
+		var op: Dictionary = route.operations[0]
+		if not op.available:
+			error = op.get("standard_error", "The selected resource is unavailable.")
+			continue
+		var option := fit(book, code, quantity, candidate, route.production_version)
+		if not option.error.is_empty():
+			error = option.error
+		elif data.is_empty() or option.start + option.duration < data.start + data.duration:
+			data = option
+	if data.is_empty():
+		var validation := recipe(book.catalog, code, quantity)
+		return validation if not validation.error.is_empty() else {"error": error}
+	var scheduled: float = data.start
 	var id: String = book._id("MO")
 	var row := {"id": id, "code": code, "quantity": quantity, "boxes": int(quantity) if data.recipe.stage == "pack" else 0,
 		"unit": "box" if data.recipe.stage == "pack" else "kg", "requested_start": start,
@@ -257,10 +323,10 @@ static func reschedule(book, id: String, start: float, version: String = "") -> 
 		return "Only a planned stage order can be rescheduled."
 	if not is_finite(start) or start < book.now - EPS:
 		return "Choose a start at or after the current simulation time."
-	var data := assignment(book, order.code, order.quantity, start, order.version if version.is_empty() else version)
+	var data := assignment(book, order.code, order.quantity, start, order.version if version.is_empty() else version, id)
 	if not data.error.is_empty():
 		return data.error
-	var error := conflict(book, data.center, start, start + float(data.duration), id)
+	var error := placement_conflict(book, data, start, id)
 	if error.is_empty():
 		_set_slot(order, data, start)
 		book.schedule_revision += 1
@@ -270,7 +336,8 @@ static func reschedule(book, id: String, start: float, version: String = "") -> 
 
 static func _set_slot(order: Dictionary, data: Dictionary, start: float) -> void:
 	order.merge({"recipe": data.recipe, "stage": data.recipe.stage, "route": data.route,
-		"version": data.route.production_version, "center": data.center, "estimate": data.duration,
+		"version": data.route.production_version, "standard": data.route.operations[0].standard.duplicate(true),
+		"center": data.center, "estimate": data.duration,
 		"start": start, "finish": start + data.duration}, true)
 
 

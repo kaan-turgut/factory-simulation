@@ -9,5 +9,7 @@
   "COAT-IN-02": "Coater 02 supplies",
   "PACK-WIP": "Coated wafers at packaging",
   "SFG-WH": "Semi-finished warehouse",
-  "SFG-DECK": "Prepared dough at mezzanine"
+  "SFG-DECK": "Prepared dough at mezzanine",
+  "CREAM-IN": "Cream mixer ingredient staging",
+  "PACK-IN-02": "Packaging Line 02 supplies"
 }

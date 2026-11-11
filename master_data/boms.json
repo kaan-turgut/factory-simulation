@@ -85,7 +85,7 @@
 		"parent": "FG-1001",
 		"parts": [
 			{
-				"code": "COATED-1001",
+				"code": "COOLED-1001",
 				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
@@ -109,7 +109,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 1
+		"version": 2
 	},
 	{
 		"active": true,
@@ -137,7 +137,7 @@
 		"parent": "FG-1002",
 		"parts": [
 			{
-				"code": "COATED-1002",
+				"code": "COOLED-1002",
 				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
@@ -161,7 +161,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 2
+		"version": 3
 	},
 	{
 		"active": true,
@@ -189,7 +189,7 @@
 		"parent": "FG-1003",
 		"parts": [
 			{
-				"code": "COATED-1003",
+				"code": "COOLED-1003",
 				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
@@ -213,7 +213,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 2
+		"version": 3
 	},
 	{
 		"active": true,
@@ -241,7 +241,7 @@
 		"parent": "FG-1004",
 		"parts": [
 			{
-				"code": "COATED-1004",
+				"code": "COOLED-1004",
 				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
@@ -265,7 +265,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 2
+		"version": 3
 	},
 	{
 		"active": true,
@@ -293,7 +293,7 @@
 		"parent": "FG-1005",
 		"parts": [
 			{
-				"code": "COATED-1005",
+				"code": "COOLED-1005",
 				"qty": 5.0,
 				"scrap": 0.0,
 				"unit": "kg"
@@ -317,6 +317,550 @@
 				"unit": "ea"
 			}
 		],
-		"version": 2
+		"version": 3
+	},
+	{
+		"parent": "CREAM-VAN",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.35,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-FAT",
+				"qty": 0.35,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-MILK",
+				"qty": 0.2,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-VANILLA",
+				"qty": 0.1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "BLOCK-VAN",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.7,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "CREAM-VAN",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CUT-VAN",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BLOCK-VAN",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CREAM-HAZ",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-FAT",
+				"qty": 0.35,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-MILK",
+				"qty": 0.15,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-HAZELNUT",
+				"qty": 0.2,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "BLOCK-HAZ",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.7,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "CREAM-HAZ",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CUT-HAZ",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BLOCK-HAZ",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CREAM-COC",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-FAT",
+				"qty": 0.35,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-MILK",
+				"qty": 0.15,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COCOA",
+				"qty": 0.2,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "BLOCK-COC",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BAKED-01",
+				"qty": 0.7,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "CREAM-COC",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CUT-COC",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BLOCK-COC",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CUT-HAZ-MINI",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "BLOCK-HAZ",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COATED-2001",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CUT-VAN",
+				"qty": 0.8,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COAT-1001",
+				"qty": 0.2,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COATED-2002",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CUT-HAZ",
+				"qty": 0.8,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COAT-1002",
+				"qty": 0.2,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COATED-2003",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CUT-COC",
+				"qty": 0.8,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COAT-1003",
+				"qty": 0.2,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-1001",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-1001",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-1002",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-1002",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-1003",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-1003",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-1004",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-1004",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-1005",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-1005",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-2001",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-2001",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-2002",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-2002",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COOLED-2003",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COATED-2003",
+				"qty": 1,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-2001",
+		"base": 5.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COOLED-2001",
+				"qty": 5.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOX-2001",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-2001",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-2002",
+		"base": 5.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COOLED-2002",
+				"qty": 5.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOX-2002",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-2002",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-2003",
+		"base": 5.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COOLED-2003",
+				"qty": 5.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOX-2003",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-2003",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-2004",
+		"base": 5.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CUT-VAN",
+				"qty": 5.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOX-2004",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-2004",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-2005",
+		"base": 2.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CUT-HAZ-MINI",
+				"qty": 2.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOX-2005",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-2005",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
 	}
 ]

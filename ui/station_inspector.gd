@@ -11,7 +11,15 @@ signal placement_requested
 signal setting_requested(key: StringName, value: float)
 signal dispatch_requested(all_stock: bool)
 
+const RATE_FACTOR := &"operating_rate_factor"
+const STANDARD_SETTINGS := [&"extruder_rate", &"coater_rate", &"coater_rate_02", &"packing_rate",
+	&"batch_capacity", &"batch_capacity_02", &"cook_minutes", &"cook_minutes_02"]
 const STATIONS := {
+	&"CreamMixer": ["Cream Mixer 01", "BATCH PROCESS", []],
+	&"Spreader": ["Cream Spreader 01", "SANDWICHING", []],
+	&"Cutter": ["Wafer Cutter 01", "CONTINUOUS PROCESS", []],
+	&"CoolingTunnel": ["Cooling Tunnel 01", "RESIDENCE PROCESS", []],
+	&"Packer02": ["Packaging Line 02", "CARTON LINE", []],
 	&"RawWarehouse": ["Raw material warehouse", "ERP  ·  RM-WH", []],
 	&"SFGWarehouse": ["Wafer stock", "ERP  ·  SFG-WH", []],
 	&"Platform": ["Ingredient platform", "LAYOUT  ·  ELEVATED FLOOR", []],
@@ -36,6 +44,7 @@ const STATIONS := {
 }
 
 var _selection: StringName = &""
+var _uses_standard := false
 var _bold: Font
 var _tag: Label
 var _title: Label
@@ -116,8 +125,11 @@ func select(id: StringName, line: Line) -> void:
 		_settings.remove_child(row)
 		row.queue_free()
 	_controls.clear()
+	_uses_standard = line.erp != null and line.erp.explicit_planning and line.operating_factors.has(id)
+	if _uses_standard:
+		_add_setting(RATE_FACTOR, line.operating_factors[id] * 100, ["Operating Rate Factor (%)", 50.0, 120.0, 1.0])
 	for key: StringName in data[2]:
-		if line.erp != null and key in [&"box_kg", &"pallet_boxes"]:
+		if (_uses_standard and key in STANDARD_SETTINGS) or (line.erp != null and key in [&"box_kg", &"pallet_boxes"]):
 			continue
 		_add_setting(key, line.settings[key])
 	refresh(line)
@@ -155,6 +167,17 @@ func refresh(line: Line) -> void:
 			pallet.id, pallet.sku, pallet.order_id, pallet.boxes, pallet.mass] if pallet != null else "Pallet dispatched."
 		return
 	match _selection:
+		&"CreamMixer", &"Spreader", &"Cutter", &"CoolingTunnel", &"Packer02":
+			var cell := line.active_cell(_selection)
+			_status(line.work_center_status(_selection), Palette.IDLE if cell == null else Palette.color(cell.machine.state))
+			_readout.text = "Awaiting order" if cell == null else "Output Staging   %s" % _stock(cell.output)
+			if cell != null:
+				for code in cell.inputs:
+					_readout.text += "\n%s   %s" % [code, _stock(cell.inputs[code])]
+				if _selection == &"CoolingTunnel":
+					_readout.text += "\nInside tunnel   %.1f kg" % cell.inside
+				elif _selection == &"CreamMixer":
+					_readout.text += "\nBatch remaining   %.1f s" % cell.remaining
 		&"SFGWarehouse":
 			var total := 0.0
 			for quantity in line.erp.balances["SFG-WH"].values():
@@ -232,7 +255,9 @@ func refresh(line: Line) -> void:
 				_status(item.kind.capitalize(), Palette.SFG)
 				_readout.text = "%.2f m high" % item.height
 
-	if line.erp != null and _selection in [&"Hopper", &"Extruder", &"Oven", &"Oven02", &"Coater", &"Coater02", &"Packer"]:
+	if _uses_standard:
+		_readout.text += "\n" + line.standard_readout(_selection, line.order_at(_selection))
+	if line.erp != null and _selection in [&"Hopper", &"Extruder", &"Oven", &"Oven02", &"Coater", &"Coater02", &"Packer", &"CreamMixer", &"Spreader", &"Cutter", &"CoolingTunnel", &"Packer02"]:
 		var order := line.order_at(_selection)
 		_readout.text += "\nOrder %s · SKU %s" % [order.get("id", "—"), order.get("code", "—")]
 		if _selection == &"Packer" and not order.is_empty():
@@ -263,8 +288,9 @@ func _definition(id: StringName, line: Line) -> Array:
 
 func _machine(machine: Line.Machine, inventories: String) -> void:
 	_status(Palette.title(machine.state), Palette.color(machine.state))
-	_readout.text = "Setpoint   %.0f kg/h\nActual   %.0f kg/h\n%s\nRun output   %.1f kg" % [
-		machine.configured_rate, machine.actual_rate, inventories, machine.total_output]
+	_readout.text = "%s\nRun output   %.1f kg" % [inventories, machine.total_output]
+	if not _uses_standard:
+		_readout.text = "Setpoint   %.0f kg/h\nActual   %.0f kg/h\n" % [machine.configured_rate, machine.actual_rate] + _readout.text
 
 
 func _operator(worker: Line.Operator, line: Line) -> void:
@@ -288,8 +314,8 @@ func _stock(stock: Line.Storage) -> String:
 	return "%.1f / %.1f kg" % [stock.quantity, stock.capacity]
 
 
-func _add_setting(key: StringName, value: float) -> void:
-	var spec: Array = Line.Settings.SPECS[key]
+func _add_setting(key: StringName, value: float, custom: Array = []) -> void:
+	var spec: Array = Line.Settings.SPECS[key] if custom.is_empty() else custom
 	var row := VBoxContainer.new()
 	row.add_theme_constant_override("separation", 1)
 	_settings.add_child(row)

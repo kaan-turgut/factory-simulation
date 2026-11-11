@@ -64,11 +64,18 @@ func refresh(line: Line) -> void:
 		views[id].set_active(cart != null)
 		if cart != null:
 			views[id].fill_slots(cart.stock.occupancy())
-			if cart.coated and not cart.order_id.is_empty() and _cart_coating.get(id, "") != cart.order_id:
-				_cart_coating[id] = cart.order_id
-				var tint := _draw.material(Color(line.erp.orders[cart.order_id].recipe.spec.coating_color))
-				for wafer in views[id].inventory_slots:
-					(wafer.get_child(0) as MeshInstance3D).material_override = tint
+			if line.erp == null:
+				continue
+			var material := cart.material
+			if material.is_empty() and cart.coated and not cart.order_id.is_empty():
+				material = line.erp.orders[cart.order_id].code
+			if _cart_coating.get(id, "") == material:
+				continue
+			_cart_coating[id] = material
+			var spec: Dictionary = line.erp.catalog.materials.get(material, {})
+			var tint := _draw.material(Color(spec.get("coating_color", "#d8bd83")))
+			for wafer in views[id].inventory_slots:
+				(wafer.get_child(0) as MeshInstance3D).material_override = tint
 	_load.refresh(line.lift_load)
 	_forks.position.y = 0.07
 	if line.lift_load != null:

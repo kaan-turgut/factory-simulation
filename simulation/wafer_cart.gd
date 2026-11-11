@@ -2,10 +2,10 @@ extends RefCounted
 ## A reusable raw, cooked or coated tray cart with a physical position and one task owner.
 
 const Storage = preload("res://simulation/storage.gd")
-enum Site { PARKING, EXTRUDER, OVEN_RAW, OVEN_COOKED, COATER, TRANSIT, COATER_OUT, PACK_WIP, SFG_DOCK }
+enum Site { PARKING, EXTRUDER, OVEN_RAW, OVEN_COOKED, COATER, TRANSIT, COATER_OUT, PACK_WIP, SFG_DOCK, CELL_IN, CELL_OUT, PALLET_DOCK }
 
 const SITE_NAMES := ["Cart parking", "Extruder output", "Oven loading", "Oven unloading",
-	"Coating intake", "In transit", "Coater outfeed", "Packaging WIP", "SFG stock dock"]
+	"Coating intake", "In transit", "Coater outfeed", "Packaging WIP", "SFG stock dock", "Cell input", "Cell output", "Palletizing cart dock"]
 
 var id: StringName
 var raw: bool
@@ -18,6 +18,7 @@ var previous_position: Vector3
 var heading := PI
 var owner: StringName = &""
 var order_id := ""
+var material := ""
 
 
 func _init(key: StringName, is_raw: bool, capacity: float, parking: Vector3, is_coated: bool = false) -> void:

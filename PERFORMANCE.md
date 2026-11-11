@@ -97,3 +97,34 @@ In the matched explicit-stage runs, the open board added 0.87 MiB of tracked mem
 The existing headless regression measured legacy p95 tick times of 0.018, 0.072, 0.142, 0.285, and 0.571 ms at 1, 4, 8, 16, and 32 independent lines respectively, with zero reported mass error. The corresponding Phase 4 results were 0.018, 0.070, 0.144, 0.272, and 0.561 ms.
 
 Live dispatch reads a queue of released stage orders. The Gantt caches scheduled rows by schedule revision and paints the visible resource and time ranges. Finite-slot edits still scan the relevant bookings, and MRP sorts dated requirements and receipts when run. Benchmark those editing operations separately before scaling to substantially larger scheduling horizons.
+
+## Product standards and filled-wafer expansion
+
+The Godot 4.7.2 runs below use the same Apple M4 Pro and 30 FPS cap. The headless script samples aggregate CPU time for quarter-second ticks with at least one active commitment. The classic case uses eight cartons of FG-1001 on the checkpoint and the expanded factory. The expanded classic route adds a cooling order and uses the new rates, so the timing windows cover different amounts of production and transport. Both finish with 40 kg.
+
+| Independent halls | Checkpoint classic p50 / p95, µs | Expanded classic p50 / p95, µs | Concurrent filled orders p50 / p95, µs |
+| ---: | ---: | ---: | ---: |
+| 1 | 25 / 44 | 29 / 50 | 33 / 61 |
+| 4 | 97 / 175 | 116 / 198 | 132 / 242 |
+| 8 | 194 / 343 | 230 / 391 | 265 / 484 |
+
+The classic run used 2,029 active ticks at the checkpoint and 6,033 in the expanded hall. Per hall, worker cart pushing rose from 350.75 to 539.25 simulated seconds. The filled workload scheduled 40 milk-vanilla cartons and 24 mini hazelnut cartons, finished with 248 kg, and peaked at three committed operations and two busy floor workers per hall. It measured 50,550 active ticks and 5,627 simulated worker pushing seconds. The higher worker time reflects two longer routes and shared-cart traffic.
+
+An initial expanded classic run measured 55 µs p95 at one hall. Reusing the floor job list until a worker claims a task removed one job-list rebuild from most ticks. The final classic run measured 50 µs p95, compared with 44 µs on the checkpoint.
+
+Native background windows used 1280 × 800, the Compatibility renderer, 45 warm-up frames and 150 measured frames at 20×. Classic samples started at active packaging. The concurrent sample began once two orders were committed and both floor workers had jobs.
+
+| Native workload | FPS | CPU rendering p50 / p95, ms | Engine memory, MiB | Nodes |
+| --- | ---: | ---: | ---: | ---: |
+| Checkpoint classic | 30.0 | 9.58 / 10.90 | 68.47 | 2,404 |
+| Expanded classic | 30.0 | 8.86 / 9.99 | 72.88 | 2,682 |
+| Concurrent filled orders | 30.0 | 8.66 / 9.50 | 73.02 | 2,682 |
+
+The expanded hall adds 278 scene nodes and about 4.4 MiB to the matched classic rendering run. The native samples held the frame cap. The wider hall changes camera framing, so the lower CPU render timings apply to these views. GPU execution was unmeasured. These runs are separate from the earlier Phase 5 scheduling-board workload.
+
+To reproduce the headless workloads from the project directory, run:
+
+```sh
+godot --headless --path . --max-fps 30 --script res://tests/benchmarks/product_expansion_benchmark.gd
+godot --headless --path . --max-fps 30 --script res://tests/benchmarks/product_expansion_benchmark.gd -- filled
+```

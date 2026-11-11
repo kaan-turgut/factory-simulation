@@ -5,7 +5,7 @@ const Scheduling = preload("res://erp/scheduling.gd")
 const Catalog = preload("res://erp/catalog.gd")
 const Operator = preload("res://simulation/operator.gd")
 const EPS := 1e-7
-const RAW_LOCATIONS := ["RM-WH", "RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN", "TRANSIT"]
+const RAW_LOCATIONS := ["CREAM-IN", "PACK-IN-02", "RM-WH", "RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN", "TRANSIT"]
 const SFG_LOCATIONS := ["SFG-WH", "SFG-DECK"]
 const OPEN := ["Created", "Released", "In Progress"]
 const LINE := "LINE-01"
@@ -236,8 +236,8 @@ func component_available(order: Dictionary, code: String) -> float:
 			locations = ["SFG-WH"]
 		"coat":
 			locations = ["SFG-WH"] if code == order.recipe.input else ["RM-WH", order.route.operations[0].supply_location]
-		"pack":
-			locations = ["SFG-WH"] if code == order.recipe.input else ["RM-WH", "PACK-IN"]
+		"pack", "cream", "spread", "cut", "cool":
+			locations = ["SFG-WH"] if code in order.recipe.get("internals", [order.recipe.input]) else ["RM-WH", order.route.operations[0].supply_location]
 	var accessible := 0.0
 	for location in locations:
 		accessible += stock(code, location)
@@ -292,7 +292,7 @@ func release(id: String) -> String:
 
 
 func _release_stage(order: Dictionary) -> String:
-	var assignment := Scheduling.assignment(self, order.code, order.quantity, order.start, order.version)
+	var assignment := Scheduling.assignment(self, order.code, order.quantity, order.start, order.version, order.id)
 	if not assignment.error.is_empty():
 		return assignment.error
 	if assignment.recipe.bom_snapshot != order.recipe.bom_snapshot or assignment.route != order.route:
@@ -309,6 +309,8 @@ func _release_stage(order: Dictionary) -> String:
 		order.warning = ", ".join(reasons)
 		changed()
 		return order.warning
+	order.setup_rules = catalog.changeovers.duplicate(true)
+	order.standard = assignment.route.operations[0].standard.duplicate(true)
 	order.recipe = order.recipe.duplicate(true)
 	order.route = order.route.duplicate(true)
 	order.remaining = order.recipe.needs.duplicate()
@@ -454,6 +456,9 @@ func sample_kpis(line, seconds: float) -> void:
 	if explicit_planning and line.platform_crew.any(func(worker: Operator) -> bool:
 		return worker.state == Operator.State.UNLOADING) and orders.get(feeder_id, {}).get("stage") == "mix":
 		utilization.Hopper = float(utilization.get("Hopper", 0.0)) + seconds
+	for id in line.cell_machines:
+		if line.cell_machines[id].state == line.Machine.State.RUNNING:
+			utilization[String(id)] = float(utilization.get(String(id), 0.0)) + seconds
 	if now < _next_sample:
 		return
 	var short_orders := 0
@@ -524,9 +529,9 @@ func can_pack(pallet_needed: bool) -> bool:
 	if order.is_empty() or order.packed >= order.boxes:
 		return false
 	for code in order.recipe.packaging:
-		if stock(code, "PACK-IN") < 1.0 - EPS:
+		if stock(code, order.route.operations[0].supply_location if order.has("standard") else "PACK-IN") < 1.0 - EPS:
 			return false
-	return not pallet_needed or stock("PK-PALLET", "PACK-IN") >= 1.0 - EPS
+	return not pallet_needed or stock("PK-PALLET", order.route.operations[0].supply_location if order.has("standard") else "PACK-IN") >= 1.0 - EPS
 
 
 func pack_box(new_pallet: bool) -> bool:
@@ -648,6 +653,21 @@ func _release_manual_shipment() -> void:
 
 
 func _supply_request(order: Dictionary, sack: float) -> Dictionary:
+	if order.has("standard") and (order.stage == "cream" or order.route.operations[0].equipment == "Packer02"):
+		var items := {}
+		var location: String = order.route.operations[0].supply_location
+		for code in order.remaining:
+			if catalog.materials[code].procurement != "External":
+				continue
+			var on_hand := stock(code, location)
+			var per_batch: float = order.standard.batch_kg * order.standard.yield_factor * order.recipe.mass_inputs[code] if order.stage == "cream" else 16.0
+			var required := minf(order.remaining[code], 2.0 * per_batch)
+			if on_hand + EPS >= minf(required, per_batch):
+				continue
+			var amount := minf(stock(code, "RM-WH"), required - on_hand)
+			if amount > EPS:
+				items[code] = amount
+		return {} if items.is_empty() else {"source": "RM-WH", "target": location, "items": items, "order": order.id}
 	var recipe: Dictionary = order.recipe
 	var mixture := {}
 	for code in recipe.mix:

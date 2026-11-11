@@ -574,6 +574,12 @@ func _reset() -> void:
 
 
 func _set_setting(key: StringName, value: float) -> void:
+	if key == &"operating_rate_factor":
+		var equipment: StringName = hud.inspector._selection
+		if line.set_operating_factor(equipment, value):
+			hud.inspector.sync_setting(key, line.operating_factors[equipment] * 100)
+			_refresh()
+		return
 	var accepted := line.set_setting(key, value)
 	hud.inspector.sync_setting(key, line.settings[key])
 	var message := ""

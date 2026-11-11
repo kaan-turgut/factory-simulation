@@ -258,6 +258,11 @@
           -2.75,
           0.920000016689301,
           2.5
+        ],
+        "cart_dock": [
+          5.2,
+          0,
+          -1
         ]
       },
       "size": [
@@ -268,7 +273,7 @@
     },
     {
       "cell": [
-        77,
+        117,
         14
       ],
       "clearance": [
@@ -511,10 +516,205 @@
           -2.15
         ]
       }
+    },
+    {
+      "id": "CreamMixer",
+      "kind": "machine",
+      "cell": [
+        75,
+        25
+      ],
+      "size": [
+        5,
+        5
+      ],
+      "height": 3.3,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.7
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.7
+        ],
+        "supply": [
+          -1.5,
+          0,
+          -7.5
+        ]
+      }
+    },
+    {
+      "id": "Spreader",
+      "kind": "machine",
+      "cell": [
+        81,
+        24
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "Cutter",
+      "kind": "machine",
+      "cell": [
+        91,
+        24
+      ],
+      "size": [
+        5,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "CoolingTunnel",
+      "kind": "machine",
+      "cell": [
+        100,
+        24
+      ],
+      "size": [
+        8,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "Packer02",
+      "kind": "machine",
+      "cell": [
+        110,
+        24
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
     }
   ],
   "size": [
-    88,
-    32
+    128,
+    40
   ]
 }

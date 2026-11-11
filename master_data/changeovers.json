@@ -1,0 +1,50 @@
+[
+  {
+    "id": "MATERIAL",
+    "operation": "*",
+    "dimension": "material",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 30
+  },
+  {
+    "id": "COAT",
+    "operation": "coat",
+    "dimension": "coating",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 600
+  },
+  {
+    "id": "FILL",
+    "operation": "spread",
+    "dimension": "flavor",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 180
+  },
+  {
+    "id": "MIX",
+    "operation": "cream",
+    "dimension": "flavor",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 180
+  },
+  {
+    "id": "FORMAT",
+    "operation": "pack",
+    "dimension": "packaging_format",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 300
+  },
+  {
+    "id": "NUT-CLEAN",
+    "operation": "*",
+    "dimension": "cleaning_group",
+    "from_value": "hazelnut",
+    "to_value": "plain",
+    "seconds": 900
+  }
+]

@@ -132,8 +132,9 @@ func load_layout(path: String = PATH, newer_only: bool = false) -> String:
 	var size := line.layout.grid.size
 	var dimensions: Variant = data.get("size")
 	if data.get("version") != 1 or not dimensions is Array or dimensions.size() != 2 \
-			or dimensions[0] != size.x or dimensions[1] != size.y or not data.get("placements") is Dictionary:
-		return "The saved layout does not match this factory size or version."
+			or not Layout.Master.number(dimensions[0], 88, size.x, true) \
+			or not Layout.Master.number(dimensions[1], 29, size.y, true) or not data.get("placements") is Dictionary:
+		return "The saved layout does not fit this factory size or version."
 	var stamp: Variant = data.get("saved_at", 0.0)
 	if not Layout.Master.number(stamp):
 		return "The saved layout has an invalid save timestamp."
@@ -149,7 +150,10 @@ func load_layout(path: String = PATH, newer_only: bool = false) -> String:
 		if not Layout.Master.number(pose[0], 0, size.x, true) or not Layout.Master.number(pose[1], 0, size.y, true) \
 				or not Layout.Master.number(pose[2], 0, 3, true):
 			return "Invalid coordinates or rotation for %s." % id
-		changes[id] = item.at(Vector2i(int(pose[0]), int(pose[1])), int(pose[2]))
+		var cell := Vector2i(int(pose[0]), int(pose[1]))
+		if id == &"Warehouse":
+			cell.x += size.x - int(dimensions[0])
+		changes[id] = item.at(cell, int(pose[2]))
 	var reason := apply(changes)
 	if reason.is_empty():
 		line.layout_file_stamp = stamp

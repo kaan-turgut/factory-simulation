@@ -16,7 +16,9 @@
 			"RM-COAT-1002",
 			"RM-COAT-1003",
 			"RM-COAT-1004",
-			"RM-COAT-1005"
+			"RM-COAT-1005",
+			"RM-COCOA",
+			"RM-HAZELNUT"
 		],
 		"id": "SUP-02",
 		"lead": 90.0,
@@ -27,7 +29,10 @@
 	{
 		"codes": [
 			"RM-OIL",
-			"RM-WATER"
+			"RM-WATER",
+			"RM-FAT",
+			"RM-MILK",
+			"RM-VANILLA"
 		],
 		"id": "SUP-03",
 		"lead": 60.0,
@@ -47,7 +52,17 @@
 			"PK-BOX-1004",
 			"PK-LABEL-1004",
 			"PK-BOX-1005",
-			"PK-LABEL-1005"
+			"PK-LABEL-1005",
+			"PK-BOX-2001",
+			"PK-LABEL-2001",
+			"PK-BOX-2002",
+			"PK-LABEL-2002",
+			"PK-BOX-2003",
+			"PK-LABEL-2003",
+			"PK-BOX-2004",
+			"PK-LABEL-2004",
+			"PK-BOX-2005",
+			"PK-LABEL-2005"
 		],
 		"id": "SUP-04",
 		"lead": 60.0,

@@ -6,8 +6,8 @@ const Grid = preload("res://layout/factory_grid.gd")
 const Placement = preload("res://layout/placement.gd")
 const Rules = preload("res://layout/placement_rules.gd")
 
-const DEFAULT_SIZE := Vector2i(88, 32)
-const MIN_SIZE := Vector2i(88, 29)
+const DEFAULT_SIZE := Vector2i(128, 40)
+const MIN_SIZE := Vector2i(128, 32)
 const ORIGIN := Vector3(-32, 0, 13)
 const PLATFORM_HEIGHT := 3.5
 const CART_LANE := 11.2
@@ -28,7 +28,7 @@ const LINKS := {
 }
 
 const LINKED_GROUPS := [[&"Extruder", &"Hopper"], [&"Packer", &"PackagingWIP", &"Palletizer"]]
-const SUPPLY_STATIONS := {"COAT-IN": &"Coater", "COAT-IN-02": &"Coater02", "PACK-IN": &"Packer"}
+const SUPPLY_STATIONS := {"COAT-IN": &"Coater", "COAT-IN-02": &"Coater02", "PACK-IN": &"Packer", "CREAM-IN": &"CreamMixer", "PACK-IN-02": &"Packer02"}
 
 var error := ""
 var grid: Grid
@@ -51,19 +51,29 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 		return "factory_layout.json: expected size and equipment definitions."
 	var data: Dictionary = result.data
 	var configured := Vector2i(int(data.size[0]), int(data.size[1]))
-	if configured != configured.max(MIN_SIZE):
+	if snapshot.is_empty() and configured != configured.max(MIN_SIZE):
 		return "factory_layout.json size: too small for factory aisles."
 	grid = Grid.new(configured if dimensions == Vector2i.ZERO else dimensions.max(MIN_SIZE), ORIGIN)
 	var width := grid.size.x
-	var definitions: Array = data.objects.duplicate()
-	if not snapshot.is_empty() and not definitions.any(func(row: Dictionary) -> bool: return row.get("id") == "SFGWarehouse"):
+	var definitions: Array = data.objects.duplicate(true)
+	if not snapshot.is_empty():
 		var defaults := Master.read("factory_layout", directory)
 		if not defaults.error.is_empty():
 			return defaults.error
+		var missing := false
 		for row in defaults.data.objects:
-			if row.id == "SFGWarehouse":
+			if not definitions.any(func(saved: Dictionary) -> bool: return saved.get("id") == row.id):
 				definitions.append(row)
-				break
+				missing = true
+		if missing:
+			for definition in definitions:
+				if definition.id == "Palletizer" and not definition.ports.has("cart_dock"):
+					for row in defaults.data.objects:
+						if row.id == "Palletizer":
+							definition.ports["cart_dock"] = row.ports.cart_dock
+							break
+			grid = Grid.new(grid.size.max(Vector2i(defaults.data.size[0], defaults.data.size[1])), ORIGIN)
+			width = grid.size.x
 	for row in definitions:
 		if not row is Dictionary or not row.get("id") is String or row.id.is_empty() or objects.has(StringName(row.id)):
 			return "factory_layout.json: missing or duplicate equipment ID."
@@ -78,7 +88,7 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 			if not _numbers(point, 3, false, -INF):
 				return "factory_layout.json [%s].ports.%s: expected three finite coordinates." % [row.id, key]
 			ports[StringName(key)] = Vector3(point[0], point[1], point[2])
-		var x := int(row.cell[0]) + (width - configured.x if row.id == "Warehouse" else 0)
+		var x := int(row.cell[0]) + (width - configured.x if row.id == "Warehouse" and dimensions != Vector2i.ZERO else 0)
 		var movable: bool = row.movable
 		if not snapshot.is_empty() and not snapshot.has("placement_revision"):
 			movable = movable or StringName(row.id) in [&"Extruder", &"Hopper", &"PackagingWIP", &"Palletizer", &"Warehouse"]
@@ -425,6 +435,10 @@ func _dock_points(plan: Dictionary) -> Array[Vector3]:
 		port(&"Coater02", &"coated_dock", plan), port(&"PackagingWIP", &"coated_dock", plan),
 		port(&"SFGWarehouse", &"stock_dock", plan)
 	]
+	for item: Placement in plan.values():
+		for name in [&"input_dock", &"output_dock", &"cart_dock"]:
+			if item.ports.has(name):
+				points.append(item.port(grid, name))
 	for index in MAX_CARTS:
 		points.append(cart_home(index, true))
 		points.append(cart_home(index, false))

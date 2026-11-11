@@ -9,7 +9,8 @@
 		"package_color": "#5974bc",
 		"packs_per_box": 50,
 		"shelf_days": 180,
-		"wafer": "Crisp wheat wafer"
+		"wafer": "Crisp wheat wafer",
+		"packaging_format": "standard"
 	},
 	{
 		"boxes_per_pallet": 8,
@@ -21,7 +22,8 @@
 		"package_color": "#51346a",
 		"packs_per_box": 50,
 		"shelf_days": 180,
-		"wafer": "Crisp wheat wafer"
+		"wafer": "Crisp wheat wafer",
+		"packaging_format": "standard"
 	},
 	{
 		"boxes_per_pallet": 8,
@@ -33,7 +35,8 @@
 		"package_color": "#d1b256",
 		"packs_per_box": 50,
 		"shelf_days": 180,
-		"wafer": "Crisp wheat wafer"
+		"wafer": "Crisp wheat wafer",
+		"packaging_format": "standard"
 	},
 	{
 		"boxes_per_pallet": 8,
@@ -45,7 +48,8 @@
 		"package_color": "#4d866c",
 		"packs_per_box": 50,
 		"shelf_days": 180,
-		"wafer": "Crisp wheat wafer"
+		"wafer": "Crisp wheat wafer",
+		"packaging_format": "standard"
 	},
 	{
 		"boxes_per_pallet": 8,
@@ -57,6 +61,72 @@
 		"package_color": "#c65376",
 		"packs_per_box": 50,
 		"shelf_days": 180,
-		"wafer": "Crisp wheat wafer"
+		"wafer": "Crisp wheat wafer",
+		"packaging_format": "standard"
+	},
+	{
+		"code": "FG-2001",
+		"coating": "Milk",
+		"wafer": "Filled wheat wafer",
+		"family": "Filled wafers",
+		"coating_color": "#86533f",
+		"package_color": "#5a8dc0",
+		"pack_kg": 0.1,
+		"packs_per_box": 50,
+		"boxes_per_pallet": 8,
+		"shelf_days": 150,
+		"packaging_format": "cream"
+	},
+	{
+		"code": "FG-2002",
+		"coating": "Dark",
+		"wafer": "Filled wheat wafer",
+		"family": "Filled wafers",
+		"coating_color": "#492b26",
+		"package_color": "#7f5c94",
+		"pack_kg": 0.1,
+		"packs_per_box": 50,
+		"boxes_per_pallet": 8,
+		"shelf_days": 150,
+		"packaging_format": "cream"
+	},
+	{
+		"code": "FG-2003",
+		"coating": "White",
+		"wafer": "Filled wheat wafer",
+		"family": "Filled wafers",
+		"coating_color": "#f2d6a0",
+		"package_color": "#d1ab5c",
+		"pack_kg": 0.1,
+		"packs_per_box": 50,
+		"boxes_per_pallet": 8,
+		"shelf_days": 150,
+		"packaging_format": "cream"
+	},
+	{
+		"code": "FG-2004",
+		"coating": "None",
+		"wafer": "Filled wheat wafer",
+		"family": "Filled wafers",
+		"coating_color": "#e9d6a1",
+		"package_color": "#9da96d",
+		"pack_kg": 0.1,
+		"packs_per_box": 50,
+		"boxes_per_pallet": 8,
+		"shelf_days": 150,
+		"packaging_format": "cream"
+	},
+	{
+		"code": "FG-2005",
+		"coating": "None",
+		"wafer": "Filled wheat wafer",
+		"family": "Filled wafers",
+		"coating_color": "#b68b5f",
+		"package_color": "#c18c55",
+		"pack_kg": 0.05,
+		"packs_per_box": 40,
+		"boxes_per_pallet": 8,
+		"shelf_days": 150,
+		"packaging_format": "mini"
 	}
 ]

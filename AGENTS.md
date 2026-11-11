@@ -16,7 +16,7 @@ The goal is to combine realistic industrial production behavior with an accessib
 
 ## Simulation Requirements
 - Use deterministic simulation time, independent of frame rate.
-- Express production rates in kg per simulated hour.
+- Use product, operation, and work center standards for planning and execution. Keep native units for rate standards and use kg for physical food mass.
 - Enforce inventory capacity constraints and material conservation.
 - Model starvation, blocking, and downstream constraints.
 - Ensure simulation speed multipliers affect simulated time rather than configured machine rates.
@@ -61,13 +61,13 @@ The goal is to combine realistic industrial production behavior with an accessib
 ## Detailed Scheduling
 - Each manufactured stage requires its own scheduled and released order. A demand, proposal, scheduled receipt, or pegging link cannot start equipment or satisfy a physical release check.
 - Reserve only immediate BOM components, atomically. Post issues and receipts when simulated work or transport actually occurs.
-- Keep planned intervals separate from actual times. Freeze the executable route, capacity parameters, and BOM on release. Check both calendar and finite resource availability for schedule edits.
+- Keep planned intervals separate from actual times. Freeze the executable route, production standard, setup rules, and BOM on release. Check both calendar and finite resource availability for schedule edits.
 - Keep the Gantt a readout and editor of authoritative orders. Run the detailed scheduling test for changes to planning, routing, WIP handoffs, or ERP persistence.
 
 ## External Master Data
 - Keep demonstration definitions in `master_data/` and validate references, machine capabilities, and physical ports before starting a shift.
 - Preserve released routing and BOM snapshots. Keep work-center commitments and cart ownership tied to production order IDs.
-- Run the alternative routing integration test when changing dispatch, transport, eligibility, or save migration.
+- Run the alternative routing integration test when changing dispatch, transport, eligibility, or save migration. Run the production standards suite for changes to rate models, expanded cells, or their save data.
 
 ## Layout Editing
 - Validate the entire proposed plan before confirming moves, including linked equipment, clearances, and all logistics approaches.

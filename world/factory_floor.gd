@@ -19,6 +19,13 @@ const AMBER := Color("#d8a250")
 const OVEN_RED := Color("#a85d4b")
 const COCOA := Color("#745148")
 const SAFETY := Color("#edbf64")
+const CELL_ART := {
+	&"CreamMixer": ["Cream Mixer 01", Color("#b79b66")],
+	&"Spreader": ["Cream Spreader 01", Color("#7b9a79")],
+	&"Cutter": ["Wafer Cutter 01", Color("#bf8750")],
+	&"CoolingTunnel": ["Cooling Tunnel 01", Color("#568ea3")],
+	&"Packer02": ["Packaging Line 02", Color("#806c99")]
+}
 
 var layout: Layout
 var _draw := Primitives.new()
@@ -41,6 +48,9 @@ var _shuttle_cargo: Node3D
 var _raw_revision := -1
 var _coating_colors := {}
 var _erp_enabled := false
+var _cell_parts := {}
+var _cooling_marks: Array[Node3D] = []
+var _cream_supplies: Array[Node3D] = []
 
 
 func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
@@ -53,6 +63,9 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	_oven_doors.clear()
 	_oven_heaters.clear()
 	_coating_drums.clear()
+	_cell_parts.clear()
+	_cooling_marks.clear()
+	_cream_supplies.clear()
 	layout = floor_plan
 	for child in get_children():
 		remove_child(child)
@@ -77,6 +90,9 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 		_build_raw_warehouse()
 		_build_sfg_warehouse()
 		_build_shuttle()
+		for id: StringName in CELL_ART:
+			_build_cell(id)
+		_bay(layout.cart_body_center(layout.port(&"Palletizer", &"cart_dock")) + Vector3.UP * 0.032, Vector2(1.5, 1.45), TEAL)
 	_draw.batch_static(self, _warehouse_markers)
 	for station in _equipment.values():
 		_draw.batch_static(station, [station.beacon])
@@ -142,6 +158,7 @@ func refresh(line: Line) -> void:
 	_logistics.refresh(line)
 	if line.erp != null and _erp_enabled:
 		_refresh_erp(line)
+		_refresh_cells(line)
 
 
 func animate(line: Line, delta: float) -> void:
@@ -156,6 +173,7 @@ func animate(line: Line, delta: float) -> void:
 	_animate_station(line, &"Oven", &"Coater", line.oven, line.coater, delta)
 	if _erp_enabled:
 		_animate_station(line, &"Oven02", &"Coater02", line.ovens[&"Oven02"], line.coaters[&"Coater02"], delta)
+		_animate_cells(line)
 
 
 func _refresh_oven(id: StringName, title: String, machine: Line.Oven) -> void:
@@ -191,9 +209,13 @@ func show_route(order: Dictionary) -> void:
 	var tint := Color("#61ebde")
 	var steps := []
 	for op in order.route.operations:
-		if op.type == "pack":
+		if op.type == "pack" and op.equipment == "Packer":
 			steps.append([&"PackagingWIP", "Cart delivery · WIP"])
+		elif op.type in ["spread", "cut", "cool"] or op.equipment == "Packer02":
+			steps.append([&"SFGWarehouse", "Reserved wafer stock"])
 		steps.append([StringName(op.equipment), "%02d  %s" % [op.number, op.description]])
+		if op.equipment == "Packer02":
+			steps.append([&"Palletizer", "Cart delivery · cartons"])
 	for step in steps:
 		var point := layout.center(step[0])
 		point.y += layout.objects[step[0]].height + 2.15
@@ -568,6 +590,92 @@ func _build_sfg_warehouse() -> void:
 		node.inventory_slots.append(stock)
 	_bay(layout.cart_body_center(layout.port(&"SFGWarehouse", &"stock_dock")) + Vector3.UP * 0.033,
 		Vector2(1.51, 1.46), TEAL)
+
+
+func _build_cell(id: StringName) -> void:
+	var art: Array = CELL_ART[id]
+	var node := _station(id, art[0], art[1])
+	var size: Vector2i = layout.objects[id].size
+	_base(node)
+	match id:
+		&"CreamMixer":
+			_draw.cylinder(node, Vector3(0, 1.46, 0), 1.32, 2.1, METAL)
+			_draw.cylinder(node, Vector3(0, 2.46, 0), 1.37, 0.24, art[1])
+			var motor := _pivot(node, Vector3(0, 2.68, 0))
+			_draw.box(motor, Vector3.ZERO, Vector3(1.05, 0.34, 0.44), STEEL)
+			_cell_parts[id] = motor
+			_draw.box(node, Vector3(0, 0.95, -1.38), Vector3(0.9, 0.56, 0.65), art[1])
+			for index in 4:
+				_cream_supplies.append(_stock.sack(node, Vector3(-1.75 + index * 0.48, 0.64, -1.88)))
+		&"CoolingTunnel":
+			_draw.box(node, Vector3(0, 0.92, 0), Vector3(size.x - 0.3, 0.42, 2.64), INK)
+			_draw.box(node, Vector3(0, 1.9, 0), Vector3(size.x - 1.6, 0.40, 2.85), art[1])
+			for x: float in [-2.65, -0.9, 0.9, 2.65]:
+				_draw.box(node, Vector3(x, 1.44, -1.26), Vector3(0.18, 1.1, 0.2), art[1])
+				_draw.box(node, Vector3(x, 1.44, 1.26), Vector3(0.18, 1.1, 0.2), art[1])
+			for index in 6:
+				_cooling_marks.append(_stock.wafer(node, Vector3(-3.15 + 1.1 * index, 1.18, 0),
+					Stock.CHOCOLATE, Vector3(0.44, 0.12, 0.55)))
+		_:
+			_draw.box(node, Vector3(0, 0.91, 0), Vector3(size.x - 0.4, 0.55, 2.34), art[1])
+			var movement := _pivot(node, Vector3(0, 1.64, -0.12))
+			_cell_parts[id] = movement
+			for x: float in [-1.3, 1.3]:
+				_draw.box(node, Vector3(x, 1.52, 0), Vector3(0.22, 1.64, 1.55), STEEL)
+			_draw.box(movement, Vector3.ZERO, Vector3(2.36, 0.32, 0.73), METAL)
+			if id == &"Cutter":
+				for index in 5:
+					_draw.box(movement, Vector3(-0.84 + index * 0.42, -0.21, 0), Vector3(0.10, 0.24, 0.58), PALE)
+			if id == &"Packer02":
+				_draw.box(node, Vector3(0, 2.13, -0.07), Vector3(2.6, 0.44, 1.6), art[1])
+	for index in 4:
+		node.inventory_slots.append(_stock.wafer(node, Vector3(-0.66 + index * 0.44, 1.25, -0.76),
+			Stock.COOKED, Vector3(0.34, 0.16, 0.42)))
+	_console(node, Vector3(1.63, 1.46, -1.13), art[1])
+	_beacon(node, Vector3(1.74, 2.27, 0.96))
+	for port in [&"input_dock", &"output_dock"]:
+		_bay(layout.cart_body_center(layout.port(id, port)) + Vector3.UP * 0.032, Vector2(1.5, 1.45), art[1])
+
+
+func _refresh_cells(line: Line) -> void:
+	for id in CELL_ART:
+		var node := _equipment[id]
+		var cell := line.active_cell(id)
+		node.update_machine(CELL_ART[id][0], line.work_center_status(id),
+			Palette.IDLE if cell == null else Palette.color(cell.machine.state))
+		node.fill_slots(0.0 if cell == null else cell.output.occupancy())
+		if id == &"Cutter" and cell != null:
+			var spec: Dictionary = line.order_at(id).recipe.spec
+			var length_mm: float = spec.get("dimensions_mm", [80])[0]
+			for item in node.inventory_slots:
+				item.scale.x = clampf(length_mm / 80.0, 0.25, 1.25)
+	var staged := 0.0
+	for quantity in line.erp.balances["CREAM-IN"].values():
+		staged += float(quantity)
+	for index in _cream_supplies.size():
+		_cream_supplies[index].visible = staged > index * 15.0
+	var tunnel := line.active_cell(&"CoolingTunnel")
+	for index in _cooling_marks.size():
+		_cooling_marks[index].visible = tunnel != null and index < ceili(tunnel.inside / tunnel.standard.internal_kg * _cooling_marks.size())
+
+
+func _animate_cells(line: Line) -> void:
+	for id in _cell_parts:
+		var cell := line.active_cell(id)
+		if cell == null:
+			continue
+		var part: Node3D = _cell_parts[id]
+		if id == &"CreamMixer":
+			part.rotation.y = fposmod(cell.remaining * 3.0, TAU)
+		else:
+			part.position.y = 1.64 + sin(cell.produced * 2.7) * 0.13
+	var tunnel := line.active_cell(&"CoolingTunnel")
+	if tunnel != null and not tunnel.cohorts.is_empty():
+		var residence: float = tunnel.standard.residence_seconds
+		for index in _cooling_marks.size():
+			var cohort: Array = tunnel.cohorts[floori(float(index * tunnel.cohorts.size()) / _cooling_marks.size())]
+			var progress := 1.0 - clampf((cohort[0] - line.erp.now) / residence, 0.0, 1.0)
+			_cooling_marks[index].position.x = lerpf(-3.15, 3.15, progress)
 
 
 func _build_shuttle() -> void:
