@@ -19,6 +19,7 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 
 ## Agent interface (added Nov 2026)
 - `agent/` exposes the ERP and simulation to AI planning agents: `agent_api.gd` (JSON commands), `work_center_monitor.gd` (read-only state-time buckets), `server.gd` (TCP, newline JSON) and `mcp_bridge.py` (stdlib-only MCP stdio bridge, registered in `.mcp.json`). Scenarios live in `scenarios/`.
+- Live mode: `godot --path . -- --agent-port 8765` starts `agent/agent_link.gd` inside `scenes/factory.gd`. The API then attaches to the game's line (`attach`), time commands reply from `live_step` after the game has played them, and `on_line_replaced` hands scenario loads and restores back to the scene. Autosave on close is off while the link is open. The link refuses `shutdown` in the game.
 - Agent actions must go through the same ERP functions as the UI. Never give the agent a shortcut that bypasses release checks, reservations or the ledger.
 - Command argument specs follow `"[optional ]<string|number|int|bool|array>[: note]"`. The bridge builds MCP schemas from them.
 - Run `tests/agent_api_test.gd` after changing anything in `agent/`, ERP command signatures, MRP output, or order/demand fields.

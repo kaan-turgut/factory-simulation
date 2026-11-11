@@ -11,6 +11,8 @@ const GridView = preload("res://world/grid_view.gd")
 const Layout = Line.Layout
 const Editor = preload("res://layout/layout_editor.gd")
 const NO_CELL := Vector2i(-2147483648, -2147483648)
+const AgentAPI = preload("res://agent/agent_api.gd")
+const AgentLink = preload("res://agent/agent_link.gd")
 
 @export var building_cells := Vector2i.ZERO
 @export var erp_enabled := true
@@ -45,6 +47,7 @@ var _preview_reason := ""
 var _highlighted_order := ""
 var _save_load_error := ""
 var _layout_refitted := false
+var _agent_link: AgentLink
 @onready var floor_view: Floor = $Floor
 @onready var camera: Orbit = $OrbitCamera
 @onready var hud: HUD = $HUD
@@ -119,6 +122,7 @@ func _ready() -> void:
 		hud.set_hint("Saved layout pending · " + layout_note)
 	_refresh()
 	floor_view.animate(line, 0.0)
+	_start_agent_link()
 
 
 func _process(delta: float) -> void:
@@ -127,6 +131,9 @@ func _process(delta: float) -> void:
 	line.advance(delta)
 	if line.elapsed_ticks != previous_tick:
 		_refresh()
+	if _agent_link != null:
+		_agent_link.tick((line.elapsed_ticks - previous_tick) * Line.STEP_SECONDS)
+		_agent_link.poll()
 	if line.playing:
 		floor_view.animate(line, delta)
 		if _selected != &"" and not line.layout.objects.has(_selected) and not Layout.LINKS.has(_selected):
@@ -680,21 +687,53 @@ func _load_shift() -> void:
 	if not saved.error.is_empty():
 		terminal.notice(saved.error)
 		return
-	_select(&"")
-	line = saved.line
-	editor = Editor.new(line)
 	_save_load_error = ""
+	_adopt_line(saved.line)
+	if _agent_link != null:
+		_agent_link.api.attach(line)
+	terminal.notice("Saved shift fitted to the updated factory and paused." if saved.get("refitted", false)
+		else "Saved shift restored and paused.")
+
+
+## Show a different shift: after loading a save, or when the agent loads a scenario or restores a snapshot.
+func _adopt_line(next: Line) -> void:
+	_select(&"")
+	line = next
+	editor = Editor.new(line)
 	_highlighted_order = ""
 	_rebuild_world()
 	terminal.bind(line)
 	_refresh()
 	floor_view.animate(line, 0.0)
-	terminal.notice("Saved shift fitted to the updated factory and paused." if saved.get("refitted", false)
-		else "Saved shift restored and paused.")
+
+
+## `-- --agent-port 8765` lets an AI agent plan and run this visible shift over the agent protocol.
+func _start_agent_link() -> void:
+	var args := OS.get_cmdline_user_args()
+	var index := args.find("--agent-port")
+	if index < 0 or not erp_enabled:
+		return
+	var port := int(args[index + 1]) if index + 1 < args.size() and args[index + 1].is_valid_int() else 8765
+	var api := AgentAPI.new(line)
+	api.on_line_replaced = _adopt_line
+	api.on_playing = _set_playing
+	api.on_speed = _set_speed
+	_agent_link = AgentLink.new(api)
+	_agent_link.allow_shutdown = false
+	var error := _agent_link.listen(port)
+	if not error.is_empty():
+		_agent_link = null
+		hud.set_hint("Agent link not started. " + error)
+		return
+	# An agent run must never overwrite the player's saved shift on close.
+	get_tree().auto_accept_quit = true
+	print("AGENT_SERVER_READY %d" % port)
+	hud.set_hint("Agent link open on port %d. Agent time commands play the shift here; your own save is not touched on close." % port)
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and erp_enabled and resume_saved and line != null and line.erp != null:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and erp_enabled and resume_saved and line != null and line.erp != null \
+			and _agent_link == null:
 		var error := SaveGame.save(line)
 		if error.is_empty():
 			get_tree().quit()

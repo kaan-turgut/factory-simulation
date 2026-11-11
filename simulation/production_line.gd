@@ -12,7 +12,7 @@ const Cart = preload("res://simulation/wafer_cart.gd")
 const Oven = preload("res://simulation/batch_oven.gd")
 const Pallet = preload("res://simulation/pallet.gd")
 
-const SPEEDS := [1, 5, 20]
+const SPEEDS := [1, 5, 20, 60]
 const STEP_SECONDS := 0.25
 const STEP_HOURS := STEP_SECONDS / 3600.0
 const EPSILON := Storage.MASS_EPSILON

@@ -3,7 +3,11 @@ extends RefCounted
 ##
 ## Every action goes through the same ERP functions the terminal buttons call, so an agent
 ## plays by the same rules as a human planner. Observations are compact summaries.
-## Time only moves when the agent calls `advance` or `run_until`, so runs are deterministic.
+##
+## Headless: the API owns its line, and `advance`/`run_until` simulate instantly and deterministically.
+## Live: `attach` binds the API to the factory shown in the game. Time commands then play the
+## shift on screen and reply when they finish (handle returns {"pending": true} and the reply
+## comes from `live_step`). With `agent_paced`, the game pauses again after each time command.
 
 const Line = preload("res://simulation/production_line.gd")
 const Plan = preload("res://erp/mrp.gd")
@@ -23,6 +27,13 @@ var scenario := {}
 var demand_met_at := {}
 var decisions: Array[Dictionary] = []
 var events: Array[Dictionary] = []
+var live := false
+var agent_paced := true
+## Live callbacks into the game: a replaced line, play/pause and speed changes.
+var on_line_replaced := Callable()
+var on_playing := Callable()
+var on_speed := Callable()
+var _job := {}
 var _snapshots := {}
 var _order_status := {}
 var _po_status := {}
@@ -75,15 +86,33 @@ var COMMANDS := {
 	"run_until": {"description": "Run until one of the stop events happens or max_seconds pass.",
 		"args": {"max_seconds": "number", "stop_on": "optional array: any of " + ", ".join(EVENT_KINDS) + "; default " + ", ".join(DEFAULT_STOPS)}},
 	"snapshot": {"description": "Save the whole shift in memory under a name, for what-if experiments.", "args": {"name": "string"}},
-	"restore": {"description": "Go back to a named snapshot, discarding everything since.", "args": {"name": "string"}},
+	"restore": {"description": "Go back to a named snapshot, discarding everything since. In live mode the game view rewinds too.", "args": {"name": "string"}},
+	"set_speed": {"description": "Live mode: game speed while time commands run (1, 5, 20 or 60x). Headless runs ignore it.", "args": {"multiplier": "int"}},
+	"save_shift": {"description": "Write the shift to a save file. Without a path it replaces the game's own save slot, which the game's Load button reads; that needs replace_game_save true.",
+		"args": {"path": "optional string: user:// or absolute path", "replace_game_save": "optional bool"}},
 	"score": {"description": "Service level, lateness, finished boxes, working share per work center and purchase spend so far.", "args": {}},
 	"log_decision": {"description": "Record a decision, finding or recommendation with its reasoning in the run log.", "args": {"text": "string"}},
 	"run_log": {"description": "All actions, decisions and events so far.", "args": {}},
 }
 
 
-func _init() -> void:
-	_new_line()
+func _init(existing: Line = null) -> void:
+	if existing == null:
+		_new_line()
+	else:
+		attach(existing)
+
+
+## Bind to a line the game owns and shows. The game drives time; call live_step after each frame.
+func attach(existing: Line) -> void:
+	live = true
+	line = existing
+	plan = Plan.new()
+	_job = {}
+	monitor.reset()
+	demand_met_at.clear()
+	_demand_flagged.clear()
+	_remember_statuses()
 
 
 func handle(request: Dictionary) -> Dictionary:
@@ -94,6 +123,10 @@ func handle(request: Dictionary) -> Dictionary:
 	if line == null or not line.validation_error.is_empty():
 		if command != "load_scenario" and command != "describe":
 			return {"ok": false, "error": "The shift is not valid: " + (line.validation_error if line else "no line")}
+	if live and command in ["advance", "run_until"]:
+		return _start_job(command, args)
+	if live and not _job.is_empty() and command in ["load_scenario", "restore"]:
+		return {"ok": false, "error": "A time command is still running."}
 	var result: Variant = call("_cmd_" + command, args)
 	var response: Dictionary = result if result is Dictionary else {"result": result}
 	if not response.has("ok"):
@@ -105,12 +138,20 @@ func handle(request: Dictionary) -> Dictionary:
 # --- Setup -----------------------------------------------------------------
 
 func _new_line() -> void:
-	line = Line.new()
+	var previous := line
+	# A live game keeps its own floor plan; headless runs use the master-data layout.
+	line = Line.new(previous.layout if live and previous != null else null)
 	line.enable_erp()
 	if not line.validation_error.is_empty():
+		if live:
+			line = previous
 		return
-	line.multiplier = 1
-	line.set_playing(true)
+	if live:
+		line.multiplier = previous.multiplier
+		_replaced()
+	else:
+		line.multiplier = 1
+		line.set_playing(true)
 	plan = Plan.new()
 	monitor.reset()
 	demand_met_at.clear()
@@ -188,6 +229,7 @@ func _cmd_status(_args: Dictionary) -> Dictionary:
 		if not order.is_empty():
 			running.append({"center": center.id, "order": order.id, "code": order.code, "state": line.work_center_status(StringName(center.equipment))})
 	return {"scenario": scenario.get("name", "default"), "horizon_seconds": scenario.get("horizon_seconds", 0),
+		"mode": "live" if live else "headless", "playing": line.playing, "speed": line.multiplier,
 		"orders_by_status": counts, "open_purchase_orders": open_po, "auto_release": line.erp.auto_release,
 		"active_work_centers": running, "orders_with_delay_or_warning": delayed,
 		"demands": _demand_summary(), "finished_boxes": _finished_boxes()}
@@ -572,6 +614,91 @@ func _remember_statuses() -> void:
 		_po_status[po.id] = po.status
 
 
+# --- Live time ---------------------------------------------------------------
+
+func _start_job(command: String, args: Dictionary) -> Dictionary:
+	if not _job.is_empty():
+		return {"ok": false, "error": "Another time command is still running."}
+	var limit := float(args.get("seconds" if command == "advance" else "max_seconds", 3600 if command == "run_until" else 0))
+	if not is_finite(limit) or limit <= 0.0 or limit > MAX_ADVANCE:
+		return {"ok": false, "error": "The time span must be between 0 and %d seconds." % MAX_ADVANCE}
+	var stops: Array = args.get("stop_on", DEFAULT_STOPS) if command == "run_until" else []
+	for kind in stops:
+		if kind not in EVENT_KINDS:
+			return {"ok": false, "error": "Unknown stop event %s." % kind}
+	if not line.playing:
+		_set_playing(true)
+	if not line.playing:
+		return {"ok": false, "error": "The game cannot play right now. Leave Build Mode and try again."}
+	_job = {"command": command, "start": line.erp.now, "end": line.erp.now + limit, "stops": stops, "found": []}
+	_log(command, {"args": args})
+	return {"pending": true}
+
+
+## Live mode: account for simulated time the game just played. Returns the reply of a finished
+## time command, or an empty dictionary.
+func live_step(seconds: float) -> Dictionary:
+	if seconds > 0.0:
+		monitor.sample(line, seconds)
+		var fresh := _detect_events()
+		events.append_array(fresh)
+		if not _job.is_empty():
+			_job.found.append_array(fresh)
+	if _job.is_empty():
+		return {}
+	var stopped: bool = _job.found.any(func(event: Dictionary) -> bool: return event.kind in _job.stops)
+	if not stopped and line.erp.now < _job.end - 1e-6:
+		return {}
+	var reply := {"ok": true, "advanced": _t(line.erp.now - _job.start), "events": _job.found, "now": _t(line.erp.now)}
+	if _job.command == "run_until":
+		reply.stopped_by_event = stopped
+	_job = {}
+	if agent_paced:
+		_set_playing(false)
+	return reply
+
+
+func busy() -> bool:
+	return not _job.is_empty()
+
+
+func _set_playing(enabled: bool) -> void:
+	if on_playing.is_valid():
+		on_playing.call(enabled)
+	else:
+		line.set_playing(enabled)
+
+
+func _replaced() -> void:
+	_job = {}
+	_remember_statuses()
+	if on_line_replaced.is_valid():
+		on_line_replaced.call(line)
+
+
+func _cmd_set_speed(args: Dictionary) -> Dictionary:
+	var value := int(args.get("multiplier", 0))
+	if value not in Line.SPEEDS:
+		return {"error": "Use one of %s." % str(Line.SPEEDS)}
+	if not live:
+		return {"speed": value, "note": "Headless runs simulate instantly; speed only matters in live mode."}
+	if on_speed.is_valid():
+		on_speed.call(value)
+	else:
+		line.set_multiplier(value)
+	return {"speed": line.multiplier}
+
+
+func _cmd_save_shift(args: Dictionary) -> Dictionary:
+	var path := String(args.get("path", ""))
+	if path.is_empty():
+		if not bool(args.get("replace_game_save", false)):
+			return {"error": "This would replace the game's save slot. Pass replace_game_save true, or give a path."}
+		path = Save.PATH
+	var error: String = Save.save(line, path)
+	return _acted("save_shift", args, error, {"path": path, "absolute": ProjectSettings.globalize_path(path)})
+
+
 # --- Experiments and evaluation ---------------------------------------------
 
 func _cmd_snapshot(args: Dictionary) -> Dictionary:
@@ -592,10 +719,15 @@ func _cmd_restore(args: Dictionary) -> Dictionary:
 	var result := Save.restore(saved.line.duplicate(true))
 	if not result.error.is_empty():
 		return {"error": result.error}
+	var speed := line.multiplier
 	line = result.line
-	line.multiplier = 1
-	line.set_playing(true)
 	line.erp.auto_release = saved.auto_release
+	if live:
+		line.multiplier = speed
+		_replaced()
+	else:
+		line.multiplier = 1
+		line.set_playing(true)
 	plan = Plan.new()
 	monitor.totals = saved.monitor[0].duplicate(true)
 	monitor.statuses = saved.monitor[1].duplicate(true)
@@ -604,7 +736,7 @@ func _cmd_restore(args: Dictionary) -> Dictionary:
 	_demand_flagged = saved.flagged.duplicate()
 	_remember_statuses()
 	_log("restore", {"name": name})
-	return {"restored": name}
+	return {"restored": name, "note": "The game view rewound to this snapshot and is paused." if live else ""}
 
 
 func _cmd_score(_args: Dictionary) -> Dictionary:

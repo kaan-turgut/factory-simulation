@@ -2,6 +2,8 @@ extends SceneTree
 ## Agent API: scenario loading, planning through the ERP, event-driven time, snapshots and scoring.
 
 const API = preload("res://agent/agent_api.gd")
+const Link = preload("res://agent/agent_link.gd")
+const Line = preload("res://simulation/production_line.gd")
 
 var _failures := 0
 var _checks := 0
@@ -16,6 +18,8 @@ func _run() -> void:
 	_rejections()
 	_full_shift()
 	_snapshots()
+	await _live()
+	await _live_link()
 	print("Agent API: %d checks, %d failures (%.1f s)." % [_checks, _failures, (Time.get_ticks_msec() - started) / 1000.0])
 	quit(int(_failures > 0))
 
@@ -97,6 +101,95 @@ func _snapshots() -> void:
 	_call(api, "advance", {"seconds": 1800})
 	_check(api.line.erp.movements.size() == journal_size and _call(api, "status").orders_by_status == after.orders_by_status,
 		"Replaying from a snapshot is deterministic")
+
+
+## A game frame: advance the shown line in real time and report played simulation time.
+func _frame(api: API, delta: float) -> Dictionary:
+	var before: int = api.line.elapsed_ticks
+	api.line.advance(delta)
+	return api.live_step((api.line.elapsed_ticks - before) * Line.STEP_SECONDS)
+
+
+func _live() -> void:
+	var shown := Line.new()
+	shown.enable_erp()
+	var api := API.new(shown)
+	var replaced := []
+	api.on_line_replaced = func(next: Line) -> void: replaced.append(next)
+	_check(api.live and api.line == shown and not shown.playing, "Live API attaches to the shown line")
+	var loaded := api.handle({"cmd": "load_scenario", "args": {"path": "res://scenarios/filled_wafer_shift.json"}})
+	_check(loaded.ok and replaced.size() == 1 and replaced[0] == api.line and api.line != shown, "Live scenario load hands the game a new line")
+	_check(not api.line.playing and api.line.erp.demands.size() == 4, "New live shift starts paused with its demands")
+	api.handle({"cmd": "convert_all", "args": {}})
+	_check(api.handle({"cmd": "set_speed", "args": {"multiplier": 60}}).ok and api.line.multiplier == 60, "Live speed can be set to 60x")
+	_check(not api.handle({"cmd": "set_speed", "args": {"multiplier": 7}}).ok, "Unsupported speed is rejected")
+	var pending := api.handle({"cmd": "advance", "args": {"seconds": 120}})
+	_check(pending.get("pending", false) and api.line.playing and api.busy(), "Live advance plays the shift and replies later")
+	_check(not api.handle({"cmd": "advance", "args": {"seconds": 5}}).ok, "A second time command waits for the first")
+	_check(api.handle({"cmd": "status"}).ok, "Observations work while time runs")
+	var reply := {}
+	for frame in 400:
+		reply = _frame(api, 1.0 / 30.0)
+		if not reply.is_empty():
+			break
+	_check(not reply.is_empty() and reply.advanced >= 120.0 and reply.advanced < 124.0,
+		"Advance replies once the game has played 120 s (%s)" % reply.get("advanced", -1))
+	_check(not api.line.playing and not api.busy(), "Agent-paced play pauses after the command")
+	_check(api.monitor.observed >= 120.0, "Work center accounting follows played time")
+	api.handle({"cmd": "set_auto_release", "args": {"enabled": true}})
+	pending = api.handle({"cmd": "run_until", "args": {"max_seconds": 43200, "stop_on": ["order_released"]}})
+	reply = {}
+	for frame in 30000:
+		reply = _frame(api, 1.0 / 30.0)
+		if not reply.is_empty():
+			break
+	_check(reply.get("stopped_by_event", false) and reply.events.any(func(e: Dictionary) -> bool: return e.kind == "order_released")
+		and reply.advanced < 43000.0, "Live run_until stops at the first release: %s" % JSON.stringify(reply).left(300))
+	_frame(api, 0.5)
+	_check(api.handle({"cmd": "snapshot", "args": {"name": "s"}}).ok and api.handle({"cmd": "restore", "args": {"name": "s"}}).ok
+		and replaced.size() == 2, "Live restore hands the rewound line to the game")
+	_check(not api.handle({"cmd": "save_shift", "args": {}}).ok, "Saving over the game's slot needs explicit consent")
+	var saved := api.handle({"cmd": "save_shift", "args": {"path": "user://agent_test.save"}})
+	_check(saved.ok and FileAccess.file_exists("user://agent_test.save"), "Save the agent's shift to a named file")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://agent_test.save"))
+
+
+func _live_link() -> void:
+	var shown := Line.new()
+	shown.enable_erp()
+	var link := Link.new(API.new(shown))
+	link.allow_shutdown = false
+	var port := 18765
+	_check(link.listen(port).is_empty(), "Live link listens")
+	var client := StreamPeerTCP.new()
+	client.connect_to_host("127.0.0.1", port)
+	var replies: Array = []
+	var send := func(cmd: String, args: Dictionary) -> void:
+		client.put_data((JSON.stringify({"cmd": cmd, "args": args}) + "\n").to_utf8_buffer())
+	var buffer := PackedByteArray()
+	for frame in 600:
+		await process_frame
+		client.poll()
+		if frame == 5:
+			send.call("advance", {"seconds": 10})
+		if frame == 6:
+			send.call("shutdown", {})
+		var before: int = link.api.line.elapsed_ticks
+		link.api.line.advance(1.0 / 30.0 * 20.0)
+		link.tick((link.api.line.elapsed_ticks - before) * Line.STEP_SECONDS)
+		link.poll()
+		if client.get_status() == StreamPeerTCP.STATUS_CONNECTED and client.get_available_bytes() > 0:
+			buffer.append_array(client.get_partial_data(client.get_available_bytes())[1])
+		var text := buffer.get_string_from_utf8()
+		replies = Array(text.split("\n", false)).map(func(row: String) -> Variant: return JSON.parse_string(row))
+		if replies.size() >= 2:
+			break
+	_check(replies.size() >= 2 and replies.any(func(r: Dictionary) -> bool: return r.get("advanced", 0.0) >= 10.0),
+		"Live link replies to advance after the game played it: " + str(replies))
+	_check(replies.any(func(r: Dictionary) -> bool: return not r.ok and "stays open" in String(r.get("error", ""))) and not link.shutdown_requested,
+		"An agent cannot shut the live game down")
+	client.disconnect_from_host()
+	link.stop()
 
 
 func _check(condition: bool, message: String) -> void:

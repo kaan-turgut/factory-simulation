@@ -213,6 +213,23 @@ godot --headless --path . --script res://agent/server.gd -- --port 8765 --scenar
 
 Send `{"cmd": "describe"}` for the full command list and `{"cmd": "shutdown"}` to stop. `python3 agent/mcp_bridge.py --connect 8765` attaches the MCP bridge to a server that is already running.
 
+**Watch the agent live.** Start the game with an agent port and point the bridge at it:
+
+```sh
+godot --path . -- --agent-port 8765
+```
+
+```sh
+python3 agent/mcp_bridge.py --connect 8765
+```
+
+In Claude Code, change the `chocolate-works` entry in `.mcp.json` to `"args": ["agent/mcp_bridge.py", "--connect", "8765"]`, start the game first, then start the agent. The agent then plans the shift you are looking at, and the ERP terminal shows its orders as it creates them.
+
+- Time commands play the shift on screen and reply when the simulated time has passed, so they take real time: simulated seconds divided by the speed. The agent can choose 1×, 5×, 20× or the new 60× with `set_speed`. One simulated hour takes a minute at 60×.
+- After each time command the game pauses again until the agent's next move. You can pause, play, change speed, move the camera and open ERP at any time. Your own ERP actions change the same shift the agent is running.
+- `load_scenario` replaces the shift on screen. `restore` rewinds the view to a snapshot. `run_until` can overshoot its stop by up to one frame of simulated time.
+- With an agent port open, closing the window does not autosave, so an agent run never overwrites your saved shift. To keep an agent's shift, the agent can call `save_shift` with a path, or with `replace_game_save` so the game's **Load** button opens it.
+
 Current limits: the agent controls planning, purchasing and release. It cannot edit the layout, crews or master data. The simulation has no breakdowns or random variability yet.
 
 ## Project structure

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """MCP stdio bridge to the headless Chocolate Works agent server.
 
-Starts `godot --headless --script res://agent/server.gd` on a free local port (or connects to an
-already running one with --connect PORT), reads the command list from the server's `describe`
-reply and exposes each command as an MCP tool named `factory_<command>`.
+Starts `godot --headless --script res://agent/server.gd` on a free local port, or connects with
+--connect PORT to a server that is already running: a headless server, or the visible game started
+with `-- --agent-port PORT` (live mode, where time commands play the shift on screen). Reads the
+command list from the server's `describe` reply and exposes each command as an MCP tool named
+`factory_<command>`.
 
 Standard library only. Environment:
   GODOT_BIN   Godot executable (default: macOS app path, then `godot` on PATH)
@@ -43,7 +45,8 @@ class Factory:
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             self._wait_ready()
             connect_port = port
-        self.sock = socket.create_connection(("127.0.0.1", connect_port), timeout=600)
+        # A live game replies to time commands only when the shift has played that far.
+        self.sock = socket.create_connection(("127.0.0.1", connect_port), timeout=600 if self.process else None)
         self.reader = self.sock.makefile("r", encoding="utf-8")
         self.lock = threading.Lock()
 
@@ -138,7 +141,10 @@ def serve(factory):
                           "serverInfo": {"name": "chocolate-works", "version": "0.1.0"},
                           "instructions": "Plan and run the Chocolate Works factory simulation. Time only moves when you call "
                                           "factory_advance or factory_run_until. Use factory_snapshot/factory_restore for what-if tests "
-                                          "and factory_log_decision to record findings and recommendations."}
+                                          "and factory_log_decision to record findings and recommendations. factory_status shows "
+                                          "mode: in live mode a person is watching the game, time commands take real time "
+                                          "(simulated seconds divided by the speed), so prefer run_until with stop events "
+                                          "and spans of an hour or less."}
             elif method == "ping":
                 result = {}
             elif method == "tools/list":
