@@ -84,11 +84,23 @@ For conversion, `layout.grid.to_world(Vector2(20.5, 14.5))` returns the center o
 
 - **Materials and BOMs.** Ten finished products ship with fictional demonstration recipes across classic coated and filled wafers. The material master distinguishes kilograms from eaches, consumer packs from shipping boxes, and boxes from pallets. Hierarchical BOM edits affect future planning. Executable stage BOMs must fit the physical process and preserve food mass.
 - **Production Orders.** Select a manufactured material, quantity, work center, and simulated start. Use kilograms for dough and wafer stock, and shipping boxes for finished goods. **Check stock** lists immediate component shortages. **Component inventory** opens the relevant stock report. **Peg supply** links an upstream order to a downstream BOM requirement. **Supply orders** opens the linked documents. Release checks physical stock and freezes the route, BOM, and technical parameters. Released orders can be cancelled before commitment. Completed orders can close.
-- **MRP.** Planning nets unreserved stock, purchase receipts, and scheduled stage output. It creates dated proposals for missing material at each BOM level, applies supplier minimums and safety stock, and flags late receipts and proposal dates. A converted make proposal is a planned order. Convert or release proposals explicitly. Scheduled receipts and pegging appear in planning while physical receipts determine release eligibility.
+- **MRP.** Planning nets unreserved stock, purchase receipts, scheduled stage output and firmed planned orders level by level. It creates numbered planned orders (**PLO-…**) for manufactured material and purchase requisitions for bought material, then flags exceptions. See *MRP workspace* below.
 - **Inventory.** The material handler brings purchased supplies by pallet jack from **RM-WH**. Prepared dough is received into **SFG-DECK**. Workers move wafers and cream through **SFG-WH** by cart. The inventory report also shows controlled **WIP**, the packaging bay, and **FG-WH**. Goods movements link stock issues and receipts to their orders.
 - **Save and load.** ChocoERP saves the active catalog, schedules, release snapshots, actual progress, stock, reservations, pegging, in-flight logistics, purchases, and journal. Loads open paused. Closing the game window saves automatically. Use the terminal's **Save** before stopping an editor run.
 
 **Auto Release** is off by default and saved with the shift. When it is on, the running shift releases planned orders once their immediate BOM components are physically available and unreserved. Eligible orders are considered by scheduled start, then priority. MRP proposals must still be converted into orders, and a released order waits for its scheduled start.
+
+### MRP workspace
+
+The MRP page works like SAP's coverage monitor and stock/requirements list.
+
+- **Coverage list.** One line per planned material, worst exception first: lot size, safety stock, available stock, the date from which stock and firm receipts no longer cover requirements, planned orders, and the top exception. **Exceptions only** filters it. Double-click a material, or select it and click **Stock/Requirements list**.
+- **Stock/requirements list.** Dated MRP elements for one material with the running available quantity: `Stock`, `IndReq` (customer demand), `DepReq` (component need of a parent order), `PrdOrd`, `POitem`, `PlOrd.` (planned order), `PurRqs` (purchase requisition). An asterisk (`PlOrd.*`, `PurRqs*`) marks a firmed order.
+- **Planned orders persist.** Each MRP run regenerates unfirmed planned orders and keeps their numbers while the same requirement still needs them. **Firm / unfirm** fixes an order so MRP no longer changes it; it then counts as fixed supply. **Change planned order** edits quantity and start and firms the order. **Convert proposal** turns one into a production order or purchase order. **Convert all shown** converts everything visible, parents first, so pegging links automatically.
+- **Lot sizing and safety time** come from the material master (**Edit material**): `EX` lot-for-lot, `FX` fixed lot, `PB` period lot that combines requirements within a period, plus minimum, maximum and rounding values. Safety time makes supply available that much earlier than the requirement. Finished goods stay lot-for-lot because each finished order is linked to one demand. The demo combines batter, extrusion and baking needs over four simulated hours and buys flour in 25 kg steps, at least 100 kg.
+- **Exception messages.** *Start date in the past* (with the earliest realistic availability), *bring forward* for receipts or linked orders that finish after they are needed, *postpone* for receipts more than 30 minutes earlier than needed, *cancel* or *excess* for unneeded supply, *finishes after the pegged order starts* for supply moved too late, *below safety stock*, and *no source*. Red is urgent, amber is a warning.
+
+MRP plans with unlimited capacity, as SAP MRP does. Converting a planned order schedules it on real machine capacity, which can move it later. Run MRP again after converting to see the resulting exceptions.
 
 ### Detailed Scheduling
 
@@ -136,7 +148,7 @@ In a fresh staged shift, ovens use about two minutes per batch and receive 1 kg 
 
 ## Editing master data
 
-- `materials.json`, `products.json`, and `boms.json` define the material IDs, product specs, opening balances, and multilevel recipes. Carton mass and pallet mass derive from product specs. Each finished BOM uses one carton as its base and includes retail film, one carton and label, and the pallet allocation. Packaging with `packaging_role` set to `retail_wrap` uses one unit per consumer pack.
+- `materials.json`, `products.json`, and `boms.json` define the material IDs, product specs, opening balances, and multilevel recipes. An optional `planning` object on a material sets MRP lot sizing and safety time: `lot_size` (`EX`, `FX` or `PB`), `fixed_lot`, `period_seconds`, `min_lot`, `max_lot`, `rounding` and `safety_time` (simulated seconds). Carton mass and pallet mass derive from product specs. Each finished BOM uses one carton as its base and includes retail film, one carton and label, and the pallet allocation. Packaging with `packaging_role` set to `retail_wrap` uses one unit per consumer pack.
 - `routings.json` lists operation numbers and work center references. `work_centers.json` holds equipment IDs, capabilities, availability, and design limits. `production_versions.json` ties each SKU to a BOM version and routing version with lot and date limits. Dates are simulated seconds from shift start. A zero `valid_to` means open-ended.
 - `production_standards.json` holds native rates, batch parameters, residence limits, and yield by material, operation, and work center. Optional routing or production version references narrow applicability. `changeovers.json` defines cleaning and setup. `planning_examples.json` contains the example demand.
 - `scheduling.json` defines stage-to-material and work-center eligibility, handling estimates, and simulated daily availability intervals. The shipped calendar is 24/7.
@@ -180,7 +192,9 @@ An AI agent can plan and run the factory without the game window and without cli
 - `agent/work_center_monitor.gd` records how long each work center spends working, in setup, starved, blocked, handling oven loads, or without work. These shares are the main evidence for bottleneck analysis. It only reads simulation state.
 - `agent/server.gd` serves those commands as one JSON object per line over TCP on 127.0.0.1.
 - `agent/mcp_bridge.py` starts the server and exposes each command as an MCP tool named `factory_<command>`. It needs only Python 3 and has no packages to install.
-- `scenarios/*.json` set up a shift: demands, stock adjustments, operating factors (50–120%), auto-release and a horizon. `evaluator_notes` is never returned to the agent, but an agent with file access could read it. For blind tests, keep scenarios with answers outside the agent's reach.
+- `scenarios/*.json` set up a shift: demands, stock adjustments, operating factors (50–120%), MRP `planning` settings per material, auto-release and a horizon. `evaluator_notes` is never returned to the agent, but an agent with file access could read it. For blind tests, keep scenarios with answers outside the agent's reach.
+
+MRP commands mirror the MRP workspace: `run_mrp` returns numbered planned orders, exceptions and coverage, `mrp_material` returns one material's stock/requirements list, and `convert_all`, `firm_planned_order`, `change_planned_order` and `set_planning` act on them.
 
 Time only moves when the agent calls `advance` or `run_until`. `run_until` stops at events such as a completed order, a received purchase or a missed due date. A 12-hour shift simulates in a few seconds. `snapshot` and `restore` keep whole shifts in memory, so an agent can test a change and then rewind. Runs are deterministic.
 
@@ -232,6 +246,7 @@ godot --headless --path . --script res://tests/layout_editor_test.gd
 godot --headless --path . --script res://tests/detailed_scheduling_test.gd
 godot --headless --path . --script res://tests/product_standards_test.gd
 godot --headless --path . --script res://tests/agent_api_test.gd
+godot --headless --path . --script res://tests/mrp_planning_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

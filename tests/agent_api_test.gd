@@ -38,17 +38,13 @@ func _rejections() -> void:
 
 
 func _plan_everything(api: API) -> int:
-	var converted := 0
-	for attempt in 40:
-		var mrp := _call(api, "run_mrp")
-		if mrp.proposals.is_empty():
-			break
-		var result := _call(api, "convert_proposal", {"id": mrp.proposals[0].id})
-		_check(result.ok, "Convert %s: %s" % [mrp.proposals[0].id, result.get("error", "")])
-		if not result.ok:
-			break
-		converted += 1
-	return converted
+	var mrp := _call(api, "run_mrp")
+	_check(mrp.ok and mrp.planned_orders.size() > 0, "MRP returns planned orders")
+	_check(mrp.planned_orders.all(func(p: Dictionary) -> bool: return String(p.number).begins_with("PLO-")), "Planned orders are numbered")
+	var result := _call(api, "convert_all")
+	_check(result.ok and result.failed.is_empty(), "Convert all planned orders: " + JSON.stringify(result.get("failed", [])))
+	_check(_call(api, "run_mrp").planned_orders.is_empty(), "No planned orders remain after converting all")
+	return result.created.size()
 
 
 func _full_shift() -> void:

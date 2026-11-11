@@ -335,7 +335,9 @@ func _build_actions() -> void:
 			_action("Locate stock", _locate)
 		4:
 			_action("Run MRP", _run_mrp)
-			if _mrp_material.is_empty():
+			if not line.erp.explicit_planning:
+				pass
+			elif _mrp_material.is_empty():
 				_action("Stock/Requirements list", func() -> void: _open_material(String(_selected.get("material", ""))))
 			else:
 				_action("← Coverage list", func() -> void: _open_material(""))
@@ -347,17 +349,18 @@ func _build_actions() -> void:
 				_action("Convert all shown", _convert_shown)
 				_action("Firm / unfirm", _toggle_firm)
 				_action("Change planned order", _change_planned)
-			if not _mrp_material.is_empty():
+			if not _mrp_material.is_empty() or not line.erp.explicit_planning:
 				var proposals := _button(_actions, "Proposals only", func() -> void:
 					_proposals_only = not _proposals_only
 					_render())
 				proposals.toggle_mode = true
 				proposals.button_pressed = _proposals_only
-			var exceptions := _button(_actions, "Exceptions only", func() -> void:
-				_exceptions_only = not _exceptions_only
-				_render())
-			exceptions.toggle_mode = true
-			exceptions.button_pressed = _exceptions_only
+			if line.erp.explicit_planning:
+				var exceptions := _button(_actions, "Exceptions only", func() -> void:
+					_exceptions_only = not _exceptions_only
+					_render())
+				exceptions.toggle_mode = true
+				exceptions.button_pressed = _exceptions_only
 		5:
 			_action("Create order", _new_order)
 			_action("Release", func() -> void: _order_action("release"))
@@ -435,11 +438,12 @@ func _header(columns: Array, summary: String) -> TreeItem:
 	for index in columns.size():
 		_table.set_column_title(index, columns[index])
 		_table.set_column_expand(index, true)
+		_table.set_column_expand_ratio(index, 1)
 		_table.set_column_clip_content(index, true)
 		var minimum := {"Material": 116, "Description": 114, "Need date": 98, "MRP element": 124,
 			"Receipt": 65, "Demand": 66, "Projected": 80, "Short": 54, "Document": 84, "Date": 98,
 			"Element data": 120, "Requirement": 80, "Available qty": 90, "Start / order": 98, "Exception": 230,
-			"Lot size": 110, "Uncovered from": 104, "Top exception": 240}
+			"Rec./reqd.": 90, "Lot size": 120, "Uncovered from": 104, "Top exception": 240, "Safety": 60, "Available": 86, "PlOrds": 58, "Exc.": 40}
 		_table.set_column_custom_minimum_width(index, int(minimum.get(columns[index], 50)))
 	_summary.text = summary
 	return _table.create_item()
@@ -641,8 +645,9 @@ func _mrp_note() -> String:
 
 ## Collective view, like MD06 / Monitor Material Coverage: one line per planned material, worst exception first.
 func _mrp_coverage() -> void:
-	var root := _header(["Material", "Description", "Type", "Lot size", "Safety stock", "Available", "Uncovered from",
-		"Planned", "Exceptions", "Top exception"], _mrp_note() + "\nDouble-click a material for its stock/requirements list.")
+	var root := _header(["Material", "Description", "Lot size", "Safety", "Available", "Uncovered from",
+		"PlOrds", "Exc.", "Top exception"], _mrp_note() + "\nDouble-click a material for its stock/requirements list.")
+	_table.set_column_expand_ratio(8, 3)
 	var catalog := line.erp.catalog
 	var lines: Array = plan.coverage.values()
 	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -660,13 +665,13 @@ func _mrp_coverage() -> void:
 		if _date_filter.text.is_valid_float() and (entry.uncovered_from < 0.0 or entry.uncovered_from > _date_filter.text.to_float() * 60.0):
 			continue
 		var settings: Dictionary = catalog.planning(entry.code)
-		var row := _row(root, [entry.code, item.name, item.type, entry.lot, _qty(entry.safety), _qty(entry.available),
+		var row := _row(root, [entry.code, item.name, entry.lot, _qty(entry.safety), _qty(entry.available),
 			Book.date(entry.uncovered_from) if entry.uncovered_from >= 0.0 else "Covered", entry.planned, entry.exceptions, entry.message],
 			{"key": entry.code, "material": entry.code, "code": entry.code,
 				"detail": "%s · %s · %s %s available · safety stock %s · safety time %s min\nLot size %s (%s) · %d requirements · %d receipts · %d planned orders" % [
 					entry.code, item.name, _qty(entry.available), entry.unit, _qty(entry.safety), _qty(settings.safety_time / 60.0),
 					entry.lot, catalog.LOT_PROCEDURES[settings.lot_size], entry.requirements, entry.receipts, entry.planned]})
-		_severity_color(row, entry.severity, 9)
+		_severity_color(row, entry.severity, 8)
 
 
 ## Single-material view, like MD04: dated MRP elements with a running available quantity.
@@ -678,8 +683,9 @@ func _mrp_material_list(code: String) -> void:
 	var note := "%s · %s · %s · Lot size %s · Safety stock %s %s · Safety time %s min · Lead %s min · Available %s" % [
 		code, item.get("name", ""), item.get("type", ""), catalog.lot_caption(code), _qty(item.get("minimum", 0.0)), item.get("unit", ""),
 		_qty(settings.safety_time / 60.0), _qty(item.get("lead", 0.0) / 60.0), _qty(entry.get("available", 0.0))]
-	var root := _header(["Date", "MRP element", "Element data", "Receipt", "Requirement", "Available qty", "Start / order", "Exception"],
+	var root := _header(["Date", "MRP element", "Element data", "Rec./reqd.", "Available", "Start / order", "Exception"],
 		note + "\nPlOrd.* and PurRqs* are firmed: MRP keeps them unchanged.")
+	_table.set_column_expand_ratio(6, 3)
 	var i := 0
 	for row in plan.rows:
 		i += 1
@@ -694,28 +700,34 @@ func _mrp_material_list(code: String) -> void:
 		var proposal: Dictionary = plan.proposals.get(row.proposal, {})
 		var data: String = row.get("number", "")
 		if row.kind == "Requirement":
-			data = row.doc
+			data = row.get("source", row.doc)
 		elif not proposal.is_empty():
 			data = "%s · for %s" % [proposal.number, ", ".join(PackedStringArray(proposal.get("docs", [proposal.doc])))]
 		elif row.element == "Error":
 			data = row.kind
 		var start := ""
 		if not proposal.is_empty():
-			start = Book.date(proposal.get("start", row.date))
+			var planned: float = proposal.get("start", row.date)
+			start = Book.date(planned) if planned >= 0.0 else "before start"
 		elif row.action_date >= 0.0:
 			start = Book.date(row.action_date)
-		var tree_row := _row(root, [Book.date(row.date), row.element, data, _qty(row["in"]) if row["in"] > 0 else "",
-			_qty(row["out"]) if row["out"] > 0 else "", _qty(row.projected), start, row.get("exception", "")],
+		var quantity := ""
+		if row["out"] > 0:
+			quantity = "-" + _qty(row["out"])
+		elif row["in"] > 0 and row.kind != "Unreserved stock":
+			quantity = _qty(row["in"])
+		var when := Book.date(row.date) if row.date >= 0.0 else "before start"
+		var tree_row := _row(root, [when, row.element, data, quantity, _qty(row.projected), start, row.get("exception", "")],
 			{"key": row.proposal if not row.proposal.is_empty() else str(i), "proposal": row.proposal, "code": code,
 				"number": proposal.get("number", ""), "detail": _mrp_row_detail(row, proposal)})
-		_severity_color(tree_row, int(row.get("severity", 0)), 7)
+		_severity_color(tree_row, int(row.get("severity", 0)), 6)
 
 
 func _mrp_row_detail(row: Dictionary, proposal: Dictionary) -> String:
 	if proposal.is_empty():
-		var text := "%s · %s · %s" % [row.element, row.kind, row.doc]
+		var text := "%s · %s · %s" % [row.element, row.kind, row.get("source", row.doc)]
 		if row.kind == "Requirement":
-			text += "\nRequired %s for %s · short before new proposals %s" % [Book.date(row.date), row.doc, _qty(row.short)]
+			text += "\nRequired %s for %s · short before new proposals %s" % [Book.date(row.date), row.get("source", row.doc), _qty(row.short)]
 		if not String(row.get("exception", "")).is_empty():
 			text += "\n" + row.exception
 		return text
@@ -1389,34 +1401,33 @@ func _convert() -> void:
 			return _result(plan.convert(key, line.erp, line.erp_fg())))
 
 
-## Keys of the proposals visible in the current MRP view.
+## Whether a proposal belongs to the current MRP view. Evaluated live, because MRP regroups
+## lots while earlier ones convert.
+func _shown(item: Dictionary) -> bool:
+	if not _mrp_material.is_empty():
+		if item.code != _mrp_material or (_exceptions_only and item.get("exceptions", []).is_empty()):
+			return false
+	else:
+		var entry: Dictionary = plan.coverage.get(item.code, {})
+		var material: Dictionary = line.erp.catalog.materials[item.code]
+		if _exceptions_only and entry.get("exceptions", 0) == 0:
+			return false
+		if not _family.text.is_empty() and not String(material.get("family", "")).to_lower().contains(_family.text.to_lower()):
+			return false
+	return not _date_filter.text.is_valid_float() or float(item.get("start", 0.0)) <= _date_filter.text.to_float() * 60.0
+
+
 func _shown_proposals() -> Array:
-	var keys := []
-	for item in plan.proposals.values():
-		if not _mrp_material.is_empty() and item.code != _mrp_material:
-			continue
-		if _mrp_material.is_empty():
-			var entry: Dictionary = plan.coverage.get(item.code, {})
-			var material: Dictionary = line.erp.catalog.materials[item.code]
-			if _exceptions_only and entry.get("exceptions", 0) == 0:
-				continue
-			if not _family.text.is_empty() and not String(material.get("family", "")).to_lower().contains(_family.text.to_lower()):
-				continue
-		elif _exceptions_only and item.get("exceptions", []).is_empty():
-			continue
-		if _date_filter.text.is_valid_float() and float(item.get("start", 0.0)) > _date_filter.text.to_float() * 60.0:
-			continue
-		keys.append(item.id)
-	return keys
+	return plan.proposals.values().filter(_shown).map(func(item: Dictionary) -> String: return item.id)
 
 
 func _convert_shown() -> void:
-	var keys := _shown_proposals()
-	if keys.is_empty():
+	var count := _shown_proposals().size()
+	if count == 0:
 		notice("No planned orders in this view. Run MRP or clear the filters.")
 		return
-	_form("Convert %d planned orders and requisitions?" % keys.size(), [], func(_values: Dictionary) -> String:
-		var result: Dictionary = plan.convert_all(line.erp, line.erp_fg(), func(item: Dictionary) -> bool: return item.id in keys)
+	_form("Convert the %d planned orders and requisitions in this view?" % count, [], func(_values: Dictionary) -> String:
+		var result: Dictionary = plan.convert_all(line.erp, line.erp_fg(), _shown)
 		var message := "Created %d documents." % result.created.size()
 		if not result.failed.is_empty():
 			message += " %d failed: %s" % [result.failed.size(), "; ".join(PackedStringArray(result.failed.map(
@@ -1446,7 +1457,7 @@ func _change_planned() -> void:
 	var item := _selected_planned()
 	if item.is_empty():
 		return
-	var unit := "shipping boxes" if item.get("boxes", 0) > 0 else line.erp.catalog.materials[item.code].unit
+	var unit: String = "shipping boxes" if item.get("boxes", 0) > 0 else line.erp.catalog.materials[item.code].unit
 	_form("Change %s · %s" % [item.number, item.code], [["quantity", "Quantity in " + unit, _qty(item.get("quantity", item.qty))],
 		["start", "%s at simulated minute" % ("Start" if item.type == "Make" else "Order date"), _qty(maxf(line.erp.now, item.start) / 60.0)]],
 		func(v: Dictionary) -> String:

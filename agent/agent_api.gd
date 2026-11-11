@@ -45,9 +45,20 @@ var COMMANDS := {
 	"schedule": {"description": "Planned and running orders per work center in time order (the Gantt).", "args": {}},
 	"work_centers": {"description": "Current state and cumulative time breakdown per work center (working, setup, starved, blocked, handling, no_work).", "args": {}},
 	"journal": {"description": "Latest stock movements.", "args": {"limit": "optional int: default 30"}},
-	"run_mrp": {"description": "Run material requirements planning. Returns proposals; nothing is created.", "args": {}},
-	"convert_proposal": {"description": "Turn an MRP proposal into a planned production order or a purchase order. Proposal ids can change after each conversion; run MRP again.",
-		"args": {"id": "string: proposal id", "quantity": "optional number: override", "start": "optional number: planned start in seconds", "version": "optional string: production version"}},
+	"run_mrp": {"description": "Run MRP. Returns planned orders (PLO numbers; firmed ones are kept unchanged), exception messages and per-material coverage. Creates no production or purchase orders.", "args": {}},
+	"mrp_material": {"description": "Stock/requirements list for one material from the last MRP run: dated stock, requirements, receipts and planned orders with the running available quantity and exceptions.",
+		"args": {"code": "string: material code"}},
+	"convert_proposal": {"description": "Turn a planned order (PLO number or planning key) into a production order or purchase order. Unfirmed numbers can change after each run.",
+		"args": {"id": "string: PLO number or planning key", "quantity": "optional number: override", "start": "optional number: planned start in seconds", "version": "optional string: production version"}},
+	"convert_all": {"description": "Convert every planned order matching the filters, parents first so pegging links. Returns created documents and failures.",
+		"args": {"type": "optional string: Make | Buy", "codes": "optional array: material codes", "until": "optional number: only planned starts up to this time (s)"}},
+	"firm_planned_order": {"description": "Firm or unfirm a planned order. MRP never changes a firmed order; it counts as fixed supply.",
+		"args": {"id": "string: PLO number", "firmed": "bool"}},
+	"change_planned_order": {"description": "Change a planned order's quantity and start. The change firms it.",
+		"args": {"id": "string: PLO number", "quantity": "number: boxes for finished goods, base unit otherwise", "start": "number: seconds"}},
+	"set_planning": {"description": "Change a material's MRP settings: lot_size EX (lot-for-lot), FX (fixed_lot), PB (period_seconds); min_lot, max_lot, rounding, safety_time (s). Finished goods stay EX.",
+		"args": {"code": "string: material code", "lot_size": "optional string: EX | FX | PB", "fixed_lot": "optional number", "period_seconds": "optional number",
+			"min_lot": "optional number", "max_lot": "optional number", "rounding": "optional number", "safety_time": "optional number: seconds"}},
 	"create_order": {"description": "Create a planned production order at the earliest finite slot at or after start.",
 		"args": {"code": "string: material code", "quantity": "number: boxes for finished goods, kg otherwise", "start": "optional number: seconds, default now",
 			"priority": "optional int: 1-9, default 5", "version": "optional string: production version"}},
@@ -136,6 +147,11 @@ func load_scenario_data(data: Dictionary) -> Dictionary:
 		var message := line.erp.adjust(String(adjustment.code), float(adjustment.qty), String(adjustment.get("reason", "Scenario")))
 		if not message.is_empty():
 			problems.append("%s: %s" % [adjustment.code, message])
+	var planning: Dictionary = data.get("planning", {})
+	for code in planning:
+		var message: String = line.erp.catalog.set_planning(String(code), planning[code])
+		if not message.is_empty():
+			problems.append("%s planning: %s" % [code, message])
 	var factors: Dictionary = data.get("operating_factors", {})
 	for equipment in factors:
 		if not line.set_operating_factor(StringName(equipment), float(factors[equipment])):
@@ -340,13 +356,55 @@ func _cmd_run_mrp(_args: Dictionary) -> Dictionary:
 	plan.run(line.erp, line.erp_fg())
 	var rows := []
 	for item in plan.proposals.values():
-		var row := {"id": item.id, "type": item.type, "code": item.code, "qty": _t(item.qty), "due": _t(item.due), "for": item.doc}
-		for key in ["quantity", "start", "version", "supplier", "center"]:
-			if item.has(key):
-				row[key] = _t(item[key]) if item[key] is float else item[key]
-		rows.append(row)
-	_log("run_mrp", {"proposals": rows.size()})
-	return {"summary": plan.summary, "proposals": rows}
+		rows.append(_planned_row(item))
+	var exceptions := []
+	for exception in plan.exceptions:
+		exceptions.append({"kind": exception.kind, "severity": exception.severity, "code": exception.code,
+			"element": exception.element, "date": _t(exception.date), "message": exception.message})
+	exceptions.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.severity > b.severity or (a.severity == b.severity and a.date < b.date))
+	var coverage := []
+	for entry in plan.coverage.values():
+		if entry.exceptions > 0 or entry.uncovered_from >= 0.0:
+			coverage.append({"code": entry.code, "lot": entry.lot, "available": _t(entry.available), "uncovered_from": _t(entry.uncovered_from),
+				"planned": entry.planned, "exceptions": entry.exceptions, "top": entry.message})
+	_log("run_mrp", {"proposals": rows.size(), "exceptions": exceptions.size()})
+	return {"summary": plan.summary, "planned_orders": rows, "exceptions": exceptions, "coverage": coverage,
+		"note": "coverage lists only materials with a gap or an exception; uncovered_from -1 means stock and firm receipts cover all requirements."}
+
+
+func _planned_row(item: Dictionary) -> Dictionary:
+	var row := {"number": item.get("number", ""), "key": item.id, "type": item.type, "code": item.code, "firmed": item.get("firmed", false),
+		"qty": _t(item.qty), "available_by": _t(item.get("finish", item.due)), "for": item.get("docs", [item.doc])}
+	for key in ["quantity", "start", "version", "supplier", "center", "earliest_finish"]:
+		if item.has(key):
+			row[key] = _t(item[key]) if item[key] is float else item[key]
+	if not item.get("exceptions", []).is_empty():
+		row.exceptions = item.exceptions
+	return row
+
+
+func _cmd_mrp_material(args: Dictionary) -> Dictionary:
+	var code := String(args.get("code", ""))
+	if plan.summary.is_empty():
+		plan.run(line.erp, line.erp_fg())
+	if not line.erp.catalog.materials.has(code):
+		return {"error": "Unknown material " + code}
+	var rows := []
+	for row in plan.rows:
+		if row.code != code:
+			continue
+		var out := {"date": _t(row.date), "element": row.get("element", row.kind), "data": row.get("number", "") if not row.get("number", "").is_empty() else row.doc}
+		if row["in"] > 0.0:
+			out.receipt = _t(row["in"])
+		if row["out"] > 0.0:
+			out.requirement = _t(row["out"])
+		out.available = _t(row.projected)
+		if not String(row.get("exception", "")).is_empty():
+			out.exception = row.exception
+		rows.append(out)
+	var settings: Dictionary = line.erp.catalog.planning(code)
+	return {"code": code, "lot_size": line.erp.catalog.lot_caption(code), "safety_stock": line.erp.catalog.materials[code].minimum,
+		"safety_time": settings.safety_time, "coverage": plan.coverage.get(code, {}), "elements": rows}
 
 
 func _cmd_convert_proposal(args: Dictionary) -> Dictionary:
@@ -358,6 +416,39 @@ func _cmd_convert_proposal(args: Dictionary) -> Dictionary:
 		edits.version = String(args.version)
 	var result: Dictionary = plan.convert(String(args.get("id", "")), line.erp, line.erp_fg(), edits)
 	return _acted("convert_proposal", args, result.get("error", ""), _created(result))
+
+
+func _cmd_convert_all(args: Dictionary) -> Dictionary:
+	var kind := String(args.get("type", ""))
+	var codes: Array = args.get("codes", [])
+	var until := float(args.get("until", INF))
+	var result: Dictionary = plan.convert_all(line.erp, line.erp_fg(), func(item: Dictionary) -> bool:
+		return (kind.is_empty() or item.type == kind) and (codes.is_empty() or item.code in codes) and float(item.get("start", 0.0)) <= until)
+	for id in result.created:
+		_created({"error": "", "id": id})
+	return _acted("convert_all", args, "", {"created": result.created, "failed": result.failed})
+
+
+func _cmd_firm_planned_order(args: Dictionary) -> Dictionary:
+	var error: String = plan.firm(String(args.get("id", "")), bool(args.get("firmed", true)), line.erp, line.erp_fg())
+	return _acted("firm_planned_order", args, error, {})
+
+
+func _cmd_change_planned_order(args: Dictionary) -> Dictionary:
+	var id := String(args.get("id", ""))
+	var error: String = plan.change(id, float(args.get("quantity", 0)), float(args.get("start", -1)), line.erp, line.erp_fg())
+	var extra := {}
+	if error.is_empty():
+		extra.planned_order = _planned_row(plan.find(id))
+	return _acted("change_planned_order", args, error, extra)
+
+
+func _cmd_set_planning(args: Dictionary) -> Dictionary:
+	var values := args.duplicate()
+	var code := String(values.get("code", ""))
+	values.erase("code")
+	var error: String = line.erp.catalog.set_planning(code, values)
+	return _acted("set_planning", args, error, {"lot_size": line.erp.catalog.lot_caption(code)} if error.is_empty() else {})
 
 
 func _cmd_create_order(args: Dictionary) -> Dictionary:

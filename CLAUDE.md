@@ -21,7 +21,13 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - `agent/` exposes the ERP and simulation to AI planning agents: `agent_api.gd` (JSON commands), `work_center_monitor.gd` (read-only state-time buckets), `server.gd` (TCP, newline JSON) and `mcp_bridge.py` (stdlib-only MCP stdio bridge, registered in `.mcp.json`). Scenarios live in `scenarios/`.
 - Agent actions must go through the same ERP functions as the UI. Never give the agent a shortcut that bypasses release checks, reservations or the ledger.
 - Command argument specs follow `"[optional ]<string|number|int|bool|array>[: note]"`. The bridge builds MCP schemas from them.
-- Run `tests/agent_api_test.gd` after changing anything in `agent/`, ERP command signatures, or order/demand fields.
+- Run `tests/agent_api_test.gd` after changing anything in `agent/`, ERP command signatures, MRP output, or order/demand fields.
+
+## MRP (phase 1, Nov 2026)
+- `erp/stage_mrp.gd` holds explicit-stage MRP: lot sizing (EX/FX/PB, min/max/rounding), safety time, exception messages and the coverage summary. Planned orders persist in `book.planned_orders` (`PLO-…`, `planned_sequence`); unfirmed ones are regenerated each run and keep their number by planning key, firmed ones are fixed supply. `erp/mrp.gd` adds `find`, `convert_all`, `firm` and `change`. The legacy combined-route path in `mrp.gd` is unchanged.
+- Material settings: optional `planning` object in `materials.json`, read through `catalog.planning(code)`, validated by `catalog.set_planning`. Finished goods must stay lot-for-lot (demand linking assumes one order per demand).
+- Run `tests/mrp_planning_test.gd` after touching MRP, planned orders or material planning settings.
+- Known gap (phase 2): MRP plans with unlimited capacity while conversion schedules finitely, so converted orders can land later than MRP assumed. Exceptions report it; nothing levels it yet.
 
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.

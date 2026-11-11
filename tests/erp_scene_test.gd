@@ -81,6 +81,8 @@ func _run() -> void:
 	_button(terminal, "Material Requirements Planning").pressed.emit()
 	_button(terminal, "Run MRP").pressed.emit()
 	_check(terminal.plan.summary.get("buy", 0) == 1, "MRP workspace runs actual planning")
+	_check(terminal._table.columns == 9 and _button(terminal, "Stock/Requirements list") == null,
+		"Legacy planning keeps the flat MRP list")
 	_button(terminal, "Production Orders").pressed.emit()
 	terminal._rows[order.id].select(0)
 	terminal._on_select()

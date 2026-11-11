@@ -291,6 +291,33 @@ func _expanded_scene() -> void:
 	factory.terminal._example_demands()
 	_check(factory.line.erp.demands.size() == 3 and factory.terminal.plan.summary.make > 0,
 		"Example adds three demands and reruns MRP without duplicate demands")
+	var terminal = factory.terminal
+	_check(terminal._table.columns == 9 and terminal._rows.has("BAKED-01"), "MRP opens on the material coverage list")
+	terminal._rows["BAKED-01"].select(0)
+	terminal._on_select()
+	terminal._on_activate()
+	var elements := []
+	var row: TreeItem = terminal._table.get_root().get_first_child()
+	while row != null:
+		elements.append(row.get_text(1))
+		row = row.get_next()
+	_check(terminal._mrp_material == "BAKED-01" and "PlOrd." in elements and "DepReq" in elements and "Stock" in elements,
+		"Double-click opens the stock/requirements list: " + str(elements))
+	var planned: Array = terminal.plan.proposals.values().filter(func(item: Dictionary) -> bool: return item.code == "BAKED-01")
+	terminal._rows[planned[0].id].select(0)
+	terminal._on_select()
+	terminal._toggle_firm()
+	_check(factory.line.erp.planned_orders[planned[0].number].firmed, "Firm a planned order from the list")
+	terminal._render()
+	_check(terminal._rows.has(planned[0].id) and terminal._rows[planned[0].id].get_text(1) == "PlOrd.*", "Firmed order shows as PlOrd.*")
+	terminal._open_material("")
+	_check(terminal._mrp_material.is_empty() and terminal._rows.has("BAKED-01"), "Back to the coverage list")
+	var before: int = factory.line.erp.orders.size() + factory.line.erp.purchases.size()
+	_check(not terminal._shown_proposals().is_empty(), "The coverage view shows planned orders to convert")
+	var converted: Dictionary = terminal.plan.convert_all(factory.line.erp, factory.line.erp_fg(), terminal._shown)
+	_check(converted.failed.is_empty() and factory.line.erp.orders.size() + factory.line.erp.purchases.size() == before + converted.created.size()
+		and terminal._shown_proposals().is_empty() and factory.line.erp.planned_orders.is_empty(),
+		"Convert all shown leaves no planned orders: " + str(converted.failed))
 	_machine_models(factory.floor_view)
 	_shutter_traffic(factory.floor_view, factory.line)
 	factory.queue_free()

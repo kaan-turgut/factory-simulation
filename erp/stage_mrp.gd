@@ -57,7 +57,7 @@ func run(target, ledger, finished: Dictionary) -> void:
 		var item: Dictionary = book.planned_orders[number]
 		if not item.firmed:
 			continue
-		_supply(item.code, item.due, item.qty, number, [], "Firmed planned order" if item.type == "Make" else "Firmed requisition", true)
+		_supply(item.code, item.due, item.qty, number, [], "Firmed planned order" if item.type == "Make" else "Firmed requisition", true, item.id)
 		if item.type == "Make":
 			var exploded := Scheduling.assignment(book, item.code, item.quantity, item.start, item.version)
 			if exploded.error.is_empty():
@@ -97,8 +97,11 @@ func run(target, ledger, finished: Dictionary) -> void:
 	_peg_exceptions()
 	_publish(numbers)
 	report.rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if a.date != b.date:
-			return a.date < b.date
+		# The stock line leads its material, even before past-dated requirements.
+		var da: float = -INF if a.kind == "Unreserved stock" else a.date
+		var db: float = -INF if b.kind == "Unreserved stock" else b.date
+		if da != db:
+			return da < db
 		if (a["in"] > EPS) != (b["in"] > EPS):
 			return a["in"] > EPS
 		return a.index < b.index)
@@ -149,13 +152,13 @@ func _components(recipe: Dictionary, start: float, doc: String, family: String) 
 		_need(component, start, recipe.needs[component], doc, family)
 
 
-func _supply(code: String, date: float, qty: float, id: String, parents: Array, kind: String, movable: bool) -> void:
+func _supply(code: String, date: float, qty: float, id: String, parents: Array, kind: String, movable: bool, key: String = "") -> void:
 	if qty <= EPS:
 		return
 	if not supply.has(code):
 		supply[code] = []
 	supply[code].append({"date": date, "qty": qty, "left": qty, "id": id, "parents": parents, "kind": kind,
-		"movable": movable, "first_use": INF})
+		"movable": movable, "first_use": INF, "key": key})
 
 
 func _by_date(a: Dictionary, b: Dictionary) -> bool:
@@ -168,7 +171,7 @@ func _net(code: String) -> void:
 	receipts.sort_custom(_by_date)
 	if requirements.is_empty():
 		for receipt in receipts:
-			report._row(code, receipt.date, receipt.kind, receipt.qty, 0.0, receipt.left, 0.0, receipt.id, "")
+			report._row(code, receipt.date, receipt.kind, receipt.qty, 0.0, receipt.left, 0.0, receipt.id, "", receipt.key)
 		_receipt_exceptions(code, receipts)
 		return
 	requirements.sort_custom(_by_date)
@@ -225,7 +228,7 @@ func _net(code: String) -> void:
 		_finish_lot(lot)
 	for receipt in receipts:
 		report._row(code, receipt.date, receipt.kind, receipt.qty, 0.0,
-			receipt.left, 0.0, receipt.id, "")
+			receipt.left, 0.0, receipt.id, "", receipt.key)
 	_receipt_exceptions(code, receipts)
 
 
@@ -485,6 +488,13 @@ func _decorate_rows() -> void:
 			element = report.proposals[row.proposal].number
 		row.element = _element(row)
 		row.number = "" if row.kind in ["Requirement", "Unreserved stock"] else element
+		# The document that causes a requirement: a demand, a production order or a planned order.
+		var source: String = row.doc
+		if report.proposals.has(source):
+			source = report.proposals[source].number
+		elif book.planning_conversions.has(source):
+			source = book.planning_conversions[source]
+		row.source = source
 		var hit: Dictionary = messages.get("%s|%s" % [row.code, element], {})
 		if row.kind == "Requirement" and hit.get("kind", "") != "safety_stock":
 			hit = {}
