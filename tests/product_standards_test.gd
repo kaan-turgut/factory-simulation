@@ -80,16 +80,21 @@ func _rates_and_eligibility() -> void:
 	var mini := Scheduling.assignment(book, "FG-2005", 8, 0, "FG-2005/WC-PKG-02")
 	_check(mini.error.is_empty() and mini.route.operations[0].standard.unit == "cartons/h",
 		"Mini product uses the carton standard on Line 02")
-	_check(Standards.kg_per_hour(mini.route.operations[0].standard, mini.recipe.spec) == 360.0,
-		"180 cartons/h at 2 kg/carton equals 360 kg/h")
+	_check(Standards.kg_per_hour(mini.route.operations[0].standard, mini.recipe.spec) == 260.0,
+		"130 cartons/h at 2 kg/carton equals 260 kg/h")
 	_check(Scheduling.assignment(book, "FG-2005", 8, 0, "FG-2005/WC-PKG-01").error != "",
 		"Line 01 rejects the mini packaging format")
 	var premium1 := Scheduling.assignment(book, "FG-2001", 8, 0, "FG-2001/WC-PKG-01")
 	var premium2 := Scheduling.assignment(book, "FG-2001", 8, 0, "FG-2001/WC-PKG-02")
 	_check(premium1.duration > premium2.duration, "Both packaging lines can run a premium product at different rates")
 	var bites := Scheduling.assignment(book, "CUT-HAZ-MINI", 2, 0, "")
-	_check(bites.route.operations[0].standard.unit == "pieces/h" and bites.recipe.spec.dimensions_mm.map(func(value): return int(value)) == [20, 20, 12],
-		"Cutter applies mini dimensions and a pieces-per-hour standard")
+	_check(bites.route.operations[0].standard.unit == "pieces/h"
+		and bites.recipe.spec.dimensions_mm.map(func(value): return int(value)) == [22, 22, 20]
+		and is_equal_approx(mini.recipe.spec.pack_kg / bites.recipe.spec.piece_kg, 10.0),
+		"Cutter applies mini dimensions and the pouch holds ten whole pieces")
+	var classic := Scheduling.alternatives(catalog, "FG-1001", 8, 0)
+	_check(classic.size() == 2 and classic.all(func(route: Dictionary) -> bool: return route.id.begins_with("ROUTE-FG-")),
+		"Classic packaging offers one independent route per eligible line")
 
 
 func _setup_and_batches() -> void:
@@ -100,8 +105,8 @@ func _setup_and_batches() -> void:
 	var vanilla := book.create_order("CREAM-VAN", 10, nut.finish, 1)
 	var plain: Dictionary = book.orders[vanilla.id]
 	var handling: float = book.catalog.scheduling.stages.cream.handling_seconds
-	_check(nut.estimate == handling + 2 * (150 + 4 + 4), "80 kg hazelnut cream books two batches with cycle and handling")
-	_check(plain.route.operations[0].setup_seconds == 900 and plain.estimate == handling + 120 + 8 + 900,
+	_check(nut.estimate == handling + 2 * (255 + 4 + 4), "80 kg hazelnut cream books two batches with cycle and handling")
+	_check(plain.route.operations[0].setup_seconds == 900 and plain.estimate == handling + 240 + 8 + 900,
 		"Planned hazelnut-to-vanilla transition reserves extra cleaning")
 	var block := book.create_order("BLOCK-HAZ", 10, 0, 1)
 	book._post("BAKED-01", 7, "", "SFG-WH", "Opening", "", "Test stock")
@@ -200,7 +205,7 @@ func _filled_family() -> void:
 	for tick in 88000:
 		line.advance(Line.STEP_SECONDS)
 		if tick % 16 == 0:
-			if line.warehouse_count() >= line.settings[&"warehouse_capacity"]:
+			if line.warehouse_count() == line.warehouse.size():
 				line.dispatch(true)
 			simultaneous = simultaneous or book.orders.values().filter(func(order: Dictionary) -> bool:
 				return order.status == "In Progress").size() > 1
@@ -235,6 +240,7 @@ func _filled_family() -> void:
 	_check(cutter_delivery and traceable_carts, "Worker carts follow the moved cutter and retain order/material identity")
 	_check(fg_milk.status == "Completed" and fg_mini.status == "Completed", "Both filled products finish through forklift receipt")
 	_check(is_equal_approx(fg_milk.received_kg, 200.0) and is_equal_approx(fg_mini.received_kg, 48.0), "Receive correct finished pallet masses")
+	_check(fg_mini.consumed.get("PK-WRAP-MINI") == 960.0, "Line 02 issues one pouch per pack")
 	_check(is_equal_approx(line.warehouse_mass() + line.dispatched_kg, 248.0), "Finished mass survives dispatch and reload")
 	var movement_totals := {}
 	var issues := {}
@@ -285,7 +291,70 @@ func _expanded_scene() -> void:
 	factory.terminal._example_demands()
 	_check(factory.line.erp.demands.size() == 3 and factory.terminal.plan.summary.make > 0,
 		"Example adds three demands and reruns MRP without duplicate demands")
+	_machine_models(factory.floor_view)
+	_shutter_traffic(factory.floor_view, factory.line)
 	factory.queue_free()
+
+
+func _machine_models(floor_view) -> void:
+	for row: Array in [[&"Spreader", "MeteringRoller"], [&"Cutter", "CuttingHead"],
+			[&"CoolingTunnel", "CoolingFan"], [&"Packer02", "SealingJaw"], [&"Packer", "FeedReel"]]:
+		var part := floor_view.view_of(row[0]).find_child(row[1], true, false) as Node3D
+		_check(part != null, "Machine has its own operating mechanism: " + String(row[0]))
+		if part == null:
+			continue
+		var idle_pose := part.transform
+		var model = floor_view._processing_models[row[0]]
+		model.animate(false, 0.17)
+		_check(part.transform == idle_pose, "Mechanism stays still while idle")
+		model.animate(true, 0.17)
+		_check(part.transform != idle_pose, "Mechanism moves while processing")
+
+
+func _shutter_traffic(floor_view, line: Line) -> void:
+	var goods_room = floor_view._warehouse_views[0]
+	var raw_room = floor_view._warehouse_views[1]
+	var layout := line.layout
+	var handler := line.erp.material_handler
+	var raw_gate = raw_room.doors[0]
+	var view = floor_view.view_of(handler.id)
+	_check(view.find_child("ManualPalletJack", true, false) != null, "Material handler has a manual pallet jack")
+	_check(raw_gate.raised == 0.0, "Raw shutter is closed with the handler inside")
+	_check(line.erp.manual_transfer("RM-FLOUR", 25.0, "RM-WH", "RM-STAGE", "Material handler test").is_empty(),
+		"Queue a real raw-material pickup")
+	line.set_playing(true)
+	line.advance(1.0)
+	floor_view.refresh(line)
+	var logistics = floor_view._logistics
+	_check(logistics._jack_load.visible and logistics._jack_ingredients.visible and not logistics._jack_packaging.visible,
+		"The pallet jack shows ingredient sacks while stock is in transit")
+	var crossed := false
+	for tick in 280:
+		line.advance(Line.STEP_SECONDS)
+		raw_room.animate(line, Line.STEP_SECONDS)
+		crossed = crossed or raw_gate.raised > 0.999
+	floor_view.refresh(line)
+	_check(crossed and raw_gate.raised == 0.0, "Raw shutter opens for the pallet jack and closes after it clears")
+	_check(not logistics._jack_load.visible and is_equal_approx(line.erp.stock("RM-FLOUR", "RM-STAGE"), 25.0),
+		"The pallet jack empties when the ingredients are delivered")
+	line.set_playing(false)
+	var forklift := line.forklift
+	for slot in [0, line.warehouse.size() - 1]:
+		var gate = goods_room.doors[0]
+		forklift.position = layout.pallet_approach(0)
+		forklift.previous_position = forklift.position
+		forklift.travel(layout.lift_to_slot(forklift.position, slot), Line.Operator.State.DRIVING, "Deliver", "FG warehouse")
+		var opened := false
+		while not forklift.finished():
+			forklift.advance(Line.STEP_SECONDS, 8.0)
+			goods_room.animate(line, Line.STEP_SECONDS)
+			opened = opened or gate.raised > 0.999
+		_check(opened, "Forklift opens the shutter on its delivery route to slot %d" % slot)
+		forklift.travel(layout.lift_from_slot(slot), Line.Operator.State.DRIVING, "Return", "Lift parking")
+		for tick in 140:
+			forklift.advance(Line.STEP_SECONDS, 8.0)
+			goods_room.animate(line, Line.STEP_SECONDS)
+		_check(forklift.finished() and gate.raised == 0.0, "Warehouse shutter closes after the forklift returns")
 
 
 func _check(condition: bool, description: String) -> void:

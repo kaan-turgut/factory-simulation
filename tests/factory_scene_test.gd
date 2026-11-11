@@ -29,6 +29,9 @@ func _run() -> void:
 	_click_button("Grid")
 	_check(_factory.grid_view.is_grid_visible(), "Grid toolbar button shows the overlay")
 	var grid := line.layout.grid
+	_check(grid.size == Vector2i(120, 100)
+		and camera.is_position_in_frustum(grid.to_world(Vector2(grid.size)))
+		and camera.is_position_in_frustum(grid.origin), "Home camera frames the resized factory")
 	_hover_world(grid.cell_center(Vector2i(22, 5)))
 	_check(_label_with_text("X 22   Z 05   Y 0.0 m") != null, "Ground hover shows grid coordinates")
 	_hover_world(grid.cell_center(Vector2i(8, 22), 3.5))
@@ -99,33 +102,31 @@ func _run() -> void:
 		_factory._process(1.0)
 		if line.warehouse_count() == 4:
 			break
-	_check(line.warehouse_count() == 4, "Live scene reaches a full warehouse")
+	_check(line.warehouse_count() == 4, "Live scene stores four pallets")
 	_click_button("Pause")
 	var tick := line.elapsed_ticks
 	_factory._process(1.0)
 	_check(not line.playing and line.elapsed_ticks == tick, "Pause freezes the live line")
 	_click_label("07  WAREHOUSE")
 	await process_frame
-	await _edit_setting(&"warehouse_capacity", "1")
-	var capacity := inspector.find_child("warehouse_capacity", true, false) as SpinBox
-	_check(line.settings[&"warehouse_capacity"] == 4 and capacity.value == 4,
-		"Warehouse rejects capacity below stored pallets")
-	_check(_label_with_text("Capacity must cover current and reserved stock.") != null,
-		"Rejected change explains the constraint")
+	_check(inspector.find_child("warehouse_capacity", true, false) == null,
+		"Warehouse has no capacity input")
+	_check(_label_with_text("4 / 24") != null and "4 / 24 pallets" in inspector._readout.text,
+		"Dashboard and inspector show fixed capacity")
 	_click_button("Dispatch one")
 	_check(line.warehouse_count() == 3 and line.dispatched_pallets == 1, "Dispatch one via inspector")
 	_click_button("Dispatch all")
 	_check(line.warehouse_count() == 0 and line.dispatched_pallets == 4, "Dispatch all via inspector")
-	await _edit_setting(&"warehouse_capacity", "3")
-	_check(line.settings[&"warehouse_capacity"] == 3, "Warehouse accepts valid capacity")
-	capacity.get_line_edit().release_focus()
 
 	_click_button("▶  Play")
-	_factory._process(9.0)
+	for index in 25:
+		_factory._process(1.0)
+		if line.warehouse_count() > 0:
+			break
 	_check(line.warehouse_count() > 0, "Live scene resumes deliveries after dispatch")
 	_click_button("Reset")
 	_check(line.elapsed_ticks == 0 and not line.playing and line.warehouse_count() == 0
-		and line.settings[&"warehouse_capacity"] == 3, "Reset clears the run and keeps settings")
+		and line.warehouse.size() == 24, "Reset clears the run and keeps fixed capacity")
 	_key(KEY_ESCAPE)
 	_check(not inspector.visible, "Escape closes inspector")
 
@@ -135,6 +136,27 @@ func _run() -> void:
 	_mouse_button(MOUSE_BUTTON_WHEEL_UP, empty, true)
 	await create_timer(0.35).timeout
 	_check(camera.position.length() < original.length(), "Wheel zooms in")
+	var distance := camera._target_distance
+	_key(KEY_Z)
+	_check(camera._target_distance < distance, "Z zooms in without modifiers")
+	_key(KEY_X)
+	_check(is_equal_approx(camera._target_distance, distance), "X zooms out without modifiers")
+	_key(KEY_EQUAL)
+	_check(camera._target_distance < distance, "Equals key zooms in")
+	_key(KEY_MINUS)
+	_check(is_equal_approx(camera._target_distance, distance), "Minus key zooms out")
+	_click_button("+")
+	_check(camera._target_distance < distance, "Toolbar zooms in")
+	_click_button("−")
+	_check(is_equal_approx(camera._target_distance, distance), "Toolbar zooms out")
+	var pinch := InputEventMagnifyGesture.new()
+	pinch.position = empty
+	pinch.factor = 1.25
+	root.push_input(pinch, true)
+	_check(camera._target_distance < distance, "Spreading a trackpad pinch zooms in")
+	pinch.factor = 0.8
+	root.push_input(pinch, true)
+	_check(is_equal_approx(camera._target_distance, distance), "Closing a trackpad pinch zooms out")
 	original = camera.position
 	_drag(MOUSE_BUTTON_RIGHT, empty, Vector2(75, 25))
 	await create_timer(0.35).timeout

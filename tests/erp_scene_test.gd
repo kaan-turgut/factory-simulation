@@ -77,6 +77,7 @@ func _run() -> void:
 	_check(factory.hud.inspector._selection == &"Oven02", "Oven 02 opens an independent inspector")
 	laptop.pressed.emit()
 	await create_timer(0.35).timeout
+	book.adjust("RM-COAT-1002", -book.stock("RM-COAT-1002", "RM-WH"), "Scene test shortage")
 	_button(terminal, "Material Requirements Planning").pressed.emit()
 	_button(terminal, "Run MRP").pressed.emit()
 	_check(terminal.plan.summary.get("buy", 0) == 1, "MRP workspace runs actual planning")

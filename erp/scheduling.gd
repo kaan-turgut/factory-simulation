@@ -29,7 +29,7 @@ static func alternatives(catalog, code: String, quantity: float, when: float) ->
 				or version.bom_version != bom.version:
 			continue
 		var route: Dictionary = catalog.routings[version.routing]
-		if not catalog._in_effect(route, when):
+		if not catalog._in_effect(route, when) or route.get("legacy_only", false):
 			continue
 		var operation: Dictionary = route.operations.back().duplicate(true)
 		if route.operations.size() != 1 and stage != "pack":
@@ -96,8 +96,6 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 		elif stage == "coat":
 			result.coating = child
 			result.coat_rate = rates[child]
-		elif stage == "pack" and child != "PK-PALLET":
-			result.packaging.append(child)
 	if not is_equal_approx(mass_rate, 1.0):
 		return {"error": "The stage BOM must conserve food mass."}
 	result.input = internal
@@ -114,14 +112,12 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 		result.baked_rate = rates[internal]
 		result.coated = code
 	if stage == "pack":
-		if internal.is_empty() or result.packaging.size() != 2 or not rates.has("PK-PALLET") \
+		var packaging: Dictionary = catalog.packing_components(spec, rates)
+		if result.internals.size() != 1 or packaging.is_empty() or rates.size() != packaging.size() + 2 \
 				or not is_equal_approx(float(rates[internal]), 1.0):
-			return {"error": "Packaging needs coated wafers, carton, label and pallets."}
-		for component in result.packaging:
-			if not is_equal_approx(float(rates[component]) * float(spec.box_kg), 1.0):
-				return {"error": "The carton and label quantities must match one shipping box."}
-		if not is_equal_approx(float(rates["PK-PALLET"]) * float(spec.box_kg) * float(spec.boxes_per_pallet), 1.0):
-			return {"error": "Pallet allocation must match boxes per pallet."}
+			return {"error": "Packaging needs one wafer input and quantities that match the packs, carton, label and pallet specifications."}
+		result.packaging = packaging.keys()
+		result.packaging_per_box = packaging
 		result.coated = internal
 	return result
 
@@ -129,9 +125,14 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 static func duration(catalog, recipe_data: Dictionary, operation: Dictionary) -> float:
 	if not operation.has("standard"):
 		return INF
-	return ceilf(float(catalog.scheduling.stages[operation.type].handling_seconds)
-		+ catalog.Standards.processing_seconds(operation.standard, recipe_data.spec, recipe_data.target)
-		+ float(operation.get("setup_seconds", operation.standard.setup_seconds)))
+	var stage: Dictionary = catalog.scheduling.stages[operation.type]
+	var standard: Dictionary = operation.standard
+	var handling := float(stage.handling_seconds) + float(stage.get("handling_seconds_per_kg", 0.0)) * float(recipe_data.target)
+	if standard.model == "batch":
+		var batches: int = catalog.Standards.batch_count(standard, recipe_data.target)
+		handling += batches * float(stage.get("batch_handling_seconds", 0.0))
+	return ceilf(handling + catalog.Standards.processing_seconds(standard, recipe_data.spec, recipe_data.target)
+		+ float(operation.get("setup_seconds", standard.setup_seconds)))
 
 
 static func setup_for(book, code: String, op: Dictionary, start: float, ignore: String = "") -> float:
@@ -160,7 +161,7 @@ static func assignment(book, code: String, quantity: float, start: float, versio
 		var seconds := duration(book.catalog, data, op)
 		if op.standard.model == "batch":
 			var input_kg: float = data.target / op.standard.yield_factor
-			var batches := ceili(input_kg / op.standard.batch_kg - EPS)
+			var batches: int = book.catalog.Standards.batch_count(op.standard, data.target)
 			if input_kg / batches + EPS < op.standard.min_batch_kg:
 				problem = "Quantity cannot form the required minimum batches on this resource."
 				continue

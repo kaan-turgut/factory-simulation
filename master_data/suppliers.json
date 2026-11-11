@@ -62,7 +62,9 @@
 			"PK-BOX-2004",
 			"PK-LABEL-2004",
 			"PK-BOX-2005",
-			"PK-LABEL-2005"
+			"PK-LABEL-2005",
+			"PK-WRAP",
+			"PK-WRAP-MINI"
 		],
 		"id": "SUP-04",
 		"lead": 60.0,

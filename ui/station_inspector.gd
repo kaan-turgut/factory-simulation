@@ -39,7 +39,7 @@ const STATIONS := {
 	&"Coater": ["Coater 01", "04  ·  CONTINUOUS PROCESS", [&"coater_rate", &"coater_input"]],
 	&"Packer": ["Packaging machine", "05  ·  CARTON LINE", [&"packing_rate", &"box_kg"]],
 	&"Palletizer": ["Palletizing bays", "06  ·  OUTBOUND STAGING", [&"pallet_boxes"]],
-	&"Warehouse": ["FG warehouse", "07  ·  OUTBOUND STORAGE", [&"warehouse_capacity"]],
+	&"Warehouse": ["FG warehouse", "07  ·  OUTBOUND STORAGE", []],
 	&"Forklift": ["Forklift", "LOGISTICS  ·  ELECTRIC LIFT", [&"lift_speed"]]
 }
 
@@ -228,7 +228,7 @@ func refresh(line: Line) -> void:
 			_readout.text = "\n".join(bays)
 		&"Warehouse":
 			var count := line.warehouse_count()
-			var capacity := int(line.settings[&"warehouse_capacity"])
+			var capacity := line.warehouse.size()
 			var reserved := int(line.warehouse_reserved_slot >= 0)
 			var open := capacity - count - reserved
 			var pct := count * 100.0 / capacity if capacity > 0 else 0.0
@@ -270,8 +270,8 @@ func _definition(id: StringName, line: Line) -> Array:
 		return STATIONS[id]
 	if line.erp != null and String(id).begins_with("FGSlot"):
 		return ["Finished pallet", "ERP  ·  FG-WH", []]
-	if id == &"SupplyShuttle" and line.erp != null:
-		return ["Material shuttle", "ERP  ·  INTERNAL LOGISTICS", []]
+	if id == Line.ERP.MATERIAL_HANDLER_ID and line.erp != null:
+		return [Line.ERP.MATERIAL_HANDLER_TITLE, "LOGISTICS  ·  MANUAL PALLET JACK", []]
 	var worker := line.find_operator(id)
 	if worker != null:
 		if String(id).begins_with("Platform"):
@@ -303,6 +303,9 @@ func _operator(worker: Line.Operator, line: Line) -> void:
 		_readout.text += "\nCarrying   %.1f kg" % worker.cargo_kg
 	if worker.id == &"Forklift" and line.lift_load != null:
 		_readout.text += "\nCarrying   1 pallet · %.1f kg" % line.lift_load.mass
+	if worker.id == Line.ERP.MATERIAL_HANDLER_ID and int(line.erp.shipment.get("phase", -1)) > 0:
+		for code in line.erp.shipment.items:
+			_readout.text += "\n%.2f %s   %s" % [line.erp.shipment.items[code], line.erp.catalog.materials[code].unit, code]
 
 
 func _status(copy: String, tint: Color) -> void:

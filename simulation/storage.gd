@@ -1,6 +1,9 @@
 extends RefCounted
 ## One bounded inventory. The owner computes feasible transfers before applying them.
 
+## Shared kilogram tolerance for physical buffers, ledger receipts and carton completion.
+const MASS_EPSILON := 1e-7
+
 var capacity: float
 var quantity: float = 0.0
 

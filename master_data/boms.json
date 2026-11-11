@@ -6,30 +6,30 @@
 		"parts": [
 			{
 				"code": "RM-FLOUR",
-				"qty": 0.55,
+				"qty": 0.44,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
 			{
 				"code": "RM-SUGAR",
-				"qty": 0.2,
+				"qty": 0.03,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
 			{
 				"code": "RM-OIL",
-				"qty": 0.1,
+				"qty": 0.01,
 				"scrap": 0.0,
 				"unit": "kg"
 			},
 			{
 				"code": "RM-WATER",
-				"qty": 0.15,
+				"qty": 0.52,
 				"scrap": 0.0,
 				"unit": "kg"
 			}
 		],
-		"version": 1
+		"version": 2
 	},
 	{
 		"active": true,
@@ -91,6 +91,12 @@
 				"unit": "kg"
 			},
 			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
 				"code": "PK-BOX-1001",
 				"qty": 1.0,
 				"scrap": 0.0,
@@ -109,7 +115,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 2
+		"version": 3
 	},
 	{
 		"active": true,
@@ -143,6 +149,12 @@
 				"unit": "kg"
 			},
 			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
 				"code": "PK-BOX-1002",
 				"qty": 1.0,
 				"scrap": 0.0,
@@ -161,7 +173,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 3
+		"version": 4
 	},
 	{
 		"active": true,
@@ -195,6 +207,12 @@
 				"unit": "kg"
 			},
 			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
 				"code": "PK-BOX-1003",
 				"qty": 1.0,
 				"scrap": 0.0,
@@ -213,7 +231,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 3
+		"version": 4
 	},
 	{
 		"active": true,
@@ -247,6 +265,12 @@
 				"unit": "kg"
 			},
 			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
 				"code": "PK-BOX-1004",
 				"qty": 1.0,
 				"scrap": 0.0,
@@ -265,7 +289,7 @@
 				"unit": "ea"
 			}
 		],
-		"version": 3
+		"version": 4
 	},
 	{
 		"active": true,
@@ -299,6 +323,12 @@
 				"unit": "kg"
 			},
 			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
+			},
+			{
 				"code": "PK-BOX-1005",
 				"qty": 1.0,
 				"scrap": 0.0,
@@ -317,17 +347,17 @@
 				"unit": "ea"
 			}
 		],
-		"version": 3
+		"version": 4
 	},
 	{
 		"parent": "CREAM-VAN",
 		"base": 1.0,
-		"version": 1,
+		"version": 2,
 		"active": true,
 		"parts": [
 			{
 				"code": "RM-SUGAR",
-				"qty": 0.35,
+				"qty": 0.4,
 				"unit": "kg",
 				"scrap": 0
 			},
@@ -339,13 +369,13 @@
 			},
 			{
 				"code": "RM-MILK",
-				"qty": 0.2,
+				"qty": 0.24,
 				"unit": "kg",
 				"scrap": 0
 			},
 			{
 				"code": "RM-VANILLA",
-				"qty": 0.1,
+				"qty": 0.01,
 				"unit": "kg",
 				"scrap": 0
 			}
@@ -706,7 +736,7 @@
 	{
 		"parent": "FG-2001",
 		"base": 5.0,
-		"version": 1,
+		"version": 2,
 		"active": true,
 		"parts": [
 			{
@@ -714,6 +744,12 @@
 				"qty": 5.0,
 				"unit": "kg",
 				"scrap": 0
+			},
+			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
 			},
 			{
 				"code": "PK-BOX-2001",
@@ -738,7 +774,7 @@
 	{
 		"parent": "FG-2002",
 		"base": 5.0,
-		"version": 1,
+		"version": 2,
 		"active": true,
 		"parts": [
 			{
@@ -746,6 +782,12 @@
 				"qty": 5.0,
 				"unit": "kg",
 				"scrap": 0
+			},
+			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
 			},
 			{
 				"code": "PK-BOX-2002",
@@ -770,7 +812,7 @@
 	{
 		"parent": "FG-2003",
 		"base": 5.0,
-		"version": 1,
+		"version": 2,
 		"active": true,
 		"parts": [
 			{
@@ -778,6 +820,12 @@
 				"qty": 5.0,
 				"unit": "kg",
 				"scrap": 0
+			},
+			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
 			},
 			{
 				"code": "PK-BOX-2003",
@@ -802,7 +850,7 @@
 	{
 		"parent": "FG-2004",
 		"base": 5.0,
-		"version": 1,
+		"version": 2,
 		"active": true,
 		"parts": [
 			{
@@ -810,6 +858,12 @@
 				"qty": 5.0,
 				"unit": "kg",
 				"scrap": 0
+			},
+			{
+				"code": "PK-WRAP",
+				"qty": 50,
+				"scrap": 0.0,
+				"unit": "ea"
 			},
 			{
 				"code": "PK-BOX-2004",
@@ -834,7 +888,7 @@
 	{
 		"parent": "FG-2005",
 		"base": 2.0,
-		"version": 1,
+		"version": 2,
 		"active": true,
 		"parts": [
 			{
@@ -842,6 +896,12 @@
 				"qty": 2.0,
 				"unit": "kg",
 				"scrap": 0
+			},
+			{
+				"code": "PK-WRAP-MINI",
+				"qty": 40,
+				"scrap": 0.0,
+				"unit": "ea"
 			},
 			{
 				"code": "PK-BOX-2005",

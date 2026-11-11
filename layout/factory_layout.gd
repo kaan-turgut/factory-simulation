@@ -5,9 +5,11 @@ const Master = preload("res://erp/master_files.gd")
 const Grid = preload("res://layout/factory_grid.gd")
 const Placement = preload("res://layout/placement.gd")
 const Rules = preload("res://layout/placement_rules.gd")
+const WarehouseRoom = preload("res://layout/warehouse_room.gd")
 
-const DEFAULT_SIZE := Vector2i(128, 40)
-const MIN_SIZE := Vector2i(128, 32)
+const DEFAULT_SIZE := Vector2i(120, 100)
+const MIN_SIZE := Vector2i(120, 32)
+const PREVIOUS_SIZE := Vector2i(128, 40)
 const ORIGIN := Vector3(-32, 0, 13)
 const PLATFORM_HEIGHT := 3.5
 const CART_LANE := 11.2
@@ -16,7 +18,7 @@ const SUPPLY_LANE := 2.15
 const LIFT_LANE := 5.8
 const REAR_LANE := 17.4
 const PALLET_BAYS := 3
-const WAREHOUSE_SLOTS := 8
+const LEGACY_WAREHOUSE_SLOTS := 8
 const MAX_CREW := 4
 const MAX_CARTS := 4
 const CART_BODY := Vector3(1.22, 1.75, 1.49)
@@ -41,6 +43,14 @@ var _approaches := {}
 
 func _init(dimensions: Vector2i = Vector2i.ZERO, directory: String = "", snapshot: Dictionary = {}) -> void:
 	error = _load(dimensions, directory, snapshot)
+
+
+static func warehouse_cell_after_resize(cell: Vector2i, turns: int, previous: Vector2i, current: Vector2i) -> Vector2i:
+	if current == DEFAULT_SIZE and previous in [PREVIOUS_SIZE, Vector2i(88, 32)] \
+			and turns == 0 and cell == Vector2i(previous.x - 11, 14):
+		# Move the former stock rack position clear of Packing 02's cart approach.
+		return Vector2i(103, 13)
+	return cell + Vector2i(current.x - previous.x, 0)
 
 
 func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> String:
@@ -88,12 +98,17 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 			if not _numbers(point, 3, false, -INF):
 				return "factory_layout.json [%s].ports.%s: expected three finite coordinates." % [row.id, key]
 			ports[StringName(key)] = Vector3(point[0], point[1], point[2])
-		var x := int(row.cell[0]) + (width - configured.x if row.id == "Warehouse" and dimensions != Vector2i.ZERO else 0)
+		var cell := Vector2i(int(row.cell[0]), int(row.cell[1]))
+		var size := Vector2i(int(row.size[0]), int(row.size[1]))
+		if row.id == "Warehouse" and dimensions != Vector2i.ZERO:
+			cell.x += width - configured.x
+		if row.id in ["RawWarehouse", "Warehouse"] and WarehouseRoom.high_bay(size):
+			cell.y += grid.size.y - configured.y
 		var movable: bool = row.movable
 		if not snapshot.is_empty() and not snapshot.has("placement_revision"):
 			movable = movable or StringName(row.id) in [&"Extruder", &"Hopper", &"PackagingWIP", &"Palletizer", &"Warehouse"]
-		_define(Placement.new(StringName(row.id), StringName(row.kind), Vector2i(x, int(row.cell[1])),
-			Vector2i(int(row.size[0]), int(row.size[1])), row.height, row.elevation, int(row.turns),
+		_define(Placement.new(StringName(row.id), StringName(row.kind), cell,
+			size, row.height, row.elevation, int(row.turns),
 			Vector4i(int(row.clearance[0]), int(row.clearance[1]), int(row.clearance[2]), int(row.clearance[3])), ports, movable))
 	var required := {&"Platform":[&"pick_0", &"pick_1"], &"Stairs":[], &"Hopper":[&"drop_0", &"drop_1", &"outlet"],
 		&"Extruder":[&"feed", &"raw_dock"], &"Oven":[&"raw_dock", &"cooked_dock"], &"Oven02":[&"raw_dock", &"cooked_dock"],
@@ -141,6 +156,9 @@ func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 		return grid.to_world(Vector2(1.0, 10.0))
 	if SUPPLY_STATIONS.has(location):
 		return port(SUPPLY_STATIONS[location], &"supply", plan)
+	if location == "RM-WH":
+		var room: Placement = plan[&"RawWarehouse"]
+		return _room_point(room, WarehouseRoom.raw_dock(room.size))
 	return grid.to_world(Vector2(10.0, SUPPLY_LANE))
 
 
@@ -204,13 +222,32 @@ func pallet_approach(index: int, plan: Dictionary = objects) -> Vector3:
 	return pallet_position(index, plan) + Vector3(0, 0, 1.65).rotated(Vector3.UP, plan[&"Palletizer"].yaw())
 
 
+func warehouse_slot_count(plan: Dictionary = objects) -> int:
+	return WarehouseRoom.FG_SLOT_COUNT if WarehouseRoom.high_bay(plan[&"Warehouse"].size) else LEGACY_WAREHOUSE_SLOTS
+
+
 func warehouse_slot(index: int, plan: Dictionary = objects) -> Vector3:
-	return plan[&"Warehouse"].local_point(grid, Vector3(-3.60 + (index % 4) * 2.2,
+	var room: Placement = plan[&"Warehouse"]
+	if WarehouseRoom.high_bay(room.size):
+		return _room_point(room, WarehouseRoom.finished_slot(room.size, index))
+	return room.local_point(grid, Vector3(-3.60 + (index % 4) * 2.2,
 		0, -2.55 + floori(index / 4.0) * 5.2))
 
 
 func warehouse_approach(index: int, plan: Dictionary = objects) -> Vector3:
-	return warehouse_slot(index, plan) + Vector3(0, 0, 1.65).rotated(Vector3.UP, plan[&"Warehouse"].yaw())
+	var room: Placement = plan[&"Warehouse"]
+	var distance := WarehouseRoom.FG_APPROACH if WarehouseRoom.high_bay(room.size) else 1.65
+	return warehouse_slot(index, plan) + Vector3(0, 0, distance).rotated(Vector3.UP, room.yaw())
+
+
+func warehouse_entry_path(plan: Dictionary = objects) -> Array[Vector3]:
+	var room: Placement = plan[&"Warehouse"]
+	var apron := _room_point(room, Vector2(0, room.size.y * 0.5 + 3.25))
+	return [Vector3(lift_side_x(), 0, lane_z(LIFT_LANE)), Vector3(lift_side_x(), 0, apron.z), apron]
+
+
+func _room_point(room: Placement, local: Vector2) -> Vector3:
+	return room.local_point(grid, Vector3(local.x, 0, -local.y))
 
 
 func cart_aisle_end() -> int:
@@ -238,6 +275,16 @@ func route(from: Vector3, to: Vector3, lane: float) -> Array[Vector3]:
 
 func lift_to_slot(from: Vector3, index: int, plan: Dictionary = objects) -> Array[Vector3]:
 	var target := warehouse_approach(index, plan)
+	var room: Placement = plan[&"Warehouse"]
+	if WarehouseRoom.high_bay(room.size):
+		var path := warehouse_entry_path(plan)
+		path.push_front(Vector3(from.x, 0, lane_z(LIFT_LANE)))
+		var row := WarehouseRoom.finished_slot(room.size, index)
+		var aisle := row.y + WarehouseRoom.FG_APPROACH + WarehouseRoom.FG_TURN_AHEAD
+		path.append(_room_point(room, Vector2(0, aisle)))
+		path.append(_room_point(room, Vector2(row.x, aisle)))
+		path.append(target)
+		return path
 	if index < 4:
 		return route(from, target, LIFT_LANE)
 	var rear := lane_z(REAR_LANE)
@@ -247,6 +294,11 @@ func lift_to_slot(from: Vector3, index: int, plan: Dictionary = objects) -> Arra
 
 func lift_from_slot(index: int, plan: Dictionary = objects) -> Array[Vector3]:
 	var from := warehouse_approach(index, plan)
+	if WarehouseRoom.high_bay(plan[&"Warehouse"].size):
+		var path := lift_to_slot(lift_home(), index, plan)
+		path.pop_back()
+		path.reverse()
+		return path
 	if index < 4:
 		return route(from, lift_home(), LIFT_LANE)
 	var rear := lane_z(REAR_LANE)
@@ -399,17 +451,17 @@ func _validate_connections(plan: Dictionary) -> String:
 		var approach := pallet_approach(index, plan)
 		if not _path_clear(lift_home(), route(lift_home(), approach, LIFT_LANE), 0.88, obstacles):
 			return "A forklift pickup route would be obstructed."
-		for slot in WAREHOUSE_SLOTS:
+		for slot in warehouse_slot_count(plan):
 			if not _path_clear(approach, lift_to_slot(approach, slot, plan), 0.88, obstacles):
 				return "A forklift delivery route would be obstructed."
-	for slot in WAREHOUSE_SLOTS:
+	for slot in warehouse_slot_count(plan):
 		if not _path_clear(warehouse_approach(slot, plan), lift_from_slot(slot, plan), 0.88, obstacles):
 			return "A forklift return route would be obstructed."
 	var supply_stops: Array[Vector3] = [supply_point("RM-WH", plan), supply_point("RM-STAGE", plan)]
 	for location in SUPPLY_STATIONS:
 		supply_stops.append(supply_point(location, plan))
 	if not _lane_clear(supply_stops, SUPPLY_LANE, 0.75, obstacles):
-		return "A supply shuttle route would be obstructed."
+		return "A material handler route would be obstructed."
 	for key: StringName in LINKS:
 		var endpoints := belt(key, plan)
 		var link: Array = LINKS[key]
@@ -546,8 +598,17 @@ func _cached_approach(point: Vector3, lane: float, radius: float, blockers: Dict
 func _obstacles(plan: Dictionary) -> Dictionary:
 	var result := {}
 	for item: Placement in plan.values():
-		if is_zero_approx(item.elevation) and (item.kind in [&"machine", &"access"] or item.id in [&"RawWarehouse", &"SFGWarehouse"]):
+		if is_zero_approx(item.elevation) and (item.kind in [&"machine", &"access"] or item.id == &"SFGWarehouse"):
 			result[item.id] = Rect2(item.footprint())
+	for id: StringName in [&"RawWarehouse", &"Warehouse"]:
+		var item: Placement = plan[id]
+		var room := WarehouseRoom.new(item.size, id == &"Warehouse")
+		var panels := room.walls + room.racks
+		for index in panels.size():
+			var area: Rect2 = panels[index]
+			var offset := area.get_center()
+			result[StringName("%sPanel%d" % [id, index])] = _local_area(item,
+				Vector3(offset.x, 0, -offset.y), area.size)
 	var supports := _platform_supports(plan)
 	for index in supports.size():
 		result[StringName("PlatformSupport%d" % index)] = supports[index]
@@ -555,8 +616,9 @@ func _obstacles(plan: Dictionary) -> Dictionary:
 	result[&"Palletizer"] = _local_area(plan[&"Palletizer"], Vector3(-0.66, 0, 2.0), Vector2(6.7, 1.5))
 	for index in PALLET_BAYS:
 		result[StringName("PalletBay%d" % index)] = _area(pallet_position(index, plan), _rotated_size(Vector2(1.70, 1.36), plan[&"Palletizer"]))
-	for index in WAREHOUSE_SLOTS:
-		result[StringName("WarehouseSlot%d" % index)] = _area(warehouse_slot(index, plan), _rotated_size(Vector2(1.70, 1.36), plan[&"Warehouse"]))
+	if not WarehouseRoom.high_bay(plan[&"Warehouse"].size):
+		for index in LEGACY_WAREHOUSE_SLOTS:
+			result[StringName("WarehouseSlot%d" % index)] = _area(warehouse_slot(index, plan), _rotated_size(Vector2(1.70, 1.36), plan[&"Warehouse"]))
 	return result
 
 

@@ -465,7 +465,7 @@ func _dashboard() -> void:
 		["Today's production", _qty(b.today_kg()) + " kg received"],
 		["Open orders / purchases", "%d orders / %d purchase orders" % [open_orders, pending_po]],
 		["Material shortages", ", ".join(PackedStringArray(shortages.keys())) if not shortages.is_empty() else "—"],
-		["Finished warehouse", "%d / %d pallets · %s kg" % [line.warehouse_count(), line.settings[&"warehouse_capacity"], _qty(line.warehouse_mass())]],
+		["Finished warehouse", "%d / %d pallets · %s kg" % [line.warehouse_count(), line.warehouse.size(), _qty(line.warehouse_mass())]],
 		["Setup remaining", "%s s coating / %s s packing" % [_qty(b.coat_remaining), _qty(b.pack_remaining)]],
 		["Shortage idle time", "%s sim min (sampled)" % _qty(b.delay_seconds / 60.0)],
 		["Run utilization", _utilization()]

@@ -81,12 +81,17 @@ func _elevation() -> void:
 
 func _factory_constraints() -> void:
 	var plan := Layout.new()
-	var expanded := Layout.new(Vector2i(147, 44))
+	var expanded_size := Layout.DEFAULT_SIZE + Vector2i(19, 4)
+	var expanded := Layout.new(expanded_size)
 	_check(plan.validate().is_empty() and expanded.validate().is_empty(), "Default and expanded halls validate")
-	_check(plan.grid.origin == expanded.grid.origin and expanded.grid.size == Vector2i(147, 44),
+	_check(plan.grid.origin == expanded.grid.origin and expanded.grid.size == expanded_size,
 		"Changing hall dimensions preserves the origin")
 	_check(expanded.center(&"Warehouse").x - plan.center(&"Warehouse").x == 19.0,
 		"Warehouse stays at the right end of an expanded hall")
+	for id: StringName in [&"RawWarehouse", &"Warehouse"]:
+		_check(plan.objects[id].footprint().end.y == plan.grid.size.y - 1
+			and expanded.objects[id].footprint().end.y == expanded.grid.size.y - 1,
+			"The warehouse follows the rear wall at both hall sizes")
 	var oven := plan.objects[&"Oven"]
 	_check("overlaps" in plan.validate_move(&"Oven", plan.objects[&"Coater"].cell, 0),
 		"A move cannot claim another machine's cells")

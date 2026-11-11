@@ -16,6 +16,7 @@ func _initialize() -> void:
 	_late_receipt_and_safety()
 	_competing_demand()
 	_planning_and_manufacturing()
+	_floor_crew_migration()
 	_thousand_box_order()
 	print("ChocoERP integration checks, %d failures." % _failures)
 	quit(int(_failures > 0))
@@ -39,8 +40,9 @@ func _master_data() -> void:
 		_near(catalog.boms[code].base, 5.0, code + " uses a one-box BOM base")
 		_near(recipe.needs["PK-BOX-%d" % index], 9.0, code + " uses one carton per box")
 		_near(recipe.needs["PK-LABEL-%d" % index], 9.0, code + " uses one label per box")
+		_near(recipe.needs["PK-WRAP"], 450.0, code + " uses one wrapper per retail pack")
 		_near(recipe.needs[recipe.coating], recipe.target * 0.2, "Variant coating explosion")
-		_near(recipe.needs["RM-FLOUR"], recipe.target * 0.8 * 0.55, "Multilevel flour explosion")
+		_near(recipe.needs["RM-FLOUR"], recipe.target * 0.8 * 0.44, "Combined-route flour explosion")
 		_near(recipe.needs["PK-PALLET"], ceilf(9.0 / recipe.spec.boxes_per_pallet), "Pallet rounding")
 	_check(colors.size() == 5, "Portfolio distinguishes packaging")
 	_check(catalog.clone_product("FG-1002", "FG-1020", "Dark trial").is_empty(), "Clone stable SKU")
@@ -48,11 +50,12 @@ func _master_data() -> void:
 	var reject := catalog.save_bom("DOUGH-01", 1, [{"code": "FG-1002", "qty": 1.0, "unit": "kg", "scrap": 0.0}], true)
 	_check(not reject.is_empty(), "BOM cycle rejected")
 	var old_version: int = catalog.boms["FG-1020"].version
-	_check(catalog.edit_material("FG-1020", "Dark trial", 0.0, 240.0, true, 0.1, 50, 6).is_empty(),
+	_check(catalog.edit_material("FG-1020", "Dark trial", 0.0, 240.0, true, 0.125, 40, 6).is_empty(),
 		"Dependent product sizes update")
 	var edited := catalog.recipe("FG-1020", 7)
 	_check(edited.error.is_empty() and edited.bom_version == old_version + 1, "Changed spec versions its BOM")
 	_near(edited.target, 35.0, "Consumer pack weight derives shipping weight")
+	_near(edited.needs["PK-WRAP"], 280.0, "Wrapper BOM follows the packs per carton")
 
 
 func _packaging_migration() -> void:
@@ -93,24 +96,38 @@ func _packaging_migration() -> void:
 func _purchase_and_transfer() -> void:
 	var line := _line()
 	var b := line.erp
+	var opening_coating := b.stock("RM-COAT-1002", "RM-WH")
 	var po := b.purchase("SUP-02", "RM-COAT-1002", 12.0)
 	_check(po.error.is_empty(), "Create purchase order")
-	_near(b.stock("RM-COAT-1002", "RM-WH"), 0.0, "Purchase creates no early stock")
+	_near(b.stock("RM-COAT-1002", "RM-WH"), opening_coating, "Purchase creates no early stock")
 	_check(not b.receive(po.id, 5.0).is_empty(), "Early manual receipt blocked")
 	b.now = b.purchases[po.id].due
 	_check(b.receive(po.id, 5.0).is_empty() and b.purchases[po.id].status == "Partial", "Partial receipt")
 	_check(not b.receive(po.id, 8.0).is_empty(), "Over-receipt blocked")
 	_check(b.receive(po.id, 7.0).is_empty() and b.purchases[po.id].status == "Received", "Complete remainder")
-	_near(b.stock("RM-COAT-1002", "RM-WH"), 12.0, "Actual receipts update stock")
+	_near(b.stock("RM-COAT-1002", "RM-WH"), opening_coating + 12.0, "Actual receipts update stock")
 	var opening := b.stock("RM-FLOUR", "RM-WH")
 	_check(b.manual_transfer("RM-FLOUR", 25.0, "RM-WH", "RM-STAGE", "Physical transfer test").is_empty(),
 		"Queue transfer to mezzanine")
 	_near(b.stock("RM-FLOUR", "RM-STAGE"), 0.0, "Transfer does not teleport")
 	line.set_playing(true)
 	line.advance(1.0)
-	_near(b.stock("RM-FLOUR", "TRANSIT"), 25.0, "Material rides the shuttle")
+	_near(b.stock("RM-FLOUR", "TRANSIT"), 25.0, "Material travels on the pallet jack")
 	_near(b.stock("RM-FLOUR", "RM-WH"), opening - 25.0, "Pickup decrements warehouse once")
-	line.advance(35.0)
+	var snapshot := Save.snapshot(line)
+	snapshot.version = 9
+	snapshot.shuttle.title = "Material shuttle"
+	snapshot.shuttle.state = Line.Operator.State.DRIVING
+	var saved := Save.restore(snapshot)
+	_check(saved.error.is_empty() and saved.line.erp.material_handler.state == Line.Operator.State.MOVING_PALLET_JACK
+		and saved.line.erp.material_handler.title == Line.ERP.MATERIAL_HANDLER_TITLE,
+		"A legacy supply trip resumes with the material handler")
+	if not saved.error.is_empty():
+		return
+	line = saved.line
+	b = line.erp
+	line.set_playing(true)
+	line.advance(75.0)
 	_near(b.stock("RM-FLOUR", "RM-STAGE"), 25.0, "Travel and handling complete transfer")
 	_near(b.stock("RM-FLOUR", "TRANSIT"), 0.0, "Transit cleared after drop")
 	_near(b.reservations["RM-FLOUR"], 0.0, "Transfer reservation released")
@@ -120,12 +137,13 @@ func _purchase_and_transfer() -> void:
 func _reservations() -> void:
 	var line := _line()
 	var b := line.erp
+	var opening := b.stock("RM-COAT-1001", "RM-WH")
 	var id: String = b.create_order("FG-1001", 8, 400.0, 5).id
 	_check(b.release(id).is_empty(), "Release a fully covered order")
 	_check(not b.release(id).is_empty(), "Release is not repeatable")
 	_near(b.reservations["RM-COAT-1001"], 8.0, "Release reserves exact coating quantity")
-	_near(b.stock("RM-COAT-1001", "RM-WH"), 1000.0, "Release does not consume physical stock")
-	_check(not b.adjust("RM-COAT-1001", -1000.0, "Count").is_empty(), "Adjustment protects reservations")
+	_near(b.stock("RM-COAT-1001", "RM-WH"), opening, "Release does not consume physical stock")
+	_check(not b.adjust("RM-COAT-1001", -opening, "Count").is_empty(), "Adjustment protects reservations")
 	_check(not b.transition(id, "Closed").is_empty(), "Released cannot close directly")
 	var plan := MRP.new()
 	plan.run(b, line.erp_fg())
@@ -137,6 +155,7 @@ func _reservations() -> void:
 func _late_receipt_and_safety() -> void:
 	var line := _line()
 	var b := line.erp
+	b.adjust("RM-COAT-1002", -b.stock("RM-COAT-1002", "RM-WH"), "Shortage test")
 	var material: Dictionary = b.catalog.materials["RM-COAT-1002"]
 	material.minimum = 2.0
 	material.lead = 120.0
@@ -186,6 +205,7 @@ func _planning_and_manufacturing() -> void:
 	var line := Line.new(layout)
 	line.enable_erp(false)
 	var b := line.erp
+	b.adjust("RM-COAT-1002", -b.stock("RM-COAT-1002", "RM-WH"), "Shortage test")
 	var demand := b.create_demand("FG-1002", 13, 420.0)
 	var plan := MRP.new()
 	plan.run(b, line.erp_fg())
@@ -234,8 +254,8 @@ func _planning_and_manufacturing() -> void:
 	var restored: Line = saved.line
 	_check(not restored.playing and restored.layout.objects[&"Oven"].turns == 1, "Restore paused with the same placement")
 	restored.set_playing(true)
-	line.advance(650.0)
-	restored.advance(650.0)
+	line.advance(1250.0)
+	restored.advance(1250.0)
 	_check(Save.snapshot(restored) == Save.snapshot(line), "Reload resumes with exact stock, jobs and movement IDs")
 	var order: Dictionary = b.orders[id]
 	_check(order.status == "Completed" and order.received == 13 and order.packed == 13,
@@ -246,8 +266,9 @@ func _planning_and_manufacturing() -> void:
 	_check(line.warehouse_count() == 2 and line.warehouse[1].boxes == 5 and line.warehouse[1].sealed,
 		"Final partial pallet occupies real warehouse space")
 	_near(order.consumed.get("RM-COAT-1002", 0.0), 13.0, "Physical coating consumption")
-	_near(order.consumed.get("RM-FLOUR", 0.0), 28.6, "Physical dough consumption")
+	_near(order.consumed.get("RM-FLOUR", 0.0), 22.88, "Physical batter consumption")
 	_near(order.consumed.get("PK-BOX-1002", 0.0), 13.0, "Packaging consumed as cartons form")
+	_near(order.consumed.get("PK-WRAP", 0.0), 650.0, "Film consumed as retail packs are formed")
 	_near(order.consumed.get("PK-PALLET", 0.0), 2.0, "Actual pallets consumed")
 	_near(b.reservations.get("RM-COAT-1002", 0.0), 0.0, "Completed order releases remaining reservation")
 	var ids := {}
@@ -284,10 +305,46 @@ func _changeover(line: Line) -> void:
 	line.advance(15.0)
 	_check(b.coat_remaining > 0 and b.pack_remaining == 0.0, "Parallel timers respect distinct durations")
 	_near(line.coater.total_output, before, "Setup blocks processing")
-	line.advance(500.0)
+	line.advance(900.0)
 	_check(b.orders[next].status == "Completed" and line.warehouse_count() == 3, "Second SKU completes independently")
 	_near(line.erp_fg().get("FG-1001", 0.0), 15.0, "Second SKU stays separate")
 	_near(line.erp_fg().get("FG-1002", 0.0), 65.0, "First SKU remains intact")
+
+
+func _floor_crew_migration() -> void:
+	var line := _line()
+	line.set_setting(&"floor_count", 2.0)
+	line.reset()
+	var book := line.erp
+	var order := book.create_order("FG-1001", 8, 0, 1)
+	_check(order.error.is_empty() and book.release(order.id).is_empty(), "Release the old crew's order")
+	line.set_playing(true)
+	for tick in 2000:
+		line.advance(Line.STEP_SECONDS)
+		if not line.floor_assignments.is_empty():
+			break
+	_check(not line.floor_assignments.is_empty(), "Save while a floor job is assigned")
+	var current := Save.snapshot(line)
+	var custom := Save.restore(current)
+	_check(custom.error.is_empty() and custom.line.floor_crew.size() == 2, "Current saves preserve a chosen crew size")
+	var previous := current.duplicate(true)
+	previous.version = 6
+	var result := Save.restore(previous)
+	_check(result.error.is_empty(), "Restore the old two-worker shift")
+	if not result.error.is_empty():
+		return
+	var restored: Line = result.line
+	var migrated := Save.snapshot(restored)
+	_check(restored.floor_crew.size() == 4 and restored.settings[&"floor_count"] == 4
+		and restored.find_operator(&"Worker3") != null and restored.find_operator(&"Worker4") != null,
+		"Old shift gains two new floor workers")
+	_check(migrated.floor.slice(0, 2) == previous.floor and migrated.jobs == previous.jobs
+		and restored.erp.orders == book.orders and restored.erp.balances == book.balances,
+		"Additional crew preserves the original workers, assignments and inventory")
+	restored.set_playing(true)
+	restored.advance(900.0)
+	_check(restored.erp.orders[order.id].status == "Completed" and is_equal_approx(restored.warehouse_mass(), 40.0),
+		"Saved order completes with the expanded crew")
 
 
 func _thousand_box_order() -> void:
@@ -296,15 +353,18 @@ func _thousand_box_order() -> void:
 	var id: String = book.create_order("FG-1001", 1000, 0.0, 1).id
 	_check(book.release(id).is_empty(), "Release 1,000 boxes from opening stock")
 	line.set_playing(true)
-	line.advance(2000.0)
-	_check(line.warehouse_count() == 4 and book.orders[id].status == "In Progress",
+	for interval in 64:
+		line.advance(250.0)
+		if line.warehouse_count() == 24:
+			break
+	_check(line.warehouse_count() == 24 and book.orders[id].status == "In Progress",
 		"Full physical warehouse holds a large order")
 	line.set_setting(&"floor_count", 3)
 	line.reset()
-	_check(not line.playing and line.floor_crew.size() == 2 and book.active_id == id,
+	_check(not line.playing and line.floor_crew.size() == 4 and book.active_id == id,
 		"Reset preserves the active order and its assigned fleet")
 	line.set_playing(true)
-	for interval in 250:
+	for interval in 320:
 		line.dispatch(true)
 		line.advance(160.0)
 		if book.orders[id].status == "Completed":

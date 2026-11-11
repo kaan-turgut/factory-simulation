@@ -14,6 +14,7 @@ const SILVER := Color("#a4b6b9")
 const PALE := Color("#deeceb")
 const TEAL := Color("#59a8a2")
 const AMBER := Color("#e7a23e")
+const JACK_ORANGE := Color("#eb9a2c")
 
 class CrewModel:
 	var view: Equipment
@@ -31,6 +32,11 @@ var _cart_coating := {}
 var _forklift: Equipment
 var _forks: Node3D
 var _load: Stock.PalletView
+var _jack_forks: Node3D
+var _jack_handle: Node3D
+var _jack_load: Node3D
+var _jack_ingredients: Node3D
+var _jack_packaging: Node3D
 
 
 func _init(parent: Node3D, draw: Primitives, stock: Stock, erp_enabled: bool) -> void:
@@ -41,6 +47,9 @@ func _init(parent: Node3D, draw: Primitives, stock: Stock, erp_enabled: bool) ->
 		_build_worker(StringName("Platform%d" % (index + 1)), true)
 	for index in Layout.MAX_CREW:
 		_build_worker(StringName("Worker%d" % (index + 1)), false)
+	if erp_enabled:
+		_build_worker(Line.ERP.MATERIAL_HANDLER_ID, false, true)
+		_build_pallet_jack(views[Line.ERP.MATERIAL_HANDLER_ID])
 	for index in Layout.MAX_CARTS:
 		_build_cart(StringName("Raw%d" % (index + 1)), true)
 		_build_cart(StringName("Cooked%d" % (index + 1)), false)
@@ -83,6 +92,25 @@ func refresh(line: Line) -> void:
 		if line.forklift.state == Operator.State.UNLOADING:
 			lift_height = line.forklift.remaining / Line.LIFT_HANDLING_SECONDS
 		_forks.position.y = lerpf(0.07, 0.28, lift_height)
+	if _jack_load != null and line.erp != null:
+		_refresh_jack_load(line.erp)
+
+
+func _refresh_jack_load(book: Line.ERP) -> void:
+	_jack_load.visible = int(book.shipment.get("phase", -1)) > 0
+	if not _jack_load.visible:
+		return
+	var ingredients := false
+	var packaging := false
+	for code in book.shipment.items:
+		if book.catalog.materials[code].type == "VERP":
+			packaging = true
+		else:
+			ingredients = true
+	_jack_ingredients.visible = ingredients
+	_jack_packaging.visible = packaging
+	_jack_ingredients.position.x = -0.21 if packaging else 0.0
+	_jack_packaging.position.x = 0.21 if ingredients else 0.0
 
 
 func animate(line: Line, delta: float) -> void:
@@ -93,6 +121,13 @@ func animate(line: Line, delta: float) -> void:
 		_pose_worker(operator, alpha, t, turn)
 	for operator in line.floor_crew:
 		_pose_worker(operator, alpha, t, turn)
+	if _jack_load != null and line.erp != null:
+		var handler := line.erp.material_handler
+		_pose_worker(handler, alpha, t, 1.0 if delta == 0.0 else turn)
+		var unloading := handler.state == Operator.State.UNLOADING
+		var lift := clampf(handler.remaining, 0.0, 1.0) if unloading else 1.0
+		_jack_forks.position.y = 0.065 * lift if _jack_load.visible else 0.0
+		_jack_handle.rotation.x = -0.35 + sin(t * 8.0) * 0.16 if unloading else -0.35
 	for cart in line.carts:
 		var view := views[cart.id]
 		view.position = cart.previous_position.lerp(cart.position, alpha)
@@ -105,8 +140,9 @@ func _pose_worker(worker: Operator, alpha: float, t: float, turn: float) -> void
 	var model := _crew[worker.id]
 	model.view.position = worker.previous_position.lerp(worker.position, alpha)
 	model.view.rotation.y = lerp_angle(model.view.rotation.y, worker.heading, turn)
-	var walking := worker.state in [Operator.State.WALKING, Operator.State.CARRYING, Operator.State.PUSHING]
-	var hands_forward := worker.cargo_kg > 0.0 or worker.state == Operator.State.PUSHING
+	var pushing := worker.state in [Operator.State.PUSHING, Operator.State.MOVING_PALLET_JACK]
+	var walking := pushing or worker.state in [Operator.State.WALKING, Operator.State.CARRYING]
+	var hands_forward := worker.cargo_kg > 0.0 or pushing
 	var stride := sin(t * 10.0 + float(worker.id.hash() % 19)) if walking else 0.0
 	model.limbs[0].rotation.x = stride * 0.55
 	model.limbs[1].rotation.x = -stride * 0.55
@@ -132,12 +168,17 @@ func _view(id: StringName, size: Vector3, tint: Color, offset: Vector3 = Vector3
 	return view
 
 
-func _build_worker(id: StringName, platform: bool) -> void:
+func _build_worker(id: StringName, platform: bool, handler: bool = false) -> void:
 	var model := CrewModel.new()
 	var vest := Color("#809bdf") if platform else Color("#e2a050")
 	var hat := Color("#b7dcf9") if platform else Color("#f7d468")
-	model.view = _view(id, Vector3(0.92, 1.95, 0.85), hat)
+	if handler:
+		vest = TEAL
+		hat = PALE
+	model.view = _view(id, Vector3(1.24, 1.95, 2.70), hat, Vector3(0, 0, 0.13)) if handler \
+		else _view(id, Vector3(0.92, 1.95, 0.85), hat)
 	model.body = Node3D.new()
+	model.body.position.z = -0.79 if handler else 0.0
 	model.view.add_child(model.body)
 	_draw.box(model.body, Vector3(0, 1.17, 0), Vector3(0.61, 0.57, 0.38), vest)
 	_draw.box(model.body, Vector3(0, 1.09, 0.006), Vector3(0.63, 0.075, 0.402), PALE)
@@ -150,13 +191,53 @@ func _build_worker(id: StringName, platform: bool) -> void:
 		_draw.box(leg, Vector3(0, -0.85, 0.067), Vector3(0.26, 0.18, 0.36), RUBBER)
 		model.limbs.append(leg)
 	for side: float in [-1.0, 1.0]:
-		var arm := _pivot(model.body, Vector3(side * 0.37, 1.37, 0.01))
+		var arm := _pivot(model.body, Vector3(side * (0.28 if handler else 0.37), 1.37, 0.01))
 		_draw.box(arm, Vector3(0, -0.22, 0), Vector3(0.17, 0.46, 0.19), vest.darkened(0.19))
 		_draw.sphere(arm, Vector3(0, -0.48, 0), Vector3(0.17, 0.19, 0.18), Color("#c7906c"))
 		model.limbs.append(arm)
 	model.sack = _stock.sack(model.body, Vector3(0, 1.22, 0.55), 0.84)
 	model.sack.hide()
 	_crew[id] = model
+
+
+func _build_pallet_jack(parent: Equipment) -> void:
+	var jack := _pivot(parent, Vector3.ZERO)
+	jack.name = "ManualPalletJack"
+	for x: float in [-0.18, 0.18]:
+		_wheel(jack, Vector3(x, 0.12, 0.12), 0.12, 0.105)
+	_draw.box(jack, Vector3(0, 0.18, 0.14), Vector3(0.44, 0.19, 0.32), STEEL)
+	_draw.cylinder(jack, Vector3(0, 0.32, 0.21), 0.13, 0.27, SILVER)
+	_draw.cylinder(jack, Vector3(0, 0.49, 0.21), 0.073, 0.14, STEEL)
+	_jack_forks = _pivot(jack, Vector3.ZERO)
+	_draw.box(_jack_forks, Vector3(0, 0.18, 0.38), Vector3(0.74, 0.22, 0.22), JACK_ORANGE)
+	for x: float in [-0.27, 0.27]:
+		_draw.box(_jack_forks, Vector3(x, 0.115, 0.91), Vector3(0.19, 0.094, 1.12), JACK_ORANGE)
+		_draw.cylinder(_jack_forks, Vector3(x, 0.115, 1.46), 0.095, 0.094, JACK_ORANGE)
+		for z: float in [1.24, 1.38]:
+			_wheel(jack, Vector3(x, 0.061, z), 0.061, 0.091)
+	_jack_handle = _pivot(jack, Vector3(0, 0.21, 0.03))
+	_draw.cylinder(_jack_handle, Vector3(0, 0.45, 0), 0.038, 0.90, RUBBER)
+	for x: float in [-0.16, 0.16]:
+		_draw.box(_jack_handle, Vector3(x, 0.98, 0), Vector3(0.059, 0.24, 0.064), RUBBER)
+	for y: float in [0.87, 1.08]:
+		_draw.box(_jack_handle, Vector3(0, y, 0), Vector3(0.37, 0.065, 0.069), RUBBER)
+	_jack_load = _pivot(_jack_forks, Vector3(0, 0.17, 0.94))
+	for x: float in [-0.49, 0, 0.49]:
+		_draw.box(_jack_load, Vector3(x, 0.04, 0), Vector3(0.13, 0.08, 1.01), Stock.WOOD.darkened(0.20))
+	for z: float in [-0.42, -0.21, 0, 0.21, 0.42]:
+		_draw.box(_jack_load, Vector3(0, 0.11, z), Vector3(1.11, 0.065, 0.17), Stock.WOOD)
+	_jack_ingredients = _pivot(_jack_load, Vector3.ZERO)
+	for y: float in [0.25, 0.43, 0.61]:
+		var sack := _stock.sack(_jack_ingredients, Vector3(0, y, 0), 0.78)
+		sack.rotation.y = PI * 0.5 if y == 0.43 else 0.0
+	_jack_packaging = _pivot(_jack_load, Vector3.ZERO)
+	_stock.carton(_jack_packaging, Vector3(0, 0.32, 0), Vector3(0.59, 0.34, 0.70))
+	_stock.carton(_jack_packaging, Vector3(0.02, 0.58, -0.03), Vector3(0.51, 0.18, 0.62))
+	_draw.batch_static(_jack_load)
+	_draw.batch_static(_jack_handle)
+	_draw.batch_static(_jack_forks)
+	_draw.batch_static(jack)
+	_jack_load.hide()
 
 
 func _build_cart(id: StringName, raw: bool, coated: bool = false) -> void:

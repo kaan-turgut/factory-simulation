@@ -118,7 +118,6 @@ func _versions() -> void:
 func _parallel() -> void:
 	var line := Line.new()
 	line.enable_erp(false)
-	line.set_setting(&"warehouse_capacity", 5)
 	var book := line.erp
 	# Use crossed assignments to ensure worker delivery follows the routing, not machine pairing.
 	var first := book.create_order("FG-1001", 16, 0, 1, "PV-1001-03")
@@ -137,7 +136,7 @@ func _parallel() -> void:
 	var raw_destinations := {}
 	var cooked_destinations := {}
 	var snapshot := {}
-	for tick in 7200:
+	for tick in 12000:
 		line.advance(Line.STEP_SECONDS)
 		if tick % 4 == 0:
 			var coated := 0.0
@@ -303,12 +302,12 @@ func _legacy_execution() -> void:
 	var mass := restored.material_on_site()
 	_check(is_equal_approx(mass, line.material_on_site()), "Legacy migration preserves in-flight stock")
 	restored.set_playing(true)
-	restored.advance(550.0)
+	restored.advance(950.0)
 	_check(restored.erp.orders[order.id].status == "Completed" and is_equal_approx(restored.warehouse_mass(), 40.0),
 		"Migrated order resumes through warehouse delivery")
 	var setup := restored.erp.create_order("FG-1001", 8, restored.erp.now, 1, "PV-1001-02")
 	_check(setup.error.is_empty() and restored.erp.release(setup.id).is_empty(), "Release onto Coater 02")
-	for tick in 2000:
+	for tick in 4500:
 		restored.advance(Line.STEP_SECONDS)
 		if restored.erp.orders[setup.id].status == "Completed":
 			break

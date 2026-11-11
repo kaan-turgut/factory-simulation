@@ -193,7 +193,7 @@ func _proposal(code: String, need: Dictionary, gap: float, projected: float) -> 
 				if not op.available or op.standard.model != "batch":
 					continue
 				var std: Dictionary = op.standard
-				var batches := ceili(data.quantity / (std.batch_kg * std.yield_factor) - EPS)
+				var batches: int = book.catalog.Standards.batch_count(std, data.quantity)
 				var lot := maxf(data.quantity, batches * std.min_batch_kg * std.yield_factor)
 				var option := Scheduling.assignment(book, code, lot, date, route.production_version)
 				if option.error.is_empty():

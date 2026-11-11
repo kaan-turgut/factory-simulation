@@ -2,7 +2,8 @@ extends RefCounted
 ## Reusable stock-to-stock cell. Jobs use the line's existing worker and cart reservations.
 const Storage = preload("res://simulation/storage.gd")
 const Machine = preload("res://simulation/machine.gd")
-const EPS := 0.00000001
+const Standards = preload("res://erp/production_standards.gd")
+const EPS := Storage.MASS_EPSILON
 
 var inputs := {}
 var output: Storage
@@ -133,22 +134,19 @@ func _pack(line, order: Dictionary, dt: float, factor: float) -> void:
 		amount -= moved
 		line._start_stage()
 		if partial + EPS >= box:
-			for code in order.recipe.packaging:
-				line.erp._consume(order, code, 1, order.route.operations[0].supply_location, "Carton formed")
-			order.packed += 1
+			line.erp.pack_box(false)
 			line.boxes_completed += 1
-			line._add_progress("pack", box)
-			line.erp.flow(order.recipe.input, box, "WIP", "", "WIP Used", "Carton packed")
-			line.erp.flow(order.code, box, "", "WIP", "Packed Receipt", "Carton packed")
-			output.apply_transfer(box, 0)
-			produced += box
+			line._add_progress("pack", partial)
+			line.erp.flow(order.recipe.input, partial, "WIP", "", "WIP Used", "Carton packed")
+			line.erp.flow(order.code, partial, "", "WIP", "Packed Receipt", "Carton packed")
+			output.apply_transfer(partial, 0)
+			produced += partial
 			partial = 0
 	state = "Packaging" if stock.quantity < before else "Waiting for wafers or packaging supplies"
 
 
 func batch_size(order: Dictionary) -> float:
-	var capacity: float = standard.batch_kg * standard.yield_factor
-	var count := ceili(order.recipe.target / capacity - EPS)
+	var count := Standards.batch_count(standard, order.recipe.target)
 	return minf(order.recipe.target - produced, order.recipe.target / count)
 
 

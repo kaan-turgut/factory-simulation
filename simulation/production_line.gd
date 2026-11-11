@@ -15,7 +15,8 @@ const Pallet = preload("res://simulation/pallet.gd")
 const SPEEDS := [1, 5, 20]
 const STEP_SECONDS := 0.25
 const STEP_HOURS := STEP_SECONDS / 3600.0
-const EPSILON := 1e-8
+const EPSILON := Storage.MASS_EPSILON
+const STEP_EPSILON := 1e-8
 const CART_HANDLING_SECONDS := 3.0
 const COATER_OUTFEED_KG := 36.0
 const LIFT_HANDLING_SECONDS := 2.0
@@ -252,9 +253,6 @@ func set_setting(key: StringName, requested: float) -> bool:
 		&"pack_wip_capacity":
 			if not pack_wip.resize(value):
 				return false
-		&"warehouse_capacity":
-			if value < warehouse_count() + int(warehouse_reserved_slot >= 0):
-				return false
 		&"extruder_rate":
 			extruder.configured_rate = value
 		&"coater_rate":
@@ -394,7 +392,7 @@ func reset() -> void:
 	staged_pallets.fill(null)
 	staged_pallets.resize(Layout.PALLET_BAYS)
 	warehouse.fill(null)
-	warehouse.resize(Layout.WAREHOUSE_SLOTS)
+	warehouse.resize(layout.warehouse_slot_count())
 	_configure_crews_and_carts()
 	forklift = Operator.new(&"Forklift", "Forklift", layout.lift_home())
 	lift_load = null
@@ -418,9 +416,7 @@ func _configure_crews_and_carts() -> void:
 	for index in 2:
 		platform_crew.append(Operator.new(StringName("Platform%d" % (index + 1)),
 			"Platform worker %d" % (index + 1), layout.platform_pick(index)))
-	for index in int(settings[&"floor_count"]):
-		floor_crew.append(Operator.new(StringName("Worker%d" % (index + 1)),
-			"Floor worker %d" % (index + 1), layout.crew_home(index)))
+	_add_floor_crew(int(settings[&"floor_count"]))
 	_create_carts(true, int(settings[&"raw_count"]), settings[&"raw_capacity"])
 	_create_carts(false, int(settings[&"cooked_count"]), settings[&"cooked_capacity"])
 	if erp != null:
@@ -430,6 +426,12 @@ func _configure_crews_and_carts() -> void:
 		raw_at_extruder.site = Cart.Site.EXTRUDER
 		raw_at_extruder.position = layout.port(&"Extruder", &"raw_dock")
 		raw_at_extruder.previous_position = raw_at_extruder.position
+
+
+func _add_floor_crew(count: int) -> void:
+	for index in range(floor_crew.size(), count):
+		floor_crew.append(Operator.new(StringName("Worker%d" % (index + 1)),
+			"Floor worker %d" % (index + 1), layout.crew_home(index)))
 
 
 func _create_carts(raw: bool, count: int, capacity: float) -> void:
@@ -453,7 +455,7 @@ func advance(real_seconds: float) -> void:
 	if not validation_error.is_empty() or not playing or not is_finite(real_seconds) or real_seconds <= 0.0:
 		return
 	_pending_seconds += real_seconds * multiplier
-	while _pending_seconds + EPSILON >= STEP_SECONDS:
+	while _pending_seconds + STEP_EPSILON >= STEP_SECONDS:
 		_pending_seconds -= STEP_SECONDS
 		_step()
 
@@ -660,7 +662,7 @@ func _begin_stage(order: Dictionary, restoring: bool = false) -> void:
 			var batch: float = tech.batch_kg
 			if order.has("standard"):
 				var total: float = order.recipe.target / order.standard.yield_factor
-				var count := ceili(total / batch - EPSILON)
+				var count := erp.catalog.Standards.batch_count(order.standard, order.recipe.target)
 				if total - (count - 1) * batch < order.standard.min_batch_kg:
 					batch = total / count
 			run.oven.stock.resize(batch)
@@ -1144,7 +1146,8 @@ func _record_scrap(order: Dictionary, produced: float, yield_factor: float) -> v
 	if loss > EPSILON:
 		order.scrapped += loss
 		scrapped_kg += loss
-		erp.flow(order.code, loss, "WIP", "", "Scrap", "Standard yield loss")
+		var reason: String = order.get("standard", {}).get("yield_loss_reason", "Standard yield loss")
+		erp.flow(order.code, loss, "WIP", "", "Scrap", reason)
 
 
 func _coat_erp() -> void:
@@ -1689,11 +1692,12 @@ func _request_forklift_job() -> void:
 		var pallet := staged_pallets[index]
 		if pallet == null or not pallet.full():
 			continue
-		if warehouse_count() >= int(settings[&"warehouse_capacity"]):
+		var slot := warehouse.find(null)
+		if slot < 0:
 			forklift.task = "Waiting for warehouse space"
 			forklift.destination = "Forklift parking"
 			return
-		warehouse_reserved_slot = warehouse.find(null)
+		warehouse_reserved_slot = slot
 		_lift_pickup_slot = index
 		_lift_phase = LiftPhase.TO_PALLET
 		forklift.travel(layout.route(forklift.position, layout.pallet_approach(index), Layout.LIFT_LANE),
@@ -1703,8 +1707,8 @@ func _request_forklift_job() -> void:
 
 
 func find_operator(id: StringName) -> Operator:
-	if erp != null and id == &"SupplyShuttle":
-		return erp.shuttle
+	if erp != null and id == ERP.MATERIAL_HANDLER_ID:
+		return erp.material_handler
 	if id == forklift.id:
 		return forklift
 	for crew in [platform_crew, floor_crew]:

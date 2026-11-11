@@ -3,7 +3,8 @@ extends RefCounted
 
 const Line = preload("res://simulation/production_line.gd")
 const PATH := "user://chocolate-works-erp.save"
-const VERSION := 6
+const VERSION := 10
+const SUPPORTED_VERSIONS := [1, 2, 3, 4, 5, 6, 7, 8, 9, VERSION]
 const LINE_FIELDS := ["elapsed_ticks", "multiplier", "layout_file_stamp", "ingredients_taken", "dispatched_kg",
 	"dispatched_pallets", "boxes_completed", "raw_deliveries", "cooked_deliveries", "forklift_deliveries",
 	"operating_factors", "resource_last", "scrapped_kg", "hopper_reserved", "warehouse_reserved_slot", "box_progress", "box_target", "_pending_seconds",
@@ -45,7 +46,7 @@ static func load_line(path: String = PATH) -> Dictionary:
 		return {"error": "No saved shift found."}
 	var data: Variant = file.get_var(false)
 	file.close()
-	if not data is Dictionary or data.get("version", -1) not in [1, 2, 3, 4, 5, VERSION]:
+	if not data is Dictionary or data.get("version", -1) not in SUPPORTED_VERSIONS:
 		return {"error": "The save is invalid or uses an unsupported version."}
 	return restore(data)
 
@@ -82,7 +83,7 @@ static func snapshot(line: Line) -> Dictionary:
 		"staged": line.staged_pallets.map(_pallet_snapshot), "warehouse": line.warehouse.map(_pallet_snapshot),
 		"load": _pallet_snapshot(line.lift_load), "erp": _fields(line.erp, ERP_FIELDS),
 		"catalog": _fields(line.erp.catalog, CATALOG_FIELDS),
-		"shuttle": _fields(line.erp.shuttle, ACTOR_FIELDS)
+		"shuttle": _fields(line.erp.material_handler, ACTOR_FIELDS)
 	}
 	return data.duplicate(true)
 
@@ -93,7 +94,7 @@ static func restore(data: Dictionary) -> Dictionary:
 		"load", "erp", "catalog", "shuttle"]:
 		if not data.has(key):
 			return {"error": "The save is missing " + key + "."}
-	if data.version not in [1, 2, 3, 4, 5, VERSION] or not data.erp is Dictionary or not data.erp.get("balances") is Dictionary \
+	if data.version not in SUPPORTED_VERSIONS or not data.erp is Dictionary or not data.erp.get("balances") is Dictionary \
 			or not data.size is Vector2i or not data.plan is Dictionary:
 		return {"error": "Invalid save structure."}
 	for location in data.erp.balances.values():
@@ -105,26 +106,31 @@ static func restore(data: Dictionary) -> Dictionary:
 	if not old and (not data.get("layout") is Dictionary or not data.get("execution") is Dictionary
 			or not data.catalog is Dictionary or not data.catalog.get("production_versions") is Dictionary):
 		return {"error": "The save is missing routing or layout data."}
-	var plan := Line.Layout.new() if refit else Line.Layout.new(data.size, "", data.layout)
+	var plan: Line.Layout
+	var stockrooms_refitted := false
+	if refit:
+		plan = Line.Layout.new()
+		plan.error = plan.validate()
+	else:
+		var dimensions: Vector2i = Line.Layout.DEFAULT_SIZE if data.size == Line.Layout.PREVIOUS_SIZE else data.size
+		if data.version < 8:
+			var expanded := Vector2i(dimensions.x, maxi(dimensions.y, Line.Layout.DEFAULT_SIZE.y))
+			plan = _restore_layout(data, expanded, true)
+			stockrooms_refitted = plan.error.is_empty()
+		if not stockrooms_refitted:
+			plan = _restore_layout(data, dimensions)
+			if not plan.error.is_empty() and dimensions != data.size:
+				plan = _restore_layout(data, data.size)
 	if not plan.error.is_empty():
 		return {"error": plan.error}
-	if not refit:
-		for id in data.plan:
-			if not plan.objects.has(id) or not plan.objects[id].movable:
-				return {"error": "Unknown saved placement."}
-			var cell: Vector2i = data.plan[id][0]
-			if id == &"Warehouse":
-				cell.x += plan.grid.size.x - data.size.x
-			plan.objects[id] = plan.objects[id].at(cell, data.plan[id][1])
-	var layout_error := plan.validate()
-	if not layout_error.is_empty():
-		return {"error": layout_error}
 	var line := Line.new(plan)
 	line.enable_erp()
 	if not line.validation_error.is_empty():
 		return {"error": line.validation_error}
+	var default_floor_count := int(line.settings[&"floor_count"])
 	for key in data.settings:
-		line.settings[key] = data.settings[key]
+		if line.settings.has(key):
+			line.settings[key] = data.settings[key]
 	_set_fields(line, data.line, LINE_FIELDS)
 	for field in ["hopper", "cooked_input"]:
 		_set_fields(line.get(field), data.stock[field], STOCK_FIELDS)
@@ -164,14 +170,22 @@ static func restore(data: Dictionary) -> Dictionary:
 		task.material = job[6] if job.size() > 6 else ""
 		line.floor_assignments[owner] = task
 	line.staged_pallets.assign(data.staged.map(_pallet))
+	var slots := plan.warehouse_slot_count()
+	if not data.warehouse is Array or data.warehouse.size() > slots:
+		return {"error": "Saved pallets exceed the warehouse's physical slot count."}
 	line.warehouse.assign(data.warehouse.map(_pallet))
+	line.warehouse.resize(slots)
 	line.lift_load = _pallet(data.load)
 	var expansion := _fields(line.erp.catalog, CATALOG_FIELDS)
 	var default_locations := line.erp.catalog.locations.duplicate()
 	var prep_center: Dictionary = line.erp.catalog.work_centers["WC-MIX-01"]
 	_set_fields(line.erp.catalog, data.catalog, ["materials", "boms", "suppliers"] if old else CATALOG_FIELDS)
 	_set_fields(line.erp, data.erp, ERP_FIELDS)
-	line.erp.shuttle = _actor(data.shuttle)
+	var handler := _actor(data.shuttle)
+	handler.title = Line.ERP.MATERIAL_HANDLER_TITLE
+	if handler.state == Line.Operator.State.DRIVING:
+		handler.state = Line.Operator.State.MOVING_PALLET_JACK
+	line.erp.material_handler = handler
 	for location in ["PACK-WIP", "CREAM-IN", "PACK-IN-02"] + Line.ERP.SFG_LOCATIONS:
 		if not line.erp.catalog.locations.has(location):
 			line.erp.catalog.locations[location] = default_locations[location]
@@ -200,14 +214,46 @@ static func restore(data: Dictionary) -> Dictionary:
 			return {"error": error}
 	if refit:
 		_refit_transport(line)
-	elif plan.grid.size.x != data.size.x:
+	elif stockrooms_refitted:
+		_refit_forklift(line)
+		_refit_material_handler(line)
+	elif plan.grid.size.x != data.size.x or (data.version < 9 and slots > Line.Layout.LEGACY_WAREHOUSE_SLOTS):
 		_refit_forklift(line)
 	if data.version < 5:
 		_migrate_packaging(line.erp)
 	if not data.catalog.has("standards"):
 		_migrate_expansion(line.erp, expansion)
+	if data.version < 7 and line.settings[&"floor_count"] == 2 and line.floor_crew.size() == 2:
+		line._add_floor_crew(default_floor_count)
+		line.settings[&"floor_count"] = float(line.floor_crew.size())
 	line.set_playing(false)
-	return {"error": "", "line": line, "refitted": refit or plan.grid.size != data.size}
+	return {"error": "", "line": line, "refitted": refit or stockrooms_refitted or plan.grid.size != data.size}
+
+
+static func _restore_layout(data: Dictionary, dimensions: Vector2i, move_stockrooms: bool = false) -> Line.Layout:
+	var plan := Line.Layout.new(dimensions, "", data.layout)
+	if not plan.error.is_empty():
+		return plan
+	for id in data.plan:
+		if move_stockrooms and id == &"Warehouse":
+			continue
+		if not plan.objects.has(id) or not plan.objects[id].movable:
+			plan.error = "Unknown saved placement."
+			return plan
+		var cell: Vector2i = data.plan[id][0]
+		var turns: int = data.plan[id][1]
+		if id == &"Warehouse":
+			cell = Line.Layout.warehouse_cell_after_resize(cell, turns, data.size, plan.grid.size)
+		plan.objects[id] = plan.objects[id].at(cell, turns)
+	if move_stockrooms:
+		var defaults := Line.Layout.new(plan.grid.size)
+		if not defaults.error.is_empty():
+			plan.error = defaults.error
+			return plan
+		for id in [&"RawWarehouse", &"Warehouse"]:
+			plan.objects[id] = defaults.objects[id]
+	plan.error = plan.validate()
+	return plan
 
 
 static func _migrate_packaging(book: Line.ERP) -> void:
@@ -490,7 +536,7 @@ static func _refit_transport(line: Line) -> void:
 			_place_actor(worker, task.cart.position)
 	line._create_coated_carts()
 	_refit_forklift(line)
-	_refit_shuttle(line)
+	_refit_material_handler(line)
 
 
 static func _legacy_cart_run(line: Line, cart: Line.Cart) -> Dictionary:
@@ -536,19 +582,21 @@ static func _refit_forklift(line: Line) -> void:
 			vehicle.idle()
 
 
-static func _refit_shuttle(line: Line) -> void:
-	var shuttle := line.erp.shuttle
+static func _refit_material_handler(line: Line) -> void:
+	var handler := line.erp.material_handler
 	var layout := line.layout
 	var shipment := line.erp.shipment
-	_place_actor(shuttle, layout.supply_point("RM-WH"))
+	_place_actor(handler, layout.supply_point("RM-WH"))
 	if shipment.is_empty():
-		shuttle.idle()
+		handler.idle()
 	elif shipment.phase == 2:
-		_place_actor(shuttle, layout.supply_point(shipment.target))
-	else:
+		_place_actor(handler, layout.supply_point(shipment.target))
+	elif shipment.phase >= 0:
+		if shipment.phase == 1:
+			_place_actor(handler, layout.supply_point(shipment.source))
 		var dock := layout.supply_point(shipment.source if shipment.phase == 0 else shipment.target)
-		shuttle.travel(layout.supply_route(shuttle.position, dock), Line.Operator.State.DRIVING,
-			shuttle.task, shuttle.destination)
+		handler.travel(layout.supply_route(handler.position, dock), Line.Operator.State.MOVING_PALLET_JACK,
+			handler.task, handler.destination)
 
 
 static func _place_actor(actor: Line.Operator, point: Vector3) -> void:

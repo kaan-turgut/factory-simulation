@@ -273,8 +273,8 @@
     },
     {
       "cell": [
-        117,
-        14
+        87,
+        64
       ],
       "clearance": [
         0,
@@ -283,14 +283,14 @@
         0
       ],
       "elevation": 0.0,
-      "height": 1.5,
+      "height": 6.4,
       "id": "Warehouse",
       "kind": "storage",
       "movable": true,
       "ports": {},
       "size": [
-        10,
-        8
+        32,
+        35
       ],
       "turns": 0
     },
@@ -342,8 +342,8 @@
     },
     {
       "cell": [
-        2,
-        3
+        1,
+        64
       ],
       "clearance": [
         0,
@@ -352,14 +352,14 @@
         0
       ],
       "elevation": 0.0,
-      "height": 2.2,
+      "height": 6.4,
       "id": "RawWarehouse",
       "kind": "storage",
       "movable": false,
       "ports": {},
       "size": [
-        16,
-        4
+        31,
+        35
       ],
       "turns": 0
     },
@@ -714,7 +714,7 @@
     }
   ],
   "size": [
-    128,
-    40
+    120,
+    100
   ]
 }

@@ -18,6 +18,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_transactions_and_production()
 	_stacked_coaters()
+	_resize_saved_shift()
 	await _mouse_workflow()
 	print("Layout editor checks, %d failures." % _failures)
 	quit(int(_failures > 0))
@@ -158,6 +159,92 @@ func _stacked_coaters() -> void:
 	_check(delivered and line.erp.orders[first.id].status == "Completed"
 		and line.erp.orders[second.id].status == "Completed" and is_equal_approx(line.warehouse_mass(), 80.0),
 		"Workers deliver to both stacked coaters and both orders complete")
+
+
+func _resize_saved_shift() -> void:
+	var former := Line.Layout.new().snapshot()
+	former.size = [128, 40]
+	for room in former.objects:
+		if room.id == "Warehouse":
+			room.cell = [117, 14]
+			room.size = [10, 8]
+			room.height = 1.5
+		elif room.id == "RawWarehouse":
+			room.cell = [2, 3]
+			room.size = [16, 4]
+			room.height = 2.2
+	var layout := Line.Layout.new(Line.Layout.PREVIOUS_SIZE, "", former)
+	var previous := Line.new(layout)
+	previous.enable_erp(false)
+	_check(previous.validation_error.is_empty(), "Validate the legacy room fixture")
+	if not previous.validation_error.is_empty():
+		return
+	var path := "user://factory-layout-resize-test-%d.json" % OS.get_process_id()
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify({"version": 1, "size": [128, 40], "placements": {"Warehouse": [117, 14, 0]}}))
+	file.close()
+	var fresh := Line.new()
+	var default_cell := fresh.layout.objects[&"Warehouse"].cell
+	_check(Editor.new(fresh).load_layout(path).is_empty() and fresh.layout.objects[&"Warehouse"].cell == default_cell,
+		"The prior layout file keeps the expanded warehouse at its new location")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var order := previous.erp.create_order("FG-1001", 8, 0, 1, "PV-1001-02")
+	_check(order.error.is_empty() and previous.erp.release(order.id).is_empty(), "Release an order in the former hall")
+	previous.set_playing(true)
+	for tick in 3600:
+		previous.advance(Line.STEP_SECONDS)
+		if previous._lift_phase == Line.LiftPhase.TO_STORAGE:
+			break
+	_check(previous.lift_load != null, "Capture a forklift with a pallet in transit")
+	var snapshot := Save.snapshot(previous)
+	snapshot.version = 7
+	var saved := Save.restore(snapshot)
+	_check(saved.error.is_empty() and saved.get("refitted", false), "Restore the previous shift in the resized hall")
+	if not saved.error.is_empty():
+		return
+	var resized: Line = saved.line
+	_check(resized.layout.grid.size == Vector2i(120, 100)
+		and resized.layout.objects[&"Packer02"].cell == layout.objects[&"Packer02"].cell,
+		"Resize keeps the Packing 02 dock in place")
+	_check(resized.layout.objects[&"Warehouse"].cell == default_cell
+		and resized.layout.objects[&"RawWarehouse"].cell == fresh.layout.objects[&"RawWarehouse"].cell,
+		"Restoring the shift relocates both warehouse rooms")
+	_check(resized.erp.balances == previous.erp.balances and resized.erp.movements == previous.erp.movements
+		and is_equal_approx(resized.material_on_site(), previous.material_on_site()),
+		"Resize preserves material and the transaction history")
+	resized.set_playing(true)
+	resized.advance(600.0)
+	_check(resized.erp.orders[order.id].status == "Completed" and is_equal_approx(resized.warehouse_mass(), 40.0),
+		"The resumed forklift delivers the pallet to the relocated warehouse")
+	var eight_slots := Save.snapshot(resized)
+	eight_slots.version = 8
+	eight_slots.settings[&"warehouse_capacity"] = 4.0
+	eight_slots.warehouse.resize(8)
+	var upgraded := Save.restore(eight_slots)
+	_check(upgraded.error.is_empty() and upgraded.line.warehouse.size() == 24
+		and not upgraded.line.settings.has(&"warehouse_capacity")
+		and Save.snapshot(upgraded.line).warehouse.slice(0, 8) == eight_slots.warehouse,
+		"Eight-slot saves keep their pallets and gain sixteen empty positions")
+	var staged := previous.erp.stock("RM-FLOUR", "RM-STAGE")
+	_check(previous.erp.manual_transfer("RM-FLOUR", 2, "RM-WH", "RM-STAGE", "Warehouse migration test").is_empty(),
+		"Queue an ingredient shipment from the former warehouse")
+	for tick in 1800:
+		previous.advance(Line.STEP_SECONDS)
+		if previous.erp.shipment.get("manual", false) and previous.erp.shipment.phase == 1:
+			break
+	_check(is_equal_approx(previous.erp.stock("RM-FLOUR", "TRANSIT"), 2.0), "Capture the ingredient shipment in transit")
+	snapshot = Save.snapshot(previous)
+	snapshot.version = 7
+	saved = Save.restore(snapshot)
+	_check(saved.error.is_empty(), "Restore the shipment with the relocated raw-material dock")
+	if not saved.error.is_empty():
+		return
+	resized = saved.line
+	resized.set_playing(true)
+	resized.advance(300.0)
+	_check(is_zero_approx(resized.erp.stock("RM-FLOUR", "TRANSIT"))
+		and is_equal_approx(resized.erp.stock("RM-FLOUR", "RM-STAGE"), staged + 2.0),
+		"The relocated shipment posts exactly once")
 
 
 func _mouse_workflow() -> void:

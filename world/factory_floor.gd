@@ -7,6 +7,8 @@ const Primitives = preload("res://world/primitives.gd")
 const Equipment = preload("res://world/equipment_view.gd")
 const Logistics = preload("res://world/logistics_view.gd")
 const Stock = preload("res://world/stock_models.gd")
+const Processing = preload("res://world/processing_models.gd")
+const WarehouseView = preload("res://world/warehouse_view.gd")
 const Palette = preload("res://ui/status_colors.gd")
 
 const INK := Color("#253541")
@@ -40,15 +42,14 @@ var _oven_heaters := {}
 var _auger: Node3D
 var _coating_drums := {}
 var _route_overlay: Node3D
-var _packing_head: Node3D
 var _raw_groups: Array[Node3D] = []
 var _pallet_picks: Array[Equipment] = []
-var _shuttle: Equipment
-var _shuttle_cargo: Node3D
 var _raw_revision := -1
 var _coating_colors := {}
 var _erp_enabled := false
-var _cell_parts := {}
+var _cream_motor: Node3D
+var _processing_models: Dictionary[StringName, Processing] = {}
+var _warehouse_views: Array[WarehouseView] = []
 var _cooling_marks: Array[Node3D] = []
 var _cream_supplies: Array[Node3D] = []
 
@@ -63,7 +64,8 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	_oven_doors.clear()
 	_oven_heaters.clear()
 	_coating_drums.clear()
-	_cell_parts.clear()
+	_processing_models.clear()
+	_warehouse_views.clear()
 	_cooling_marks.clear()
 	_cream_supplies.clear()
 	layout = floor_plan
@@ -89,7 +91,6 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 		_build_pack_wip()
 		_build_raw_warehouse()
 		_build_sfg_warehouse()
-		_build_shuttle()
 		for id: StringName in CELL_ART:
 			_build_cell(id)
 		_bay(layout.cart_body_center(layout.port(&"Palletizer", &"cart_dock")) + Vector3.UP * 0.032, Vector2(1.5, 1.45), TEAL)
@@ -124,6 +125,7 @@ func refresh(line: Line) -> void:
 		buffer.update_machine("Packaging WIP", "%.0f / %.0f kg" % [line.pack_wip.quantity, line.pack_wip.capacity], Palette.SFG)
 		buffer.fill_slots(line.pack_wip.occupancy())
 	_machine(&"Packer", "05  Packaging", line.packer)
+	_processing_models[&"Packer"].show_loads(line.packer.state == Line.Machine.State.RUNNING)
 	var hopper_text := "%0.0f / %0.0f kg" % [line.hopper.quantity, line.hopper.capacity]
 	if _erp_enabled and line.erp.explicit_planning:
 		var prepared := 0.0
@@ -136,14 +138,18 @@ func refresh(line: Line) -> void:
 	_refresh_oven(&"Oven", "Oven 01", line.oven)
 	_equipment[&"Palletizer"].update_machine("06  Palletizing", "%d full" % line.pallets_ready(), Palette.FG)
 	_equipment[&"Warehouse"].update_machine("07  FG warehouse", "%d / %d pallets" % [
-		line.warehouse_count(), int(line.settings[&"warehouse_capacity"])], Palette.FG)
+		line.warehouse_count(), line.warehouse.size()], Palette.FG)
 	for index in _staged.size():
 		_staged[index].refresh(line.staged_pallets[index], true)
-	var free := int(line.settings[&"warehouse_capacity"]) - line.warehouse_count()
+	var free := line.warehouse.size() - line.warehouse_count()
 	free -= int(line.warehouse_reserved_slot >= 0)
 	for index in _stored.size():
 		var pallet := line.warehouse[index]
-		_stored[index].refresh(pallet)
+		if pallet != null and _stored[index] == null:
+			var node := _equipment[&"Warehouse"]
+			_stored[index] = _stock.pallet(node, node.to_local(layout.warehouse_slot(index)) + Vector3.UP * 0.049)
+		if _stored[index] != null:
+			_stored[index].refresh(pallet)
 		if _erp_enabled:
 			_pallet_picks[index].set_active(pallet != null)
 		var marker := Color("#555d63")
@@ -163,17 +169,14 @@ func refresh(line: Line) -> void:
 
 func animate(line: Line, delta: float) -> void:
 	_logistics.animate(line, delta)
-	if line.erp != null and _erp_enabled:
-		var operator := line.erp.shuttle
-		_shuttle.position = operator.previous_position.lerp(operator.position, line.interpolation())
-		_shuttle.rotation.y = operator.heading
-		_shuttle_cargo.visible = not line.erp.shipment.is_empty() and line.erp.shipment.phase > 0
 	_auger.rotation.x = fposmod(line.extruder.total_output * 0.28, TAU)
-	_packing_head.position.y = 1.71 - 0.28 * (0.5 - 0.5 * cos(line.packer.total_output * 1.7))
+	_processing_models[&"Packer"].animate(line.packer.state == Line.Machine.State.RUNNING, delta)
+	for room in _warehouse_views:
+		room.animate(line, delta)
 	_animate_station(line, &"Oven", &"Coater", line.oven, line.coater, delta)
 	if _erp_enabled:
 		_animate_station(line, &"Oven02", &"Coater02", line.ovens[&"Oven02"], line.coaters[&"Coater02"], delta)
-		_animate_cells(line)
+		_animate_cells(line, delta)
 
 
 func _refresh_oven(id: StringName, title: String, machine: Line.Oven) -> void:
@@ -291,24 +294,30 @@ func _build_hall() -> void:
 	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end - 1.0, layout.lane_z(Layout.WALK_LANE),
 		0.87, Color("#a6acaa"))
 	var lift_z := layout.lane_z(Layout.LIFT_LANE)
-	var rear_z := layout.lane_z(Layout.REAR_LANE)
-	var warehouse_left := layout.center(&"Warehouse").x - 5.8
 	var side := layout.lift_side_x()
 	_strip(grid.origin.x + aisle_end - 1.8, side + 0.62, lift_z, 2.64, Color("#706e5d"))
-	_strip(warehouse_left, side + 0.62, rear_z, 1.8, Color("#706e5d"))
-	_draw.box(self, Vector3(side, 0.013, (lift_z + rear_z) * 0.5),
-		Vector3(1.32, 0.02, lift_z - rear_z), Color("#706e5d"))
+	var outbound := layout.center(&"Warehouse") + Vector3(0.5, 0.04, -5.1)
+	if Layout.WarehouseRoom.high_bay(layout.objects[&"Warehouse"].size):
+		var entry := layout.warehouse_entry_path()
+		for index in range(1, entry.size()):
+			_drive_lane(entry[index - 1], entry[index], 1.95, 0.016)
+		_drive_lane(entry.back(), entry.back().move_toward(layout.center(&"Warehouse"), 4.0), 2.4, 0.019)
+		outbound = entry.back() + Vector3(0, 0.04, 1.15)
+	else:
+		var rear_z := layout.lane_z(Layout.REAR_LANE)
+		_strip(layout.center(&"Warehouse").x - 5.8, side + 0.62, rear_z, 1.8, Color("#706e5d"))
+		_drive_lane(Vector3(side, 0, lift_z), Vector3(side, 0, rear_z), 1.32, 0.013)
 	for x in range(aisle_end - 1, width - 1):
 		_draw.box(self, grid.to_world(Vector2(x, Layout.LIFT_LANE), 0.029),
 			Vector3(0.43, 0.014, 0.057), SAFETY)
 	for x in range(2, aisle_end - 1, 2):
 		_draw.box(self, grid.to_world(Vector2(x, Layout.WALK_LANE), 0.032),
 			Vector3(0.64, 0.014, 0.045), PALE)
-	_floor_text(grid.to_world(Vector2(11.1, 2.9), 0.04), "CHOCOLATE WORKS   /   02", PALE, 0.031)
+	_floor_text(grid.to_world(Vector2(30.5, 2.7), 0.04), "CHOCOLATE WORKS   /   02", PALE, 0.031)
 	_floor_text(grid.to_world(Vector2(width - 12.0, 2.9), 0.04), "FORKLIFT ONLY  ›", SAFETY, 0.025)
 	_floor_text(grid.to_world(Vector2(22.7, Layout.CART_LANE - 0.2), 0.04),
 		"CART TRANSFER AISLE", PALE, 0.014)
-	_floor_text(layout.center(&"Warehouse") + Vector3(0.5, 0.04, -5.1), "OUTBOUND", SAFETY, 0.025)
+	_floor_text(outbound, "OUTBOUND", SAFETY, 0.025)
 	for id in [&"RawParking", &"CookedParking"]:
 		_station(id, "", PALE, false)
 	if _erp_enabled:
@@ -324,6 +333,10 @@ func _build_hall() -> void:
 			Vector2(1.41, 1.35), Color("#bfa57d"))
 	# The service bank is decorative and sits against the rear wall.
 	for x: float in [19, 25, 34, 40, 46, width - 6]:
+		var cell := Vector2i(int(x), length - 2)
+		if layout.objects[&"RawWarehouse"].footprint().has_point(cell) \
+				or layout.objects[&"Warehouse"].footprint().has_point(cell):
+			continue
 		var base := grid.to_world(Vector2(x, length - 1.1))
 		_draw.box(self, base + Vector3(0, 0.87, 0), Vector3(1.55, 1.73, 0.83), INK)
 		_draw.box(self, base + Vector3(0, 1.12, 0.43), Vector3(1.35, 1.13, 0.08), METAL)
@@ -416,30 +429,30 @@ func _build_extruder() -> void:
 
 func _build_oven(id: StringName, title: String) -> void:
 	var node := _station(id, title, OVEN_RED)
-	_base(node)
-	_draw.box(node, Vector3(0, 1.86, -0.12), Vector3(4.64, 3.10, 2.95), OVEN_RED)
-	_draw.box(node, Vector3(0, 1.68, 1.42), Vector3(3.78, 2.51, 0.21), INK)
-	_draw.box(node, Vector3(0, 0.60, 1.61), Vector3(3.68, 0.14, 0.62), METAL)
-	var door := _pivot(node, Vector3(-1.83, 1.69, 1.67))
-	_draw.box(door, Vector3(1.83, 0, 0), Vector3(3.65, 2.28, 0.17), METAL)
-	_draw.box(door, Vector3(1.83, 0.37, 0.094), Vector3(2.94, 1.16, 0.044), INK)
-	_draw.box(door, Vector3(1.83, 0.39, 0.12), Vector3(2.56, 0.84, 0.02), Color("#59443d"))
-	var heater := _pivot(door, Vector3(1.83, 0.37, 0.14))
+	_base(node, Vector2(0.40, 0.16))
+	_draw.box(node, Vector3(0, 1.70, -0.03), Vector3(4.24, 2.78, 2.76), OVEN_RED)
+	_draw.box(node, Vector3(0, 1.60, 1.42), Vector3(3.52, 2.32, 0.21), INK)
+	_draw.box(node, Vector3(0, 0.60, 1.61), Vector3(3.40, 0.14, 0.62), METAL)
+	var door := _pivot(node, Vector3(-1.67, 1.61, 1.67))
+	_draw.box(door, Vector3(1.67, 0, 0), Vector3(3.34, 2.10, 0.17), METAL)
+	_draw.box(door, Vector3(1.67, 0.33, 0.094), Vector3(2.70, 1.08, 0.044), INK)
+	_draw.box(door, Vector3(1.67, 0.35, 0.12), Vector3(2.37, 0.78, 0.02), Color("#59443d"))
+	var heater := _pivot(door, Vector3(1.67, 0.33, 0.14))
 	for index in 3:
-		var glow := _draw.box(heater, Vector3(0, -0.28 + index * 0.28, 0), Vector3(2.45, 0.061, 0.023), AMBER)
+		var glow := _draw.box(heater, Vector3(0, -0.26 + index * 0.26, 0), Vector3(2.25, 0.061, 0.023), AMBER)
 		var emissive := StandardMaterial3D.new()
 		emissive.albedo_color = Color("#e5a15c")
 		emissive.emission_enabled = true
 		emissive.emission = Color("#e58d4b")
 		emissive.emission_energy_multiplier = 0.65
 		glow.material_override = emissive
-	_draw.box(door, Vector3(3.16, -0.35, 0.21), Vector3(0.21, 0.46, 0.23), INK)
-	for x: float in [-1.29, 0.0, 1.29]:
-		_draw.box(node, Vector3(x, 3.45, -0.69), Vector3(0.92, 0.16, 1.16), INK)
+	_draw.box(door, Vector3(2.89, -0.33, 0.21), Vector3(0.21, 0.42, 0.23), INK)
+	for x: float in [-1.15, 0.0, 1.15]:
+		_draw.box(node, Vector3(x, 3.13, -0.58), Vector3(0.86, 0.16, 1.10), INK)
 		for index in 4:
-			_draw.box(node, Vector3(x, 3.55, -1.04 + index * 0.23), Vector3(0.79, 0.06, 0.09), METAL)
-	_console(node, Vector3(2.00, 1.86, 1.45), AMBER)
-	_beacon(node, Vector3(1.95, 3.36, 0.8))
+			_draw.box(node, Vector3(x, 3.23, -0.92 + index * 0.22), Vector3(0.73, 0.06, 0.09), METAL)
+	_console(node, Vector3(1.83, 1.77, 1.45), AMBER)
+	_beacon(node, Vector3(1.79, 3.09, 0.8))
 	_oven_doors[id] = door
 	_oven_heaters[id] = heater
 	for dock: Vector3 in [layout.port(id, &"raw_dock"), layout.port(id, &"cooked_dock")]:
@@ -490,19 +503,9 @@ func _build_pack_wip() -> void:
 
 func _build_packer() -> void:
 	var node := _station(&"Packer", "05  Packaging", AMBER)
-	_base(node)
-	_draw.box(node, Vector3(0, 0.63, 0), Vector3(3.95, 0.54, 2.60), STEEL)
-	_draw.box(node, Vector3(0, 1.05, 0), Vector3(4.24, 0.20, 1.10), INK)
-	for x: float in [-1.63, 1.63]:
-		for z: float in [-1.1, 1.1]:
-			_draw.box(node, Vector3(x, 1.55, z), Vector3(0.23, 2.1, 0.23), AMBER)
-	_draw.box(node, Vector3(0, 2.51, 0), Vector3(3.53, 0.44, 2.51), AMBER)
-	_draw.box(node, Vector3(0, 2.78, 0), Vector3(2.97, 0.13, 2.0), PALE)
-	_packing_head = _pivot(node, Vector3(0, 1.71, 0))
-	_draw.box(_packing_head, Vector3(0, 0.32, 0), Vector3(0.88, 1.1, 0.86), METAL)
-	_draw.box(_packing_head, Vector3.ZERO, Vector3(1.15, 0.20, 1.04), PALE)
-	_console(node, Vector3(1.53, 1.54, 1.29), AMBER)
-	_beacon(node, Vector3(-1.19, 2.82, 0.38))
+	var model := Processing.new(_draw, node, &"Packer", 4.2, AMBER)
+	_processing_models[&"Packer"] = model
+	_beacon(node, model.beacon_mount)
 	_build_belt(&"CartonBelt", layout.belt(&"CartonBelt"), AMBER)
 
 
@@ -521,17 +524,33 @@ func _build_palletizing() -> void:
 
 
 func _build_warehouse() -> void:
-	var node := _station(&"Warehouse", "07  FG warehouse", AMBER)
-	var size := layout.objects[&"Warehouse"].size
+	var spec := layout.objects[&"Warehouse"]
+	var size := spec.size
+	var room := Layout.WarehouseRoom.new(size, true)
+	var high_bay := room.rack_bays > 0
+	var node := _station(&"Warehouse", "07  FG warehouse", AMBER, true, not high_bay)
+	if high_bay:
+		node.add_hitbox(Vector3(size.x, 0.12, size.y), Vector3.ZERO)
+	_warehouse_views.append(WarehouseView.new(node, _draw, room, AMBER))
+	node.offset_readout(Vector3(0, room.height - spec.height, -size.y * 0.30))
 	_draw.box(node, Vector3(0, 0.015, 0),
 		Vector3(size.x - 0.4, 0.025, size.y - 0.2), Color("#637276"))
-	for index in Layout.WAREHOUSE_SLOTS:
+	if high_bay:
+		var per_row := Layout.WarehouseRoom.FG_SLOTS_PER_ROW
+		var turn := Vector3.BACK * Layout.WarehouseRoom.FG_TURN_AHEAD
+		var back := node.to_local(layout.warehouse_approach(Layout.WarehouseRoom.FG_SLOT_COUNT - per_row)).z + turn.z
+		_drive_lane(node.to_global(Vector3(0, 0, size.y * 0.5)), node.to_global(Vector3(0, 0, back)), 3.2, 0.032)
+		for index in range(0, Layout.WarehouseRoom.FG_SLOT_COUNT, per_row):
+			var left := node.to_local(layout.warehouse_approach(index)) + turn
+			var right := node.to_local(layout.warehouse_approach(index + per_row - 1)) + turn
+			_drive_lane(node.to_global(left), node.to_global(right), 2.0, 0.034)
+	for index in layout.warehouse_slot_count():
 		var at := layout.warehouse_slot(index)
 		var marker := _draw.box(self, at + Vector3(0, 0.033, 0), Vector3(1.93, 0.021, 1.54), METAL)
 		marker.rotation.y = node.rotation.y
 		_warehouse_markers.append(marker)
 		_bay(at + Vector3(0, 0.053, 0), Vector2(2.02, 1.68), PALE, node.rotation.y)
-		_stored.append(_stock.pallet(node, node.to_local(at) + Vector3(0, 0.049, 0)))
+		_stored.append(null)
 		if _erp_enabled:
 			var pick := Equipment.new()
 			pick.position = at
@@ -543,35 +562,60 @@ func _build_warehouse() -> void:
 			_pallet_picks.append(pick)
 			pick.set_active(false)
 		_floor_text(at + Vector3(0, 0.053, 1.05).rotated(Vector3.UP, node.rotation.y), "%02d" % (index + 1), PALE, 0.015)
-	for x: float in [-4.42, 4.46]:
-		_draw.box(node, Vector3(x, 0.73, -3.81), Vector3(0.17, 1.46, 0.18), AMBER)
-	_draw.box(node, Vector3(0.02, 1.28, -3.81), Vector3(9.0, 0.15, 0.11), STEEL)
+	_draw.batch_static(node)
 
 
 func _build_raw_warehouse() -> void:
-	var node := _station(&"RawWarehouse", "RM  Raw materials", TEAL)
-	_draw.box(node, Vector3(0, 0.045, 0), Vector3(15.8, 0.09, 3.8), Color("#687f8b"))
-	for index in 5:
-		var x := -6.0 + 3.0 * index
-		_draw.box(node, Vector3(x, 0.09, 0.9), Vector3(2.7, 0.035, 1.5), Color("#9a8762"))
-		for side: float in [-1.12, 1.12]:
-			_draw.box(node, Vector3(x + side, 0.92, -0.73), Vector3(0.09, 1.76, 0.12), STEEL)
-		for y: float in [0.27, 1.12]:
-			_draw.box(node, Vector3(x, y, -0.73), Vector3(2.28, 0.11, 1.38), TEAL)
+	var spec := layout.objects[&"RawWarehouse"]
+	var room := Layout.WarehouseRoom.new(spec.size, false)
+	var high_bay := room.rack_bays > 0
+	var node := _station(&"RawWarehouse", "RM  Raw materials", TEAL, true, not high_bay)
+	if high_bay:
+		node.add_hitbox(Vector3(spec.size.x, 0.12, spec.size.y), Vector3.ZERO)
+	_warehouse_views.append(WarehouseView.new(node, _draw, room, TEAL))
+	node.offset_readout(Vector3(0, room.height - spec.height, -spec.size.y * 0.25))
+	_draw.box(node, Vector3(0, 0.045, 0), Vector3(spec.size.x - 0.2, 0.09, spec.size.y - 0.2), Color("#687f8b"))
+	for index in room.racks.size():
+		var area := room.racks[index]
+		var center := area.get_center()
+		var x := center.x
+		var z := center.y
+		var apron := area.end.y + 0.62
+		_draw.box(node, Vector3(x, 0.10, apron), Vector3(area.size.x, 0.016, 1.1), Color("#556d73"))
+		if not high_bay:
+			for side: float in [-1.12, 1.12]:
+				_draw.box(node, Vector3(x + side * (area.size.x * 0.5 - 0.12), 0.92, z),
+					Vector3(0.09, 1.76, 0.12), STEEL)
+			for y: float in [0.27, 1.12]:
+				_draw.box(node, Vector3(x, y, z), Vector3(area.size.x, 0.11, area.size.y), TEAL)
 		var group := Node3D.new()
-		group.position = Vector3(x, 0.33, -0.7)
+		group.position = Vector3(x, 0, z)
 		node.add_child(group)
 		_raw_groups.append(group)
-		for shelf in 2:
-			for bay in 2:
-				var at := Vector3(-0.48 + bay * 0.96, shelf * 0.86, 0.0)
+		var shelves: Array = room.rack_levels.slice(0, 3) if high_bay else [0.27, 1.12]
+		var bays := room.rack_bays if high_bay else 2
+		for shelf: float in shelves:
+			for bay in bays:
+				var at := Vector3((bay + 0.5 - bays * 0.5) * area.size.x / bays, shelf + 0.10, 0.0)
+				if high_bay:
+					_draw.box(group, at + Vector3.UP * 0.05, Vector3(1.38, 0.14, 1.10), Stock.WOOD)
 				if index < 2:
-					_stock.sack(group, at + Vector3.UP * 0.19)
+					_stock.sack(group, at + Vector3.UP * 0.26, 1.1 if high_bay else 0.81)
 				else:
-					_stock.carton(group, at + Vector3.UP * 0.22, Vector3(0.82, 0.43, 0.78))
+					var carton := Vector3(1.27, 0.56, 1.02) if high_bay else Vector3(area.size.x * 0.39, 0.43, 0.78)
+					_stock.carton(group, at + Vector3.UP * (0.12 + carton.y * 0.5), carton)
+		_draw.batch_static(group)
 		var label: String = ["FLOUR / SUGAR", "OTHER INPUTS", "COATINGS", "CARTONS", "LABELS"][index]
-		_floor_text(node.position + Vector3(x, 0.13, 1.05), label, PALE, 0.01)
-	_rail(node.position + Vector3(-7.85, 0, -1.82), node.position + Vector3(7.85, 0, -1.82))
+		_floor_text(node.to_global(Vector3(x, 0.13, apron)), label, PALE, 0.020 if high_bay else 0.01)
+	var dock := layout.supply_point("RM-WH")
+	if high_bay:
+		var threshold := node.to_global(Vector3(0, 0, spec.size.y * 0.5))
+		var apron := threshold + Vector3.BACK.rotated(Vector3.UP, node.rotation.y) * 3.25
+		_drive_lane(dock, threshold, 3.2, 0.104)
+		_drive_lane(threshold, apron, 2.4, 0.016)
+		_floor_text(apron + Vector3.UP * 0.04, "INBOUND", SAFETY, 0.025)
+	_bay(dock + Vector3.UP * 0.12, Vector2(2.15, 2.70), SAFETY, node.rotation.y)
+	_draw.batch_static(node)
 
 
 func _build_sfg_warehouse() -> void:
@@ -596,43 +640,45 @@ func _build_cell(id: StringName) -> void:
 	var art: Array = CELL_ART[id]
 	var node := _station(id, art[0], art[1])
 	var size: Vector2i = layout.objects[id].size
-	_base(node)
-	match id:
-		&"CreamMixer":
-			_draw.cylinder(node, Vector3(0, 1.46, 0), 1.32, 2.1, METAL)
-			_draw.cylinder(node, Vector3(0, 2.46, 0), 1.37, 0.24, art[1])
-			var motor := _pivot(node, Vector3(0, 2.68, 0))
-			_draw.box(motor, Vector3.ZERO, Vector3(1.05, 0.34, 0.44), STEEL)
-			_cell_parts[id] = motor
-			_draw.box(node, Vector3(0, 0.95, -1.38), Vector3(0.9, 0.56, 0.65), art[1])
-			for index in 4:
-				_cream_supplies.append(_stock.sack(node, Vector3(-1.75 + index * 0.48, 0.64, -1.88)))
-		&"CoolingTunnel":
-			_draw.box(node, Vector3(0, 0.92, 0), Vector3(size.x - 0.3, 0.42, 2.64), INK)
-			_draw.box(node, Vector3(0, 1.9, 0), Vector3(size.x - 1.6, 0.40, 2.85), art[1])
-			for x: float in [-2.65, -0.9, 0.9, 2.65]:
-				_draw.box(node, Vector3(x, 1.44, -1.26), Vector3(0.18, 1.1, 0.2), art[1])
-				_draw.box(node, Vector3(x, 1.44, 1.26), Vector3(0.18, 1.1, 0.2), art[1])
+	if id == &"CreamMixer":
+		_base(node)
+		var tank := Vector3(0.14, 1.59, -0.28)
+		_draw.cylinder(node, Vector3(tank.x, 0.52, tank.z), 1.76, 0.18, STEEL)
+		_draw.cylinder(node, tank, 1.68, 2.32, METAL)
+		_draw.cylinder(node, tank + Vector3.UP * 1.20, 1.74, 0.28, art[1])
+		_cream_motor = _pivot(node, tank + Vector3.UP * 1.50)
+		_draw.box(_cream_motor, Vector3.ZERO, Vector3(1.34, 0.36, 0.56), STEEL)
+		_draw.box(node, Vector3(tank.x, 0.95, 1.37), Vector3(1.12, 0.56, 0.72), art[1])
+		for index in 4:
+			_cream_supplies.append(_stock.sack(node, Vector3(-2.0, 0.64, -1.68 + index * 0.88), 0.78))
+		var console := Vector3(1.94, 1.56, 1.16)
+		_draw.box(node, Vector3(console.x, 0.92, console.z), Vector3(0.15, 0.90, 0.16), STEEL)
+		_console(node, console, art[1])
+		_beacon(node, console + Vector3.UP * 0.265)
+	else:
+		var model := Processing.new(_draw, node, id, size.x - 0.30, art[1])
+		_processing_models[id] = model
+		_beacon(node, model.beacon_mount)
+		node.offset_readout(Vector3(0, 0.72, -0.68))
+		if id == &"CoolingTunnel":
 			for index in 6:
-				_cooling_marks.append(_stock.wafer(node, Vector3(-3.15 + 1.1 * index, 1.18, 0),
-					Stock.CHOCOLATE, Vector3(0.44, 0.12, 0.55)))
-		_:
-			_draw.box(node, Vector3(0, 0.91, 0), Vector3(size.x - 0.4, 0.55, 2.34), art[1])
-			var movement := _pivot(node, Vector3(0, 1.64, -0.12))
-			_cell_parts[id] = movement
-			for x: float in [-1.3, 1.3]:
-				_draw.box(node, Vector3(x, 1.52, 0), Vector3(0.22, 1.64, 1.55), STEEL)
-			_draw.box(movement, Vector3.ZERO, Vector3(2.36, 0.32, 0.73), METAL)
-			if id == &"Cutter":
-				for index in 5:
-					_draw.box(movement, Vector3(-0.84 + index * 0.42, -0.21, 0), Vector3(0.10, 0.24, 0.58), PALE)
-			if id == &"Packer02":
-				_draw.box(node, Vector3(0, 2.13, -0.07), Vector3(2.6, 0.44, 1.6), art[1])
+				_cooling_marks.append(_stock.wafer(node, Vector3(-3.46 + 1.3 * index, model.belt_load_height(), 0),
+					Stock.CHOCOLATE, Vector3(0.44, 0.14, 0.66)))
+	var tray_z := 1.78 if id == &"CreamMixer" else 1.50
+	var tray_y := 0.77 if id == &"CreamMixer" else 0.95
+	_draw.box(node, Vector3(0, tray_y, tray_z), Vector3(2.03, 0.11, 0.66), STEEL)
+	_draw.box(node, Vector3(0, tray_y + 0.075, tray_z + 0.30), Vector3(2.03, 0.10, 0.07), METAL)
+	for x: float in [-0.85, 0.85]:
+		_draw.box(node, Vector3(x, tray_y * 0.5, tray_z), Vector3(0.091, tray_y, 0.10), METAL)
 	for index in 4:
-		node.inventory_slots.append(_stock.wafer(node, Vector3(-0.66 + index * 0.44, 1.25, -0.76),
-			Stock.COOKED, Vector3(0.34, 0.16, 0.42)))
-	_console(node, Vector3(1.63, 1.46, -1.13), art[1])
-	_beacon(node, Vector3(1.74, 2.27, 0.96))
+		var at := Vector3(-0.66 + index * 0.44, tray_y + 0.059, tray_z)
+		if id == &"Packer02":
+			var box := _pivot(node, at)
+			_stock.carton(box, Vector3.UP * 0.10, Vector3(0.37, 0.20, 0.42))
+			node.inventory_slots.append(box)
+		else:
+			var tint := Stock.CHOCOLATE if id == &"CoolingTunnel" else Stock.COOKED
+			node.inventory_slots.append(_stock.wafer(node, at, tint, Vector3(0.34, 0.16, 0.42)))
 	for port in [&"input_dock", &"output_dock"]:
 		_bay(layout.cart_body_center(layout.port(id, port)) + Vector3.UP * 0.032, Vector2(1.5, 1.45), art[1])
 
@@ -643,6 +689,8 @@ func _refresh_cells(line: Line) -> void:
 		var cell := line.active_cell(id)
 		node.update_machine(CELL_ART[id][0], line.work_center_status(id),
 			Palette.IDLE if cell == null else Palette.color(cell.machine.state))
+		if _processing_models.has(id):
+			_processing_models[id].show_loads(cell != null and cell.machine.state == Line.Machine.State.RUNNING)
 		node.fill_slots(0.0 if cell == null else cell.output.occupancy())
 		if id == &"Cutter" and cell != null:
 			var spec: Dictionary = line.order_at(id).recipe.spec
@@ -659,40 +707,22 @@ func _refresh_cells(line: Line) -> void:
 		_cooling_marks[index].visible = tunnel != null and index < ceili(tunnel.inside / tunnel.standard.internal_kg * _cooling_marks.size())
 
 
-func _animate_cells(line: Line) -> void:
-	for id in _cell_parts:
-		var cell := line.active_cell(id)
-		if cell == null:
-			continue
-		var part: Node3D = _cell_parts[id]
-		if id == &"CreamMixer":
-			part.rotation.y = fposmod(cell.remaining * 3.0, TAU)
-		else:
-			part.position.y = 1.64 + sin(cell.produced * 2.7) * 0.13
+func _animate_cells(line: Line, delta: float) -> void:
+	var mixer := line.active_cell(&"CreamMixer")
+	if mixer != null:
+		_cream_motor.rotation.y = fposmod(mixer.remaining * 3.0, TAU)
 	var tunnel := line.active_cell(&"CoolingTunnel")
+	for id: StringName in CELL_ART:
+		if not _processing_models.has(id):
+			continue
+		var cell := tunnel if id == &"CoolingTunnel" else line.active_cell(id)
+		_processing_models[id].animate(cell != null and cell.machine.state == Line.Machine.State.RUNNING, delta)
 	if tunnel != null and not tunnel.cohorts.is_empty():
 		var residence: float = tunnel.standard.residence_seconds
 		for index in _cooling_marks.size():
 			var cohort: Array = tunnel.cohorts[floori(float(index * tunnel.cohorts.size()) / _cooling_marks.size())]
 			var progress := 1.0 - clampf((cohort[0] - line.erp.now) / residence, 0.0, 1.0)
-			_cooling_marks[index].position.x = lerpf(-3.15, 3.15, progress)
-
-
-func _build_shuttle() -> void:
-	_shuttle = Equipment.new()
-	add_child(_shuttle)
-	_shuttle.configure(&"SupplyShuttle", _draw, Vector3(1.45, 1.25, 2.0), "", TEAL, false)
-	_equipment[&"SupplyShuttle"] = _shuttle
-	_draw.box(_shuttle, Vector3(0, 0.37, 0), Vector3(1.38, 0.37, 1.9), TEAL)
-	_draw.box(_shuttle, Vector3(0, 0.61, -0.64), Vector3(1.08, 0.39, 0.43), INK)
-	for x: float in [-0.65, 0.65]:
-		for z: float in [-0.57, 0.57]:
-			var wheel := _draw.cylinder(_shuttle, Vector3(x, 0.23, z), 0.22, 0.18, INK)
-			wheel.rotation_degrees.z = 90.0
-	_shuttle_cargo = Node3D.new()
-	_shuttle.add_child(_shuttle_cargo)
-	_stock.carton(_shuttle_cargo, Vector3(0, 0.77, 0.16), Vector3(0.94, 0.42, 1.04))
-	_shuttle_cargo.hide()
+			_cooling_marks[index].position.x = lerpf(-3.46, 3.46, progress)
 
 
 func _refresh_erp(line: Line) -> void:
@@ -752,10 +782,10 @@ func _station(
 	return station
 
 
-func _base(parent: Equipment) -> void:
+func _base(parent: Equipment, inset: Vector2 = Vector2.ZERO) -> void:
 	var footprint := layout.objects[parent.name].size
-	var width := footprint.x - 0.12
-	var depth := footprint.y - 0.28
+	var width := footprint.x - 0.12 - inset.x
+	var depth := footprint.y - 0.28 - inset.y
 	_draw.box(parent, Vector3(0, 0.22, 0), Vector3(width, 0.44, depth), INK)
 	_draw.box(parent, Vector3(0, 0.41, 0), Vector3(width * 0.96, 0.15, depth * 0.92), STEEL)
 
@@ -808,6 +838,15 @@ func _rail(start: Vector3, end: Vector3) -> void:
 func _strip(start: float, end: float, z: float, width: float, tint: Color) -> void:
 	var length := end - start
 	_draw.box(self, Vector3((start + end) * 0.5, 0.016, z), Vector3(length, 0.025, width), tint)
+
+
+func _drive_lane(start: Vector3, end: Vector3, width: float, y: float) -> void:
+	var span := end - start
+	if span.is_zero_approx():
+		return
+	var at := (start + end) * 0.5 + Vector3.UP * y
+	var stripe := _draw.box(self, at, Vector3(width, 0.018, span.length()), Color("#706e5d"))
+	stripe.look_at(at + span)
 
 
 func _bay(at: Vector3, size: Vector2, tint: Color, yaw: float = 0.0) -> void:

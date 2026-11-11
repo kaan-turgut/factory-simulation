@@ -4,18 +4,18 @@
     "demands": [
       {
         "code": "FG-2001",
-        "boxes": 500,
-        "due": 86400
-      },
-      {
-        "code": "FG-2002",
-        "boxes": 300,
-        "due": 129600
+        "boxes": 48,
+        "due": 14400
       },
       {
         "code": "FG-2004",
-        "boxes": 250,
-        "due": 172800
+        "boxes": 60,
+        "due": 28800
+      },
+      {
+        "code": "FG-2002",
+        "boxes": 120,
+        "due": 43200
       }
     ]
   }

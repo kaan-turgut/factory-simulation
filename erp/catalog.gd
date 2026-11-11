@@ -245,7 +245,8 @@ func _validate_scheduling() -> String:
 		var row: Variant = scheduling.stages.get(stage)
 		if not row is Dictionary or not row.get("materials") is Array or row.materials.is_empty() or not row.get("centers") is Array \
 				or row.centers.is_empty() or not row.get("handling") is String or not Master.number(row.get("handling_seconds")) \
-				or (stage == "bake" and not Master.number(row.get("batch_handling_seconds"))):
+				or not Master.number(row.get("batch_handling_seconds", 0.0)) \
+				or not Master.number(row.get("handling_seconds_per_kg", 0.0)):
 			return "scheduling.json [%s]: invalid stage materials, centers or handling times." % stage
 		for code in row.materials:
 			if not code is String or seen.has(code) or (code == "FERT" and stage != "pack") \
@@ -422,9 +423,9 @@ func recipe(code: String, boxes: int) -> Dictionary:
 		return {"error": exploded.error}
 	var finished := _rates(code)
 	var coated := _by_type(finished, "HALB")
-	var packaging := _by_type(finished, "VERP")
-	if coated.size() != 1 or packaging.size() != 3 or finished.size() != 4:
-		return {"error": "This BOM needs one coated wafer and three packaging components for the wafer line."}
+	var packaging := packing_components(spec, finished)
+	if coated.size() != 1 or packaging.is_empty() or finished.size() != packaging.size() + 2:
+		return {"error": "This BOM needs one wafer input and valid carton, label and pallet quantities."}
 	var finished_input: String = coated.keys()[0]
 	var coated_code := finished_input
 	if Scheduling.stage_for(self, coated_code) == "cool":
@@ -457,12 +458,6 @@ func recipe(code: String, boxes: int) -> Dictionary:
 		total += float(mix[child])
 	if not is_equal_approx(total, 1.0):
 		return {"error": "The dough blend must total one kg of ingredients per kg."}
-	if not packaging.has("PK-PALLET") or not is_equal_approx(float(packaging["PK-PALLET"]) * spec.box_kg * spec.boxes_per_pallet, 1.0):
-		return {"error": "Pallet allocation must match boxes per pallet."}
-	packaging.erase("PK-PALLET")
-	for child in packaging:
-		if materials[child].unit != "ea" or not is_equal_approx(float(packaging[child]) * spec.box_kg, 1.0):
-			return {"error": "This packing line needs one carton and one label per box."}
 	var needs: Dictionary = exploded.requirements
 	for child in needs:
 		if materials[child].unit == "ea":
@@ -470,8 +465,28 @@ func recipe(code: String, boxes: int) -> Dictionary:
 	return {"error": "", "spec": spec, "target": target, "dough_target": target * baked_rate,
 		"mix": mix, "dough": dough_code, "raw": raw_code, "baked": baked_code, "coated": coated_code,
 		"coating": coating_code, "coat_rate": coat_rate, "baked_rate": baked_rate,
-		"packaging": packaging.keys(), "needs": needs, "bom_version": boms[code].version,
+		"packaging": packaging.keys(), "packaging_per_box": packaging, "needs": needs, "bom_version": boms[code].version,
 		"bom_snapshot": _freeze_bom(code)}
+
+
+func packing_components(spec: Dictionary, rates: Dictionary) -> Dictionary:
+	var parts := _by_type(rates, "VERP")
+	if not is_equal_approx(float(parts.get("PK-PALLET", 0.0)) * spec.box_kg * spec.boxes_per_pallet, 1.0):
+		return {}
+	parts.erase("PK-PALLET")
+	var per_box := {}
+	var carton_parts := 0
+	var wrapper_parts := 0
+	for code in parts:
+		var material: Dictionary = materials[code]
+		var is_wrapper: bool = material.get("packaging_role", "") == "retail_wrap"
+		var count: int = int(spec.packs_per_box) if is_wrapper else 1
+		if material.unit != "ea" or not is_equal_approx(float(parts[code]) * spec.box_kg, count):
+			return {}
+		per_box[code] = count
+		wrapper_parts += int(is_wrapper)
+		carton_parts += int(not is_wrapper)
+	return per_box if carton_parts == 2 and wrapper_parts <= 1 else {}
 
 
 func manufacturing_flow(code: String, seen: Dictionary = {}) -> PackedStringArray:
@@ -542,6 +557,8 @@ func edit_material(code: String, name: String, minimum: float, lead: float, acti
 					part.qty *= pack_kg * packs / float(header.base)
 				elif part.code == "PK-PALLET":
 					part.qty = 1.0 / boxes
+				elif materials[part.code].get("packaging_role", "") == "retail_wrap":
+					part.qty = packs
 			header.base = pack_kg * packs
 			header.version += 1
 			_update_bom_versions(code)

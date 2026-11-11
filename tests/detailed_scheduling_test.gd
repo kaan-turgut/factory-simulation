@@ -94,14 +94,20 @@ func _end_to_end() -> void:
 		"No operation runs without an explicit release")
 	_release(line, dough)
 	var flour: float = book.stock("RM-FLOUR", "RM-WH")
-	_check(book.reservations["RM-FLOUR"] == 22.0, "Only dough reserves flour")
+	_check(is_equal_approx(book.reservations["RM-FLOUR"], 35.2), "Only batter preparation reserves flour")
 	line.advance(dough.start - book.now - 1.0)
 	_check(dough.status == "Released" and dough.started < 0.0 and book.stock("RM-FLOUR", "RM-WH") == flour, "Future release waits without consuming")
 	_finish(line, dough)
-	_check(is_equal_approx(book.stock("DOUGH-01", "SFG-DECK"), 40.0) and line.extruder.total_output == 0.0, "Dough is physically prepared and received separately")
+	_check(is_equal_approx(book.stock("DOUGH-01", "SFG-DECK"), 80.0) and line.extruder.total_output == 0.0, "Batter is physically prepared and received separately")
 	for order in [raw, bake, coat, cool, pack]:
 		var upstream := [line.extruder.total_output, line.oven.batches, line.coater.total_output]
 		var before: float = order.start
+		if order == pack:
+			var wrappers: float = book.stock("PK-WRAP", "RM-WH")
+			book.adjust("PK-WRAP", -wrappers, "Packaging shortage test")
+			_check("PK-WRAP" in book.release(pack.id) and is_zero_approx(book.reservations.get("COOLED-1001", 0.0)),
+				"Missing retail film blocks release without reserving wafers")
+			book.adjust("PK-WRAP", wrappers, "Packaging stock restored")
 		_release(line, order)
 		_finish(line, order)
 		_check(order.started >= before and order.completed >= order.started and order.start == before,
@@ -112,7 +118,10 @@ func _end_to_end() -> void:
 			_check(upstream == [line.extruder.total_output, line.oven.batches, line.coater.total_output],
 				"Packaging from received stock does not execute an upstream stage")
 	_check(is_equal_approx(line.erp_fg().get("FG-1001", 0.0), 50.0) and line.warehouse_count() == ceili(10.0 / pack.recipe.spec.boxes_per_pallet), "Forklift receives ten boxes in FG storage")
-	_check(is_equal_approx(line.material_on_site(), 50.0) and is_equal_approx(line.ingredients_taken, 40.0), "40 kg dough and 10 kg chocolate conserve 50 kg total")
+	_check(is_equal_approx(line.material_on_site(), 50.0) and is_equal_approx(line.ingredients_taken, 80.0)
+		and is_equal_approx(bake.scrapped, 40.0) and is_equal_approx(line.scrapped_kg, 40.0),
+		"80 kg batter and 10 kg coating reconcile to 50 kg finished and 40 kg baking loss")
+	_check(pack.consumed.get("PK-WRAP") == 500.0, "Line 01 issues one wrapper per retail pack")
 	_check(book.reservations.values().all(func(amount: float) -> bool: return is_zero_approx(amount)), "All reservations consumed")
 	var receipts := {}
 	var issues := {}
@@ -146,8 +155,8 @@ func _automatic_release() -> void:
 	var coat := _order(line, "COATED-1001", 10.0, 180.0)
 	var cool := _order(line, "COOLED-1001", 10.0, 210.0)
 	var bake := _order(line, "BAKED-01", 8.0, 90.0)
-	var raw := _order(line, "RAW-01", 8.0, 45.0)
-	var dough := _order(line, "DOUGH-01", 8.0, 15.0)
+	var raw := _order(line, "RAW-01", 16.0, 45.0)
+	var dough := _order(line, "DOUGH-01", 16.0, 15.0)
 	line.set_playing(true)
 	line.advance(5.0)
 	_check(dough.status == "Created" and book.reservations.is_empty(), "Auto Release defaults off")
@@ -172,7 +181,7 @@ func _automatic_release() -> void:
 func _automatic_release_competition() -> void:
 	var line := _line()
 	var book := line.erp
-	book._post("RAW-01", 8.0, "", "SFG-WH", "Opening", "", "Competition test stock")
+	book._post("RAW-01", 16.0, "", "SFG-WH", "Opening", "", "Competition test stock")
 	book._post("BAKED-01", 8.0, "", "SFG-WH", "Opening", "", "Coating test stock")
 	book.adjust("RM-COAT-1001", -book.stock("RM-COAT-1001", "RM-WH"), "Test purchase receipt")
 	var first := _order(line, "BAKED-01", 8.0, 600.0, "BAKED-01/WC-OVN-01")
@@ -195,7 +204,7 @@ func _automatic_release_competition() -> void:
 	coat = book.orders[coat.id]
 	line.set_playing(true)
 	line.advance(1.0)
-	_check(priority.status == "Released" and first.status == "Created" and book.reservations["RAW-01"] == 8.0,
+	_check(priority.status == "Released" and first.status == "Created" and book.reservations["RAW-01"] == 16.0,
 		"Only the higher-priority order reserves shared stock at the same start time")
 	line.advance(float(book.purchases[po.id].due) - book.now - Line.STEP_SECONDS)
 	_check(coat.status == "Created", "Open purchase order cannot trigger Auto Release")
@@ -222,12 +231,13 @@ func _resources() -> void:
 		return
 	line.set_setting(&"floor_speed", 0.5)
 	var start: float = book.now + 10.0
-	var a := _order(line, "BAKED-01", 130.0, start, "BAKED-01/WC-OVN-01")
-	var b := _order(line, "BAKED-01", 50.0, start, "BAKED-01/WC-OVN-02")
-	var c := _order(line, "BAKED-01", 1.0, start, "BAKED-01/WC-OVN-01")
+	var a := _order(line, "BAKED-01", 65.0, start, "BAKED-01/WC-OVN-01")
+	var b := _order(line, "BAKED-01", 25.0, start, "BAKED-01/WC-OVN-02")
+	var c := _order(line, "BAKED-01", 0.5, start, "BAKED-01/WC-OVN-01")
 	_check(a.start == b.start and c.start == a.finish, "Parallel ovens can overlap while one oven is scheduled finitely")
 	var bake_work: Dictionary = book.catalog.scheduling.stages.bake
-	_check(a.estimate == bake_work.handling_seconds + 2 * (a.standard.cycle_seconds + a.standard.loading_seconds + a.standard.unloading_seconds), "Oven duration includes two cycles and handling")
+	_check(a.estimate == bake_work.handling_seconds + 2 * (a.standard.cycle_seconds + a.standard.loading_seconds
+		+ a.standard.unloading_seconds + bake_work.batch_handling_seconds), "Oven duration includes two cycles and both batches' handling")
 	_check("conflict" in book.reschedule(c.id, a.start), "Reject drag into occupied interval")
 	_check(not book.reschedule(c.id, a.start, "BAKED-01/WC-COT-01").is_empty(), "Reject incompatible machine")
 	_check(not book.create_order("COATED-1005", 2.0, start, 5, "COATED-1005/WC-COT-02").error.is_empty(), "Reject a coater incompatible with strawberry")
@@ -274,7 +284,7 @@ func _resources() -> void:
 	_check(saved and both, "Observe concurrent commitments and save an in-flight stock transfer")
 	_check(visited.get(a.id) == line.layout.port(&"Oven", &"raw_dock")
 		and visited.get(b.id) == line.layout.port(&"Oven02", &"raw_dock"), "Workers deliver to the frozen work center coordinates")
-	_check(a.status == "Completed" and b.status == "Completed" and is_equal_approx(book.stock("BAKED-01", "SFG-WH"), 181.0),
+	_check(a.status == "Completed" and b.status == "Completed" and is_equal_approx(book.stock("BAKED-01", "SFG-WH"), 90.5),
 		"Concurrent multi-cart orders conserve stock and complete")
 	_check(a.completed > a.finish and a.logistics_seconds > 0.0 and a.oven_wait_seconds > 0.0,
 		"Slow cart transport creates measured lateness and wait time")
@@ -386,6 +396,25 @@ func _planning_board() -> void:
 	await create_timer(0.35).timeout
 	var board = terminal._board
 	_check(board.visible and board._centers.size() == factory.line.erp.catalog.work_centers.size(), "ERP board exposes every master-data work center")
+	var chart_body := board._canvas.get_parent() as Control
+	chart_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	await process_frame
+	await process_frame
+	var swipe := InputEventPanGesture.new()
+	swipe.position = board._canvas.get_global_rect().get_center()
+	swipe.delta = Vector2(0.3, 0.0)
+	root.push_input(swipe, true)
+	var time_offset: float = board._left
+	_check(time_offset > 0.0 and is_zero_approx(board._top), "Horizontal swipe scrolls only the timeline")
+	swipe.delta = Vector2(0.0, 0.3)
+	root.push_input(swipe, true)
+	_check(is_equal_approx(board._left, time_offset) and board._top > 0.0 and board._top < 1.0,
+		"Vertical swipe scrolls work centers by part of a row (offset %.3f, page %.3f, total %.3f)" % [
+			board._top, board._vertical.page, board._vertical.max_value])
+	swipe.delta = Vector2(-0.3, -0.3)
+	root.push_input(swipe, true)
+	_check(is_zero_approx(board._left) and is_zero_approx(board._top), "Reverse swipe moves both axes back")
+	chart_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board._canvas.queue_redraw()
 	await process_frame
 	await process_frame

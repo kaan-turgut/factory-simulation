@@ -15,6 +15,7 @@ signal selection_requested(id: StringName)
 signal setting_requested(key: StringName, value: float)
 signal dispatch_requested(all_stock: bool)
 signal home_requested
+signal zoom_requested(inward: bool)
 signal grid_requested(enabled: bool)
 signal placement_requested
 signal build_requested
@@ -83,7 +84,7 @@ func refresh(line: Line) -> void:
 		_details[&"Oven"].text += " · %.0fs" % line.oven.remaining
 	_values[&"Palletizer"].text = "%d ready" % line.pallets_ready()
 	_details[&"Palletizer"].text = "%d boxes packed" % line.boxes_completed
-	var capacity := int(line.settings[&"warehouse_capacity"])
+	var capacity := line.warehouse.size()
 	var count := line.warehouse_count()
 	var fraction := float(count) / capacity if capacity > 0 else 0.0
 	_values[&"Warehouse"].text = "%d / %d" % [count, capacity]
@@ -249,7 +250,7 @@ func _build_controls() -> void:
 		_speed_buttons[speed] = button
 
 	_spacer(controls)
-	controls.add_child(_label("WASD · RMB Orbit · MMB Pan · Scroll",
+	controls.add_child(_label("WASD · RMB Orbit · MMB Pan",
 		13, Style.MUTED))
 	_build_button = _button(controls, "Build Mode", func() -> void: build_requested.emit())
 	_build_button.toggle_mode = true
@@ -257,6 +258,14 @@ func _build_controls() -> void:
 	_grid_button = _button(controls, "Grid", func() -> void: grid_requested.emit(_grid_button.button_pressed))
 	_grid_button.toggle_mode = true
 	_grid_button.tooltip_text = "Toggle the 1 m grid (G)"
+	var zoom := _row(4)
+	controls.add_child(zoom)
+	var zoom_out := _button(zoom, "−", func() -> void: zoom_requested.emit(false))
+	zoom_out.tooltip_text = "Zoom out (X)"
+	zoom_out.custom_minimum_size.x = 36
+	var zoom_in := _button(zoom, "+", func() -> void: zoom_requested.emit(true))
+	zoom_in.tooltip_text = "Zoom in (Z)"
+	zoom_in.custom_minimum_size.x = 36
 	var home := _button(controls, "Home view", func() -> void: home_requested.emit())
 	home.tooltip_text = "Return to the starting view (Home)"
 	_laptop = _button(controls, "ERP", func() -> void: erp_requested.emit(-1, ""), true)

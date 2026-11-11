@@ -104,10 +104,11 @@ func _oven_cycle() -> void:
 		return
 	_near(line.oven.stock.quantity, 75.0, "Oven cooks exactly its batch capacity")
 	_near(line.raw_at_oven.stock.quantity, 25.0, "Oversize delivery leaves its excess on the cart")
-	_near(line.oven.remaining, 36.0, "Configured minutes become simulated seconds")
+	var cycle := line.settings[&"cook_minutes"] * 60.0
+	_near(line.oven.remaining, cycle, "Configured minutes become simulated seconds")
 	_check(not line.set_setting(&"batch_capacity", 80.0), "Active oven batch capacity is locked")
 	line.set_setting(&"cook_minutes", 0.10)
-	line.advance(36.0 - STEP)
+	line.advance(cycle - STEP)
 	_check(line.oven.state == Oven.State.COOKING and line.oven.batches == 0,
 		"Changing the next duration does not finish the current batch early")
 	line.advance(STEP)
@@ -136,7 +137,7 @@ func _mismatched_loads() -> void:
 	line.set_setting(&"coater_input", 11.0)
 	line.reset()
 	line.set_playing(true)
-	line.advance(850.0)
+	line.advance(1500.0)
 	_check(line.warehouse_count() > 0 and line.oven.batches >= 3,
 		"One worker and one cart of each type handle incompatible capacities")
 	_check(line.raw_deliveries < line.cooked_deliveries, "Large raw carts span batches and smaller cooked deliveries")
@@ -190,27 +191,27 @@ func _packaging_settings() -> void:
 
 func _forklift_and_storage() -> void:
 	_scenarios += 1
-	var line := _packing_line(20.0)
-	line.set_setting(&"warehouse_capacity", 1.0)
+	var line := _packing_line(20.0, 1)
 	var home := line.forklift.position
 	if not _until(line, func() -> bool: return line.warehouse_reserved_slot >= 0,
 			15.0, "Ready pallet dispatches the forklift"):
 		return
-	_check(line.warehouse_count() == 0 and line.lift_load == null and line.pallets_ready() > 0,
+	_check(line.warehouse_count() == 23 and line.warehouse_reserved_slot == 23
+		and line.lift_load == null and line.pallets_ready() > 0,
 		"Dispatch reserves a slot while the pallet still sits at staging")
-	_check(not line.set_setting(&"warehouse_capacity", 0.0), "Cannot remove a reserved storage slot")
+	_check(not line.set_setting(&"warehouse_capacity", 0.0), "Warehouse capacity is fixed")
 	line.advance(STEP)
 	_check(line.forklift.position.distance_to(home) > 0.0, "Forklift drives to the pickup")
 	if not _until(line, func() -> bool: return line.lift_load != null, 30.0,
 			"Forklift collects pallet after arrival and handling"):
 		return
 	_near(line.lift_load.mass, 4.0, "Loaded pallet mass is carried in transit")
-	_check(line.warehouse_count() == 0, "Lift load has not arrived at warehouse")
+	_check(line.warehouse_count() == 23, "Lift load has not arrived at warehouse")
 	_mass_balance(line, "Pallet in transit")
-	_until(line, func() -> bool: return line.warehouse_count() == 1, 40.0,
-		"Driving and unloading place the pallet in storage")
+	_until(line, func() -> bool: return line.warehouse_count() == 24, 60.0,
+		"Driving and unloading fill the 24th rack position")
 	line.advance(60.0)
-	_check(line.warehouse_count() == 1 and line.forklift_deliveries == 1 and line.pallets_ready() == 3,
+	_check(line.warehouse_count() == 24 and line.forklift_deliveries == 1 and line.pallets_ready() == 3,
 		"Full storage stops subsequent deliveries and fills staging")
 	_check(line.forklift.task == "Waiting for warehouse space", "Forklift reports full warehouse")
 	_check(line.dispatch(false) == 1, "Dispatch frees one occupied slot")
@@ -224,16 +225,18 @@ func _upstream_block_and_resume() -> void:
 	_scenarios += 1
 	var line := Line.new()
 	line.set_playing(true)
-	line.advance(1250.0)
-	_check(line.warehouse_count() == 4 and line.pallets_ready() == 3, "Default shift fills all space")
+	_until(line, func() -> bool: return line.warehouse_count() == 24, 18000.0, "Default shift fills all 24 positions")
+	line.advance(1500.0)
+	_check(line.warehouse_count() == 24 and line.pallets_ready() == 3, "Default shift fills all space")
 	_check(line.packer.state == Machine.State.BLOCKED and line.coater.state == Machine.State.BLOCKED
 		and line.extruder.state == Machine.State.BLOCKED, "Blockage reaches the upstream machines")
 	var output := line.extruder.total_output
 	var deliveries := line.forklift_deliveries
-	_check(line.dispatch(true) == 4, "Dispatch all empties stored pallets")
+	_check(line.dispatch(true) == 24, "Dispatch all empties stored pallets")
 	line.advance(200.0)
 	_check(line.forklift_deliveries > deliveries, "Warehouse accepts new loads after dispatch")
-	_check(line.extruder.total_output > output, "Upstream extrusion resumes after dispatch")
+	_until(line, func() -> bool: return line.extruder.total_output > output, 500.0,
+		"Upstream extrusion resumes after dispatch")
 	_mass_balance(line, "Restarted full line")
 
 
@@ -270,7 +273,7 @@ func _pause_speed_and_reset() -> void:
 	reference.set_setting(&"extruder_rate", 1234.0)
 	_near(reference.extruder.configured_rate, 1234.0, "Live setpoint accepts whole kilograms per hour")
 	reference.set_setting(&"floor_count", 3.0)
-	_check(reference.floor_crew.size() == 2, "Changing crew count keeps live assignments")
+	_check(reference.floor_crew.size() == 4, "Changing crew count keeps live assignments")
 	reference.reset()
 	_check(reference.floor_crew.size() == 3 and reference.elapsed_ticks == 0 and not reference.playing,
 		"Reset applies fleet changes and pauses")
@@ -282,7 +285,6 @@ func _pause_speed_and_reset() -> void:
 func _reservations_bounds_and_mass() -> void:
 	_scenarios += 1
 	var line := Line.new()
-	line.set_setting(&"warehouse_capacity", 8.0)
 	line.set_setting(&"floor_count", 4.0)
 	line.set_setting(&"raw_count", 4.0)
 	line.set_setting(&"cooked_count", 4.0)
@@ -300,7 +302,7 @@ func _reservations_bounds_and_mass() -> void:
 			line.dispatch(true)
 		line.advance(STEP)
 		_check_invariants(line, tick)
-	_check(line.forklift_deliveries > 8, "Stress run exercises all warehouse slots and repeat dispatch")
+	_check(line.forklift_deliveries > 8, "Stress run exercises repeat deliveries and dispatch")
 	_check(line.cooked_deliveries > 5, "Stress run exercises multiple cart assignments")
 
 
@@ -327,7 +329,7 @@ func _check_invariants(line: Line, tick: int) -> void:
 	for storage: Line.Storage in [line.hopper, line.oven.stock, line.cooked_input, line.coated_input]:
 		_bounds(storage, "Station")
 	_check(line.warehouse_count() + int(line.warehouse_reserved_slot >= 0)
-		<= line.settings[&"warehouse_capacity"], "Warehouse includes reservations in its bound")
+		<= line.warehouse.size(), "Warehouse includes reservations in its bound")
 	if line.warehouse_reserved_slot >= 0:
 		_check(line.warehouse[line.warehouse_reserved_slot] == null, "Reserved slot is vacant")
 	for pallet in line.staged_pallets:
@@ -337,17 +339,20 @@ func _check_invariants(line: Line, tick: int) -> void:
 	_mass_balance(line, "All inventories at tick %d" % tick)
 
 
-func _packing_line(input: float) -> Line:
+func _packing_line(input: float, free_slots: int = 0) -> Line:
 	var line := Line.new()
 	line.set_setting(&"hopper_capacity", 1.0)
 	line.set_setting(&"coater_rate", 3600.0)
 	line.set_setting(&"packing_rate", 7200.0)
 	line.set_setting(&"box_kg", 2.0)
 	line.set_setting(&"pallet_boxes", 2.0)
-	line.set_setting(&"warehouse_capacity", 0.0)
+	for index in line.warehouse.size() - free_slots:
+		var pallet := Line.Pallet.new(1)
+		pallet.add_box(4.0)
+		line.warehouse[index] = pallet
 	# Seed cooked wafers to isolate the final stages in these unit scenarios.
 	line.cooked_input.apply_transfer(input, 0.0)
-	line.ingredients_taken = input
+	line.ingredients_taken = input + line.warehouse_mass()
 	line.set_playing(true)
 	return line
 

@@ -9,7 +9,7 @@
     ],
     "coatings": [],
     "technical": {
-      "max_rate_kg_h": 9000
+      "max_rate_kg_h": 5400
     },
     "available": true,
     "models": [
@@ -30,7 +30,7 @@
     "coatings": [],
     "technical": {
       "batch_kg": 75,
-      "cycle_seconds": 36
+      "cycle_seconds": 115
     },
     "available": true,
     "models": [
@@ -51,7 +51,7 @@
     "coatings": [],
     "technical": {
       "batch_kg": 60,
-      "cycle_seconds": 42
+      "cycle_seconds": 125
     },
     "available": true,
     "models": [
@@ -74,7 +74,7 @@
     "technical": {
       "input_kg": 65,
       "setup_seconds": 600,
-      "max_rate_kg_h": 7800
+      "max_rate_kg_h": 540
     },
     "available": true,
     "supply_location": "COAT-IN",
@@ -109,7 +109,7 @@
     "technical": {
       "input_kg": 55,
       "setup_seconds": 480,
-      "max_rate_kg_h": 6900
+      "max_rate_kg_h": 450
     },
     "available": true,
     "supply_location": "COAT-IN-02",
@@ -137,7 +137,7 @@
     "coatings": [],
     "technical": {
       "setup_seconds": 300,
-      "max_rate_kg_h": 7200
+      "max_rate_kg_h": 650
     },
     "available": true,
     "supply_location": "PACK-IN",
@@ -166,7 +166,7 @@
     ],
     "coatings": [],
     "technical": {
-      "max_rate_kg_h": 9000
+      "max_rate_kg_h": 6000
     },
     "available": true,
     "models": [
@@ -215,7 +215,7 @@
     "technical": {
       "input_kg": 150,
       "output_kg": 60,
-      "max_rate_kg_h": 1500
+      "max_rate_kg_h": 500
     },
     "available": true,
     "supply_location": "",
@@ -242,7 +242,7 @@
     "technical": {
       "input_kg": 100,
       "output_kg": 60,
-      "max_rate_kg_h": 1800
+      "max_rate_kg_h": 720
     },
     "available": true,
     "supply_location": "",
@@ -272,7 +272,7 @@
       "input_kg": 100,
       "output_kg": 60,
       "internal_kg": 150,
-      "max_rate_kg_h": 1200
+      "max_rate_kg_h": 600
     },
     "available": true,
     "supply_location": "",
@@ -306,7 +306,7 @@
       "input_kg": 100,
       "output_kg": 60,
       "setup_seconds": 300,
-      "max_rate_kg_h": 1500
+      "max_rate_kg_h": 700
     },
     "available": true,
     "supply_location": "PACK-IN-02",

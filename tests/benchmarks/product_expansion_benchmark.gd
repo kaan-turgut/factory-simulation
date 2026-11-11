@@ -68,7 +68,7 @@ func _headless(filled: bool) -> void:
 				active = active or not line.runs.is_empty()
 				max_orders = maxi(max_orders, line.runs.size())
 				max_workers = maxi(max_workers, line.floor_assignments.size())
-				if line.warehouse_count() >= int(line.settings[&"warehouse_capacity"]):
+				if line.warehouse_count() == line.warehouse.size():
 					line.dispatch(true)
 			for worker in lines[0].floor_crew:
 				push_ticks += int(worker.state == Line.Operator.State.PUSHING)

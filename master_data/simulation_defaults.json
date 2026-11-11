@@ -2,7 +2,7 @@
   "box_kg": 5.0,
   "cooked_capacity": 45.0,
   "cooked_count": 2.0,
-  "floor_count": 2.0,
+  "floor_count": 4.0,
   "floor_speed": 2.4,
   "hopper_capacity": 100.0,
   "lift_speed": 4.2,
@@ -13,7 +13,6 @@
   "raw_count": 2.0,
   "sack_kg": 25.0,
   "unload_time": 2.0,
-  "warehouse_capacity": 4.0,
   "coated_cart_capacity": 24,
   "coated_cart_count": 2,
   "pack_wip_capacity": 60

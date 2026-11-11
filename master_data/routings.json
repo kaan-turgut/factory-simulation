@@ -42,7 +42,8 @@
         "output": "finished",
         "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
       }
-    ]
+    ],
+    "legacy_only": true
   },
   {
     "id": "WAFER-02",
@@ -87,7 +88,8 @@
         "output": "finished",
         "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
       }
-    ]
+    ],
+    "legacy_only": true
   },
   {
     "id": "WAFER-03",
@@ -132,7 +134,8 @@
         "output": "finished",
         "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
       }
-    ]
+    ],
+    "legacy_only": true
   },
   {
     "id": "WAFER-04",
@@ -177,11 +180,12 @@
         "output": "finished",
         "handling": "Floor worker delivers coated wafers to Packaging WIP; cartons and pallets follow"
       }
-    ]
+    ],
+    "legacy_only": true
   },
   {
     "id": "ROUTE-DOUGH-01-WC-MIX-01",
-    "description": "Wafer dough blend / Ingredient prep 01",
+    "description": "Wafer batter / Ingredient prep 01",
     "version": 1,
     "categories": [
       "Chocolate wafers"
@@ -207,7 +211,7 @@
   },
   {
     "id": "ROUTE-RAW-01-WC-EXT-01",
-    "description": "Extruded wafer sheets / Extruder 01",
+    "description": "Formed raw wafer sheets / Extruder 01",
     "version": 1,
     "categories": [
       "Chocolate wafers"
@@ -1039,7 +1043,7 @@
   {
     "id": "ROUTE-FG-1001-WC-PKG-02",
     "description": "Classic Milk Chocolate Wafer / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Chocolate wafers"
     ],
@@ -1053,19 +1057,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "COOLED-1001",
+          "PK-WRAP",
           "PK-BOX-1001",
           "PK-LABEL-1001",
           "PK-PALLET"
         ],
         "output": "FG-1001",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-1002-WC-PKG-02",
     "description": "Dark Chocolate Wafer / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Chocolate wafers"
     ],
@@ -1079,19 +1084,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "COOLED-1002",
+          "PK-WRAP",
           "PK-BOX-1002",
           "PK-LABEL-1002",
           "PK-PALLET"
         ],
         "output": "FG-1002",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-1003-WC-PKG-02",
     "description": "White Chocolate Wafer / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Chocolate wafers"
     ],
@@ -1105,19 +1111,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "COOLED-1003",
+          "PK-WRAP",
           "PK-BOX-1003",
           "PK-LABEL-1003",
           "PK-PALLET"
         ],
         "output": "FG-1003",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2001-WC-PKG-01",
     "description": "Milk Chocolate Vanilla Cream Wafer / Packaging 01",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1131,19 +1138,20 @@
         "work_center": "WC-PKG-01",
         "input": [
           "COOLED-2001",
+          "PK-WRAP",
           "PK-BOX-2001",
           "PK-LABEL-2001",
           "PK-PALLET"
         ],
         "output": "FG-2001",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2001-WC-PKG-02",
     "description": "Milk Chocolate Vanilla Cream Wafer / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1157,19 +1165,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "COOLED-2001",
+          "PK-WRAP",
           "PK-BOX-2001",
           "PK-LABEL-2001",
           "PK-PALLET"
         ],
         "output": "FG-2001",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2002-WC-PKG-01",
     "description": "Dark Chocolate Hazelnut Cream Wafer / Packaging 01",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1183,19 +1192,20 @@
         "work_center": "WC-PKG-01",
         "input": [
           "COOLED-2002",
+          "PK-WRAP",
           "PK-BOX-2002",
           "PK-LABEL-2002",
           "PK-PALLET"
         ],
         "output": "FG-2002",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2002-WC-PKG-02",
     "description": "Dark Chocolate Hazelnut Cream Wafer / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1209,19 +1219,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "COOLED-2002",
+          "PK-WRAP",
           "PK-BOX-2002",
           "PK-LABEL-2002",
           "PK-PALLET"
         ],
         "output": "FG-2002",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2003-WC-PKG-01",
     "description": "White Chocolate Cocoa Cream Wafer / Packaging 01",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1235,19 +1246,20 @@
         "work_center": "WC-PKG-01",
         "input": [
           "COOLED-2003",
+          "PK-WRAP",
           "PK-BOX-2003",
           "PK-LABEL-2003",
           "PK-PALLET"
         ],
         "output": "FG-2003",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2003-WC-PKG-02",
     "description": "White Chocolate Cocoa Cream Wafer / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1261,19 +1273,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "COOLED-2003",
+          "PK-WRAP",
           "PK-BOX-2003",
           "PK-LABEL-2003",
           "PK-PALLET"
         ],
         "output": "FG-2003",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2004-WC-PKG-01",
-    "description": "Vanilla Cream Wafer \u2014 Uncoated / Packaging 01",
-    "version": 1,
+    "description": "Vanilla Cream Wafer — Uncoated / Packaging 01",
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1287,19 +1300,20 @@
         "work_center": "WC-PKG-01",
         "input": [
           "CUT-VAN",
+          "PK-WRAP",
           "PK-BOX-2004",
           "PK-LABEL-2004",
           "PK-PALLET"
         ],
         "output": "FG-2004",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2004-WC-PKG-02",
-    "description": "Vanilla Cream Wafer \u2014 Uncoated / Packaging Line 02",
-    "version": 1,
+    "description": "Vanilla Cream Wafer — Uncoated / Packaging Line 02",
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1313,19 +1327,20 @@
         "work_center": "WC-PKG-02",
         "input": [
           "CUT-VAN",
+          "PK-WRAP",
           "PK-BOX-2004",
           "PK-LABEL-2004",
           "PK-PALLET"
         ],
         "output": "FG-2004",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   },
   {
     "id": "ROUTE-FG-2005-WC-PKG-02",
     "description": "Mini Hazelnut Wafer Bites / Packaging Line 02",
-    "version": 1,
+    "version": 2,
     "categories": [
       "Filled wafers"
     ],
@@ -1339,12 +1354,148 @@
         "work_center": "WC-PKG-02",
         "input": [
           "CUT-HAZ-MINI",
+          "PK-WRAP-MINI",
           "PK-BOX-2005",
           "PK-LABEL-2005",
           "PK-PALLET"
         ],
         "output": "FG-2005",
-        "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1001-WC-PKG-01",
+    "description": "Classic Milk Chocolate Wafer / Packaging Line 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-1001",
+          "PK-WRAP",
+          "PK-BOX-1001",
+          "PK-LABEL-1001",
+          "PK-PALLET"
+        ],
+        "output": "FG-1001",
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1002-WC-PKG-01",
+    "description": "Dark Chocolate Wafer / Packaging Line 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-1002",
+          "PK-WRAP",
+          "PK-BOX-1002",
+          "PK-LABEL-1002",
+          "PK-PALLET"
+        ],
+        "output": "FG-1002",
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1003-WC-PKG-01",
+    "description": "White Chocolate Wafer / Packaging Line 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-1003",
+          "PK-WRAP",
+          "PK-BOX-1003",
+          "PK-LABEL-1003",
+          "PK-PALLET"
+        ],
+        "output": "FG-1003",
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1004-WC-PKG-01",
+    "description": "Hazelnut Chocolate Wafer / Packaging Line 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-1004",
+          "PK-WRAP",
+          "PK-BOX-1004",
+          "PK-LABEL-1004",
+          "PK-PALLET"
+        ],
+        "output": "FG-1004",
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-1005-WC-PKG-01",
+    "description": "Strawberry Chocolate Wafer / Packaging Line 01",
+    "version": 1,
+    "categories": [
+      "Chocolate wafers"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-01",
+        "input": [
+          "COOLED-1005",
+          "PK-WRAP",
+          "PK-BOX-1005",
+          "PK-LABEL-1005",
+          "PK-PALLET"
+        ],
+        "output": "FG-1005",
+        "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
   }

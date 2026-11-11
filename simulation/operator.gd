@@ -1,9 +1,9 @@
 extends RefCounted
 ## A task owner with timed work and distance-based travel. Positions are simulation data.
 
-enum State { IDLE, WALKING, CARRYING, PUSHING, LOADING, UNLOADING, DRIVING }
+enum State { IDLE, WALKING, CARRYING, PUSHING, LOADING, UNLOADING, DRIVING, MOVING_PALLET_JACK }
 
-const TITLES := ["Idle", "Walking", "Carrying sack", "Pushing cart", "Loading", "Unloading", "Driving"]
+const TITLES := ["Idle", "Walking", "Carrying sack", "Pushing cart", "Loading", "Unloading", "Driving", "Moving pallet jack"]
 
 var id: StringName
 var title: String

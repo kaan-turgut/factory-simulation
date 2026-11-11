@@ -38,8 +38,7 @@ const SPECS := {
 	&"packing_rate": ["Packaging rate (kg/h)", 0.0, 36000.0, 1.0],
 	&"box_kg": ["Box size (kg)", 1.0, 50.0, 0.25],
 	&"pallet_boxes": ["Boxes per pallet", 1.0, 32.0, 1.0],
-	&"lift_speed": ["Forklift speed (m/s)", 0.25, 8.0, 0.05],
-	&"warehouse_capacity": ["Warehouse capacity (pallets)", 0.0, 8.0, 1.0]
+	&"lift_speed": ["Forklift speed (m/s)", 0.25, 8.0, 0.05]
 }
 
 
@@ -67,7 +66,7 @@ static func load_values(directory: String = "") -> Dictionary:
 				var source: Variant = technical.get("max_rate_kg_h", technical.get(ref[1])) if ref[1] == "rate" else technical.get(ref[1])
 				if Master.number(source):
 					value = float(source) / (ref[2] if ref.size() == 3 else 1.0)
-		var whole: bool = key in [&"floor_count", &"raw_count", &"cooked_count", &"coated_cart_count", &"warehouse_capacity", &"pallet_boxes"]
+		var whole: bool = key in [&"floor_count", &"raw_count", &"cooked_count", &"coated_cart_count", &"pallet_boxes"]
 		if not Master.number(value, spec[1], spec[2], whole):
 			return {"error": "%s.json [%s]: missing or outside permitted range." % [
 				"work_centers" if TECHNICAL.has(key) else "simulation_defaults", key]}

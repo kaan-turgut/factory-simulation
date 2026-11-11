@@ -4,11 +4,15 @@ extends RefCounted
 const Scheduling = preload("res://erp/scheduling.gd")
 const Catalog = preload("res://erp/catalog.gd")
 const Operator = preload("res://simulation/operator.gd")
-const EPS := 1e-7
+const Storage = preload("res://simulation/storage.gd")
+const EPS := Storage.MASS_EPSILON
 const RAW_LOCATIONS := ["CREAM-IN", "PACK-IN-02", "RM-WH", "RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN", "TRANSIT"]
 const SFG_LOCATIONS := ["SFG-WH", "SFG-DECK"]
 const OPEN := ["Created", "Released", "In Progress"]
 const LINE := "LINE-01"
+const MATERIAL_HANDLER_ID := &"SupplyShuttle" # Stable ID in existing shifts.
+const MATERIAL_HANDLER_TITLE := "Material handler"
+const MATERIAL_HANDLER_SPEED := 2.4
 
 var explicit_planning := true
 var auto_release := false
@@ -38,7 +42,7 @@ var coat_setup_seconds := 600.0
 var pack_setup_seconds := 300.0
 var coat_remaining := 0.0
 var pack_remaining := 0.0
-var shuttle: Operator
+var material_handler: Operator
 var shipment := {}
 var manual_shipments: Array[Dictionary] = []
 var _next_sample := 60.0
@@ -528,18 +532,22 @@ func can_pack(pallet_needed: bool) -> bool:
 	var order := active()
 	if order.is_empty() or order.packed >= order.boxes:
 		return false
+	var location: String = order.route.operations[0].supply_location if order.has("standard") else "PACK-IN"
+	var per_box: Dictionary = order.recipe.get("packaging_per_box", {})
 	for code in order.recipe.packaging:
-		if stock(code, order.route.operations[0].supply_location if order.has("standard") else "PACK-IN") < 1.0 - EPS:
+		if stock(code, location) < float(per_box.get(code, 1)) - EPS:
 			return false
-	return not pallet_needed or stock("PK-PALLET", order.route.operations[0].supply_location if order.has("standard") else "PACK-IN") >= 1.0 - EPS
+	return not pallet_needed or stock("PK-PALLET", location) >= 1.0 - EPS
 
 
 func pack_box(new_pallet: bool) -> bool:
 	var order := active()
+	var location: String = order.route.operations[0].supply_location if order.has("standard") else "PACK-IN"
+	var per_box: Dictionary = order.recipe.get("packaging_per_box", {})
 	for code in order.recipe.packaging:
-		_consume(order, code, 1.0, "PACK-IN", "Carton formed")
+		_consume(order, code, float(per_box.get(code, 1)), location, "Carton formed")
 	if new_pallet:
-		_consume(order, "PK-PALLET", 1.0, "PACK-IN", "Pallet opened")
+		_consume(order, "PK-PALLET", 1.0, location, "Pallet opened")
 	order.packed += 1
 	changed()
 	return order.packed == order.boxes
@@ -586,12 +594,12 @@ func _release_remainder(order: Dictionary) -> void:
 
 
 func initialize_supply(layout) -> void:
-	shuttle = Operator.new(&"SupplyShuttle", "Material shuttle", layout.supply_point("RM-WH"))
+	material_handler = Operator.new(MATERIAL_HANDLER_ID, MATERIAL_HANDLER_TITLE, layout.supply_point("RM-WH"))
 
 
 func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
-	shuttle.advance(seconds, 4.0)
-	if not shuttle.finished():
+	material_handler.advance(seconds, MATERIAL_HANDLER_SPEED)
+	if not material_handler.finished():
 		return
 	if shipment.is_empty():
 		if not manual_shipments.is_empty():
@@ -609,33 +617,33 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 		shipment.phase = -1
 	if shipment.phase == -1:
 		var pickup: Vector3 = layout.supply_point(shipment.source)
-		var path: Array[Vector3] = layout.supply_route(shuttle.position, pickup)
-		if path.is_empty() and not shuttle.position.is_equal_approx(pickup):
+		var path: Array[Vector3] = layout.supply_route(material_handler.position, pickup)
+		if path.is_empty() and not material_handler.position.is_equal_approx(pickup):
 			return
 		shipment.phase = 0
-		shuttle.travel(path, Operator.State.DRIVING, "Collect supplies", catalog.locations[shipment.source])
+		material_handler.travel(path, Operator.State.MOVING_PALLET_JACK, "Collect supplies", catalog.locations[shipment.source])
 	elif shipment.phase == 0:
 		for code in shipment.items:
 			# Recheck the source before creating in-transit stock.
 			if stock(code, shipment.source) + EPS < shipment.items[code]:
 				if shipment.get("manual", false):
 					_release_manual_shipment()
-				warning = "Shuttle pickup short at " + shipment.source
+				warning = "Material pickup short at " + shipment.source
 				shipment.clear()
-				shuttle.idle()
+				material_handler.idle()
 				changed()
 				return
 		var destination: Vector3 = layout.supply_point(shipment.target)
-		var path: Array[Vector3] = layout.supply_route(shuttle.position, destination)
-		if path.is_empty() and not shuttle.position.is_equal_approx(destination):
+		var path: Array[Vector3] = layout.supply_route(material_handler.position, destination)
+		if path.is_empty() and not material_handler.position.is_equal_approx(destination):
 			return
 		for code in shipment.items:
-			_post(code, shipment.items[code], shipment.source, "TRANSIT", "Transfer", shipment.order, "Shuttle pickup")
+			_post(code, shipment.items[code], shipment.source, "TRANSIT", "Transfer", shipment.order, "Pallet jack pickup")
 		shipment.phase = 1
-		shuttle.travel(path, Operator.State.DRIVING, "Deliver supplies", catalog.locations[shipment.target])
+		material_handler.travel(path, Operator.State.MOVING_PALLET_JACK, "Deliver supplies", catalog.locations[shipment.target])
 	elif shipment.phase == 1:
 		shipment.phase = 2
-		shuttle.work(5.0 if shipment.target == "RM-STAGE" else 2.0, Operator.State.UNLOADING)
+		material_handler.work(5.0 if shipment.target == "RM-STAGE" else 2.0, Operator.State.UNLOADING)
 	else:
 		for code in shipment.items:
 			var reason := String(shipment.get("reason", "Freight lift to mezzanine" if shipment.target == "RM-STAGE"
@@ -644,7 +652,7 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 		if shipment.get("manual", false):
 			_release_manual_shipment()
 		shipment.clear()
-		shuttle.idle()
+		material_handler.idle()
 
 
 func _release_manual_shipment() -> void:
@@ -656,11 +664,13 @@ func _supply_request(order: Dictionary, sack: float) -> Dictionary:
 	if order.has("standard") and (order.stage == "cream" or order.route.operations[0].equipment == "Packer02"):
 		var items := {}
 		var location: String = order.route.operations[0].supply_location
+		var per_box: Dictionary = order.recipe.get("packaging_per_box", {})
 		for code in order.remaining:
 			if catalog.materials[code].procurement != "External":
 				continue
 			var on_hand := stock(code, location)
-			var per_batch: float = order.standard.batch_kg * order.standard.yield_factor * order.recipe.mass_inputs[code] if order.stage == "cream" else 16.0
+			var per_batch: float = order.standard.batch_kg * order.standard.yield_factor * order.recipe.mass_inputs[code] \
+				if order.stage == "cream" else 16.0 * float(per_box.get(code, 1))
 			var required := minf(order.remaining[code], 2.0 * per_batch)
 			if on_hand + EPS >= minf(required, per_batch):
 				continue
@@ -673,8 +683,9 @@ func _supply_request(order: Dictionary, sack: float) -> Dictionary:
 	for code in recipe.mix:
 		mixture[code] = recipe.mix[code] * maxf(100.0, sack * 2.0)
 	var pack := {"PK-PALLET": 5.0}
+	var per_box: Dictionary = recipe.get("packaging_per_box", {})
 	for code in recipe.packaging:
-		pack[code] = 32.0
+		pack[code] = 32.0 * float(per_box.get(code, 1))
 	var groups := []
 	if not order.has("stage") or order.stage == "coat":
 		groups.append([order.route.operations[0 if order.has("stage") else 2].supply_location, {recipe.coating: 48.0}])

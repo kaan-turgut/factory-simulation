@@ -9,6 +9,7 @@ const HOME_DISTANCE := 69.0
 const HOME_YAW := 0.11
 const HOME_PITCH := 0.88
 const INSPECTOR_SHIFT := 148.0
+const ZOOM_STEP := 0.88
 
 var _target_focus := Vector3(0.0, 0.2, 0.0)
 var _home_focus := _target_focus
@@ -72,7 +73,20 @@ func set_inspector_open(open: bool) -> void:
 
 func fit_factory(center: Vector3, cells: Vector2i) -> void:
 	_home_focus = center + Vector3(0, 0.2, 0)
-	_home_distance = HOME_DISTANCE * maxf(cells.x / 64.0, cells.y / 26.0)
+	var viewport := get_viewport().get_visible_rect().size
+	var vertical := tan(deg_to_rad(fov) * 0.5) * 0.88
+	var horizontal := vertical * viewport.aspect()
+	var heading := Vector3(sin(HOME_YAW), 0.0, cos(HOME_YAW))
+	var direction := heading * cos(HOME_PITCH) + Vector3.UP * sin(HOME_PITCH)
+	var right := Vector3(heading.z, 0.0, -heading.x)
+	var up := direction.cross(right)
+	_home_distance = HOME_DISTANCE
+	# Fit the projected corners, including the foreshortening at the home angle.
+	for x: float in [-0.5, 0.5]:
+		for z: float in [-0.5, 0.5]:
+			var corner := Vector3(cells.x * x, -0.2, cells.y * z)
+			var fit := maxf(absf(corner.dot(right)) / horizontal, absf(corner.dot(up)) / vertical)
+			_home_distance = maxf(_home_distance, fit + corner.dot(direction))
 	_max_distance = maxf(MAX_DISTANCE, _home_distance * 1.52)
 	_pan_extent = Vector2(cells) * 0.5 + Vector2(10.0, 11.0)
 	far = maxf(180.0, _max_distance * 1.5)
@@ -87,6 +101,15 @@ func home() -> void:
 	_target_yaw = _yaw + wrapf(HOME_YAW - _yaw, -PI, PI)
 	_target_pitch = HOME_PITCH
 	_target_distance = _home_distance
+
+
+func zoom_step(inward: bool) -> void:
+	_zoom(ZOOM_STEP if inward else 1.0 / ZOOM_STEP)
+
+
+func _zoom(factor: float) -> void:
+	if not _build_drag:
+		_target_distance = clampf(_target_distance * factor, MIN_DISTANCE, _max_distance)
 
 
 func _update_transform() -> void:
@@ -144,12 +167,25 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _build_drag:
 		return
+	if event is InputEventMagnifyGesture and event.factor > 0.0 and is_finite(event.factor):
+		_zoom(1.0 / event.factor)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and not (event.ctrl_pressed or event.meta_pressed or event.alt_pressed):
+		var edit := get_viewport().gui_get_focus_owner() as LineEdit
+		if edit != null and edit.is_editing():
+			return
+		if event.keycode in [KEY_Z, KEY_EQUAL, KEY_PLUS, KEY_KP_ADD] or event.unicode == "+".unicode_at(0):
+			zoom_step(true)
+			get_viewport().set_input_as_handled()
+		elif event.keycode in [KEY_X, KEY_MINUS, KEY_KP_SUBTRACT] or event.unicode == "-".unicode_at(0):
+			zoom_step(false)
+			get_viewport().set_input_as_handled()
 	if event is InputEventMouseButton and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
-				_target_distance = clampf(_target_distance * 0.88, MIN_DISTANCE, _max_distance)
+				zoom_step(true)
 			MOUSE_BUTTON_WHEEL_DOWN:
-				_target_distance = clampf(_target_distance / 0.88, MIN_DISTANCE, _max_distance)
+				zoom_step(false)
 			MOUSE_BUTTON_RIGHT:
 				_rotating = true
 			MOUSE_BUTTON_MIDDLE:

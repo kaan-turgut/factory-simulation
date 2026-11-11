@@ -92,7 +92,7 @@ func _ready() -> void:
 		terminal.route_requested.connect(_highlight_order)
 		hud.erp_requested.connect(_open_erp)
 		if _save_load_error.is_empty():
-			hud.set_hint("Saved shift moved to the larger factory. Cart jobs resume when you press Play." if _layout_refitted
+			hud.set_hint("Saved shift fitted to the updated factory. Transport resumes when you press Play." if _layout_refitted
 				else "Open ERP to create and release a production order.")
 		else:
 			hud.set_hint("Existing save preserved. " + _save_load_error)
@@ -109,6 +109,7 @@ func _ready() -> void:
 	hud.setting_requested.connect(_set_setting)
 	hud.dispatch_requested.connect(_dispatch)
 	hud.home_requested.connect(camera.home)
+	hud.zoom_requested.connect(camera.zoom_step)
 	hud.grid_requested.connect(_toggle_grid)
 	hud.placement_requested.connect(_toggle_placement)
 	hud.build_requested.connect(_toggle_build)
@@ -661,7 +662,7 @@ func _locate_stock(location: String) -> void:
 		"PACK-IN": _select(&"Packer")
 		"PACK-WIP": _select(&"PackagingWIP")
 		"FG-WH": _select(&"Warehouse")
-		"TRANSIT": _select(&"SupplyShuttle")
+		"TRANSIT": _select(Line.ERP.MATERIAL_HANDLER_ID)
 		_: _select(&"Oven")
 
 
@@ -687,7 +688,7 @@ func _load_shift() -> void:
 	terminal.bind(line)
 	_refresh()
 	floor_view.animate(line, 0.0)
-	terminal.notice("Saved shift moved to the larger factory and paused." if saved.get("refitted", false)
+	terminal.notice("Saved shift fitted to the updated factory and paused." if saved.get("refitted", false)
 		else "Saved shift restored and paused.")
 
 

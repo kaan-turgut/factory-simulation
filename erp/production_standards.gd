@@ -1,5 +1,6 @@
 extends RefCounted
 ## Product-operation-resource standards, unit conversions, and illustrative cleaning rules.
+const Storage = preload("res://simulation/storage.gd")
 const EPS := 0.000001
 const MODELS := ["continuous", "batch", "packaging", "residence"]
 const UNITS := ["kg/h", "pieces/h", "cartons/h"]
@@ -27,6 +28,8 @@ static func validate(catalog) -> String:
 				return prefix + "." + field + ": invalid value."
 		if not catalog.Master.number(row.get("yield_factor"), EPS, 1):
 			return prefix + ".yield_factor: expected a yield above zero and at most one."
+		if not row.get("yield_loss_reason", "") is String:
+			return prefix + ".yield_loss_reason: expected a description."
 		for reference in ["routing", "production_version"]:
 			if row.has(reference) and not catalog.get("routings" if reference == "routing" else "production_versions").has(row[reference]):
 				return prefix + "." + reference + ": missing reference."
@@ -111,11 +114,15 @@ static func kg_per_hour(standard: Dictionary, material: Dictionary) -> float:
 	return 0.0
 
 
+static func batch_count(standard: Dictionary, output: float) -> int:
+	var capacity: float = standard.batch_kg * standard.yield_factor
+	return maxi(0, ceili((output - Storage.MASS_EPSILON) / capacity))
+
+
 static func processing_seconds(standard: Dictionary, material: Dictionary, output: float) -> float:
 	match standard.model:
 		"batch":
-			var capacity: float = standard.batch_kg * standard.yield_factor
-			return ceilf(output / capacity - EPS) * (standard.cycle_seconds + standard.loading_seconds + standard.unloading_seconds)
+			return batch_count(standard, output) * (standard.cycle_seconds + standard.loading_seconds + standard.unloading_seconds)
 		"residence":
 			var throughput := minf(kg_per_hour(standard, material), standard.internal_kg * 3600.0 / standard.residence_seconds)
 			return output * 3600.0 / throughput + standard.residence_seconds

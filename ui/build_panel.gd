@@ -26,7 +26,7 @@ func _ready() -> void:
 	_actions(stack, [["undo", "Undo"], ["redo", "Redo"], ["default", "Default"]])
 	_actions(stack, [["save", "Save Layout"], ["load", "Load Layout"]])
 	_saved = _label(stack, "", 13, Style.MUTED)
-	_label(stack, "Drag to move · R / Shift+R to rotate\nEsc cancels · ⌘Z / ⇧⌘Z undo / redo\nB exits · Right drag orbits · Scroll zooms", 12, Style.MUTED)
+	_label(stack, "Drag to move · R / Shift+R to rotate\nEsc cancels · ⌘Z / ⇧⌘Z undo / redo\nB exits · Right drag orbits · Z / X zoom", 12, Style.MUTED)
 	hide()
 
 

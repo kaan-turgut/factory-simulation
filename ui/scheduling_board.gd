@@ -10,6 +10,7 @@ const Book = preload("res://erp/operations.gd")
 const LABEL_WIDTH := 160.0
 const HEADER := 32.0
 const ROW := 48.0
+const PAN_PIXELS_PER_UNIT := 100.0 / 3.0
 const SCALES := [300.0, 60.0, 15.0, 5.0]
 const COLORS := {"Created": Color("#307db2"), "Released": Color("#6a54ad"),
 	"In Progress": Color("#187858"), "Completed": Color("#496977"), "Closed": Color("#496977"),
@@ -31,7 +32,7 @@ var _boxes := {}
 var _cached_line
 var _schedule_revision := -1
 var _left := 0.0
-var _top := 0
+var _top := 0.0
 var _scale := 1
 var _drag := ""
 var _from := Vector2.ZERO
@@ -79,11 +80,13 @@ func _ready() -> void:
 	body.add_child(_canvas)
 	_vertical = VScrollBar.new()
 	_vertical.value_changed.connect(func(value: float) -> void:
-		_top = roundi(value)
+		_top = value
 		_canvas.queue_redraw())
-	_vertical.step = 1
+	_vertical.step = 0.0
+	_vertical.custom_step = 1.0
 	body.add_child(_vertical)
 	_horizontal = HScrollBar.new()
+	_horizontal.step = 0.0
 	_horizontal.value_changed.connect(func(value: float) -> void:
 		_left = value
 		_canvas.queue_redraw())
@@ -152,7 +155,7 @@ func refresh() -> void:
 		if not orders.is_empty():
 			last = maxf(last, orders.back().finish + SCALES[_scale])
 	_horizontal.max_value = maxf(last, _horizontal.page)
-	_vertical.page = maxf(1.0, floorf((_canvas.size.y - HEADER) / ROW))
+	_vertical.page = maxf(1.0, (_canvas.size.y - HEADER) / ROW)
 	_vertical.max_value = maxf(_vertical.page, _rows.size())
 	_canvas.queue_redraw()
 
@@ -199,8 +202,9 @@ func _paint() -> void:
 	if line == null:
 		return
 	var right := _left + maxf(0, size.x - LABEL_WIDTH) * _seconds_per_pixel()
-	var visible_count := ceili(maxf(0, size.y - HEADER) / ROW)
-	for i in range(_top, mini(_rows.size(), _top + visible_count)):
+	var first := floori(_top)
+	var last := mini(_rows.size(), ceili(_top + maxf(0, size.y - HEADER) / ROW))
+	for i in range(first, last):
 		var y := HEADER + (i - _top) * ROW
 		var shade := Color("#eaf1f8") if i % 2 == 0 else Color("#f6f9fc")
 		_canvas.draw_rect(Rect2(0, y, size.x, ROW), shade)
@@ -208,6 +212,7 @@ func _paint() -> void:
 		_text(Vector2(10, y + 21), center.description, Color("#253c51"), 14, LABEL_WIDTH - 16)
 		_text(Vector2(10, y + 37), center.id, Color("#50677b"), 11, LABEL_WIDTH - 16)
 		_canvas.draw_line(Vector2(0, y + ROW), Vector2(size.x, y + ROW), Color("#dce7f1"))
+	_canvas.draw_rect(Rect2(0, 0, size.x, HEADER), Color("#f9fbfe"))
 	var interval: float = SCALES[_scale]
 	var tick := floorf(_left / interval) * interval
 	while tick <= right:
@@ -218,7 +223,7 @@ func _paint() -> void:
 		tick += interval
 	_text(Vector2(10, 20), "WORK CENTER", Color("#39536a"), 12, LABEL_WIDTH - 16)
 	_canvas.draw_line(Vector2(LABEL_WIDTH, 0), Vector2(LABEL_WIDTH, size.y), Color("#b9ccde"), 1)
-	for i in range(_top, mini(_rows.size(), _top + visible_count)):
+	for i in range(first, last):
 		var y := HEADER + (i - _top) * ROW + 7
 		for order in _by_center.get(_rows[i], []):
 			if order.start >= right:
@@ -230,17 +235,17 @@ func _paint() -> void:
 			if not _matches(order, state):
 				continue
 			var bar := _bar(order.start, order.finish, y, 25)
-			if bar.size.x > 0:
+			if bar.has_area():
 				_boxes[order.id] = bar
 				_canvas.draw_rect(bar, COLORS[state])
 				if order.id == picked:
-					_canvas.draw_rect(bar.grow(2.0), Color("#152d43"), false, 2.0)
-				if bar.size.x > 18:
+					_canvas.draw_rect(bar, Color("#152d43"), false, 2.0)
+				if bar.size.x > 18 and bar.size.y >= 20:
 					_text(bar.position + Vector2(5, 17), "%s  %s  %.2f %s" % [
 						order.code, order.id, order.quantity, order.unit], Color.WHITE, 12, bar.size.x - 8)
 			if order.started >= 0.0:
 				var actual := _bar(order.started, actual_end, y + 29.0, 4.0)
-				if actual.size.x > 0:
+				if actual.has_area():
 					_canvas.draw_rect(actual, Color("#16374c"))
 	_draw_pegs()
 	var now := _time_x(line.erp.now)
@@ -266,6 +271,8 @@ func _draw_preview() -> void:
 	if target.is_empty():
 		return
 	var rect := _bar(target.start, target.start + target.estimate, HEADER + (target.row - _top) * ROW + 7, 25)
+	if not rect.has_area():
+		return
 	_canvas.draw_rect(rect, Color("#48ad82a5") if target.error.is_empty() else Color("#c84e5dbb"))
 	_canvas.draw_rect(rect, Color("#244659"), false, 1)
 
@@ -273,7 +280,9 @@ func _draw_preview() -> void:
 func _bar(start: float, finish: float, y: float, height: float) -> Rect2:
 	var x := clampf(_time_x(start), LABEL_WIDTH, _canvas.size.x)
 	var edge := clampf(_time_x(finish), LABEL_WIDTH, _canvas.size.x)
-	return Rect2(x, y, maxf(0.0, edge - x), height)
+	var top := clampf(y, HEADER, _canvas.size.y)
+	var bottom := clampf(y + height, HEADER, _canvas.size.y)
+	return Rect2(x, top, maxf(0.0, edge - x), bottom - top)
 
 
 func _time_x(seconds: float) -> float:
@@ -286,6 +295,14 @@ func _text(at: Vector2, value: String, color: Color, point: int, width: float) -
 
 func _input_canvas(event: InputEvent) -> void:
 	if line == null:
+		return
+	if event is InputEventPanGesture:
+		if _drag.is_empty():
+			# macOS delivers trackpad motion and momentum as fractional pan deltas.
+			var pixels: Vector2 = event.delta * PAN_PIXELS_PER_UNIT
+			_horizontal.value += pixels.x * _seconds_per_pixel()
+			_vertical.value += pixels.y / ROW
+		_canvas.accept_event()
 		return
 	if event is InputEventMouseMotion and not _drag.is_empty():
 		_pointer = event.position
@@ -333,8 +350,8 @@ func _input_canvas(event: InputEvent) -> void:
 
 
 func _drop_target() -> Dictionary:
-	var row := _top + floori((_pointer.y - HEADER) / ROW)
-	if row < _top or row >= _rows.size():
+	var row := floori(_top + (_pointer.y - HEADER) / ROW)
+	if _pointer.y < HEADER or _pointer.y >= _canvas.size.y or row >= _rows.size():
 		return {}
 	var order: Dictionary = line.erp.orders[_drag]
 	var start := maxf(line.erp.now, snappedf(order.start + (_pointer.x - _from.x) * _seconds_per_pixel(), 5.0))

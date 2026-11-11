@@ -5,6 +5,7 @@ const Line = preload("res://simulation/production_line.gd")
 const Layout = Line.Layout
 const Placement = Layout.Placement
 const PATH := "user://factory_layout.json"
+const FILE_VERSION := 2
 const HISTORY_LIMIT := 32
 const PREVIEW_LIMIT := 96
 
@@ -107,7 +108,7 @@ func save(path: String = PATH) -> String:
 	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if file == null:
 		return "Cannot write the layout file."
-	file.store_string(JSON.stringify({"version": 1, "saved_at": stamp,
+	file.store_string(JSON.stringify({"version": FILE_VERSION, "saved_at": stamp,
 		"size": [size.x, size.y], "placements": positions}, "	") + "
 ")
 	file.flush()
@@ -131,9 +132,13 @@ func load_layout(path: String = PATH, newer_only: bool = false) -> String:
 	var data: Dictionary = parser.data
 	var size := line.layout.grid.size
 	var dimensions: Variant = data.get("size")
-	if data.get("version") != 1 or not dimensions is Array or dimensions.size() != 2 \
-			or not Layout.Master.number(dimensions[0], 88, size.x, true) \
+	var version: Variant = data.get("version")
+	if (version != 1 and version != FILE_VERSION) or not dimensions is Array or dimensions.size() != 2 \
+			or not Layout.Master.number(dimensions[0], 88, INF, true) \
 			or not Layout.Master.number(dimensions[1], 29, size.y, true) or not data.get("placements") is Dictionary:
+		return "The saved layout does not fit this factory size or version."
+	var saved_size := Vector2i(int(dimensions[0]), int(dimensions[1]))
+	if saved_size.x > size.x and not (saved_size == Layout.PREVIOUS_SIZE and size == Layout.DEFAULT_SIZE):
 		return "The saved layout does not fit this factory size or version."
 	var stamp: Variant = data.get("saved_at", 0.0)
 	if not Layout.Master.number(stamp):
@@ -147,12 +152,16 @@ func load_layout(path: String = PATH, newer_only: bool = false) -> String:
 		var pose: Variant = data.placements[key]
 		if item == null or not item.movable or not pose is Array or pose.size() != 3:
 			return "Invalid placement for %s." % id
-		if not Layout.Master.number(pose[0], 0, size.x, true) or not Layout.Master.number(pose[1], 0, size.y, true) \
+		if not Layout.Master.number(pose[0], 0, saved_size.x, true) or not Layout.Master.number(pose[1], 0, saved_size.y, true) \
 				or not Layout.Master.number(pose[2], 0, 3, true):
 			return "Invalid coordinates or rotation for %s." % id
 		var cell := Vector2i(int(pose[0]), int(pose[1]))
 		if id == &"Warehouse":
-			cell.x += size.x - int(dimensions[0])
+			if Layout.WarehouseRoom.high_bay(item.size):
+				if version == 1:
+					continue
+				cell.y += size.y - saved_size.y
+			cell = Layout.warehouse_cell_after_resize(cell, int(pose[2]), saved_size, size)
 		changes[id] = item.at(cell, int(pose[2]))
 	var reason := apply(changes)
 	if reason.is_empty():
