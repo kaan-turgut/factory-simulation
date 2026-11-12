@@ -299,7 +299,8 @@
     "operation": "pack",
     "categories": [
       "Chocolate wafers",
-      "Filled wafers"
+      "Filled wafers",
+      "Chewing gum"
     ],
     "coatings": [],
     "technical": {
@@ -323,7 +324,275 @@
       "FG-2002",
       "FG-2003",
       "FG-2004",
-      "FG-2005"
+      "FG-2005",
+      "FG-3005",
+      "FG-3006",
+      "FG-3007"
+    ]
+  },
+  {
+    "id": "WC-GMX-01",
+    "equipment": "GumMixer",
+    "description": "Gum Mixer 01 (Z-blade)",
+    "operation": "gum_mix",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 120,
+      "input_kg": 240,
+      "output_kg": 120
+    },
+    "available": true,
+    "supply_location": "GUM-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "MASS-SPEAR-SF",
+      "MASS-PEPP-SF",
+      "MASS-PEPP-XY",
+      "MASS-MELON-XY",
+      "MASS-STRAW",
+      "MASS-ORANGE",
+      "MASS-APPLE"
+    ]
+  },
+  {
+    "id": "WC-GSH-01",
+    "equipment": "GumSheeter",
+    "description": "Gum Sheeter 01",
+    "operation": "gum_form",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 150,
+      "output_kg": 80,
+      "max_rate_kg_h": 300
+    },
+    "available": true,
+    "supply_location": "",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "CORE-SPEAR-SF",
+      "CORE-PEPP-SF",
+      "CORE-PEPP-XY",
+      "CORE-MELON-XY"
+    ]
+  },
+  {
+    "id": "WC-GFF-01",
+    "equipment": "FruitFormer",
+    "description": "Fruit Gum Former 01",
+    "operation": "gum_form",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 150,
+      "output_kg": 80,
+      "max_rate_kg_h": 250
+    },
+    "available": true,
+    "supply_location": "",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "continuous"
+    ],
+    "materials": [
+      "CORE-STRAW",
+      "CORE-ORANGE",
+      "CORE-APPLE"
+    ]
+  },
+  {
+    "id": "WC-GCD-01",
+    "equipment": "GumConditioner",
+    "description": "Gum Conditioning Tunnel 01",
+    "operation": "gum_condition",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 150,
+      "output_kg": 80,
+      "internal_kg": 200,
+      "max_rate_kg_h": 500
+    },
+    "available": true,
+    "supply_location": "",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "residence"
+    ],
+    "materials": [
+      "COND-SPEAR-SF",
+      "COND-PEPP-SF",
+      "COND-PEPP-XY",
+      "COND-MELON-XY",
+      "COND-STRAW",
+      "COND-ORANGE",
+      "COND-APPLE"
+    ]
+  },
+  {
+    "id": "WC-PAN-01",
+    "equipment": "GumPan01",
+    "description": "Coating Pan 01",
+    "operation": "gum_coat",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 80,
+      "input_kg": 120,
+      "output_kg": 100
+    },
+    "available": true,
+    "supply_location": "GUM-PAN-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "PELLET-SPEAR-SF",
+      "PELLET-PEPP-SF",
+      "PELLET-PEPP-XY",
+      "PELLET-MELON-XY",
+      "FRUIT-STRAW",
+      "FRUIT-ORANGE",
+      "FRUIT-APPLE"
+    ]
+  },
+  {
+    "id": "WC-PAN-02",
+    "equipment": "GumPan02",
+    "description": "Coating Pan 02",
+    "operation": "gum_coat",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 80,
+      "input_kg": 120,
+      "output_kg": 100
+    },
+    "available": true,
+    "supply_location": "GUM-PAN-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "PELLET-SPEAR-SF",
+      "PELLET-PEPP-SF",
+      "PELLET-PEPP-XY",
+      "PELLET-MELON-XY",
+      "FRUIT-STRAW",
+      "FRUIT-ORANGE",
+      "FRUIT-APPLE"
+    ]
+  },
+  {
+    "id": "WC-PAN-03",
+    "equipment": "GumPan03",
+    "description": "Coating Pan 03",
+    "operation": "gum_coat",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "batch_kg": 80,
+      "input_kg": 120,
+      "output_kg": 100
+    },
+    "available": true,
+    "supply_location": "GUM-PAN-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "batch"
+    ],
+    "materials": [
+      "PELLET-SPEAR-SF",
+      "PELLET-PEPP-SF",
+      "PELLET-PEPP-XY",
+      "PELLET-MELON-XY",
+      "FRUIT-STRAW",
+      "FRUIT-ORANGE",
+      "FRUIT-APPLE"
+    ]
+  },
+  {
+    "id": "WC-PKG-03",
+    "equipment": "WalletPacker",
+    "description": "Wallet Packer 01",
+    "operation": "pack",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 100,
+      "output_kg": 60,
+      "setup_seconds": 300,
+      "max_rate_kg_h": 400
+    },
+    "available": true,
+    "supply_location": "GUM-PACK-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "packaging"
+    ],
+    "materials": [
+      "FG-3001",
+      "FG-3002"
+    ]
+  },
+  {
+    "id": "WC-PKG-04",
+    "equipment": "BottleFiller",
+    "description": "Bottle Filler 01",
+    "operation": "pack",
+    "categories": [
+      "Chewing gum"
+    ],
+    "coatings": [],
+    "technical": {
+      "input_kg": 100,
+      "output_kg": 60,
+      "setup_seconds": 300,
+      "max_rate_kg_h": 350
+    },
+    "available": true,
+    "supply_location": "GUM-PACK-IN",
+    "input_port": "input_dock",
+    "output_port": "output_dock",
+    "models": [
+      "packaging"
+    ],
+    "materials": [
+      "FG-3003",
+      "FG-3004"
     ]
   }
 ]

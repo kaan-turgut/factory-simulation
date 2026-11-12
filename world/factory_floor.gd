@@ -12,6 +12,7 @@ const WarehouseView = preload("res://world/warehouse_view.gd")
 const Industrial = preload("res://world/industrial_models.gd")
 const Hall = preload("res://world/hall_models.gd")
 const LineModels = preload("res://world/line_models.gd")
+const GumModels = preload("res://world/gum_models.gd")
 const Palette = preload("res://ui/status_colors.gd")
 
 const INK := Color("#253541")
@@ -29,14 +30,34 @@ const CELL_ART := {
 	&"Spreader": ["Cream Spreader 01", Color("#7b9a79")],
 	&"Cutter": ["Wafer Cutter 01", Color("#bf8750")],
 	&"CoolingTunnel": ["Cooling Tunnel 01", Color("#568ea3")],
-	&"Packer02": ["Packaging Line 02", Color("#806c99")]
+	&"Packer02": ["Packaging Line 02", Color("#806c99")],
+	&"GumMixer": ["Gum Mixer 01", Color("#4f9fa8")],
+	&"GumSheeter": ["Gum Sheeter 01", Color("#5f86c4")],
+	&"FruitFormer": ["Fruit Gum Former 01", Color("#e07a5f")],
+	&"GumConditioner": ["Gum Conditioning 01", Color("#7fb3c8")],
+	&"GumPan01": ["Coating Pan 01", Color("#5f86c4")],
+	&"GumPan02": ["Coating Pan 02", Color("#5f86c4")],
+	&"GumPan03": ["Coating Pan 03", Color("#5f86c4")],
+	&"WalletPacker": ["Wallet Packer 01", Color("#2f9e8f")],
+	&"BottleFiller": ["Bottle Filler 01", Color("#3a8fd0")]
 }
+const GUM_CELLS := [&"GumMixer", &"GumSheeter", &"FruitFormer", &"GumConditioner", &"GumPan01", &"GumPan02",
+	&"GumPan03", &"WalletPacker", &"BottleFiller"]
+const PACKING_CELLS := [&"Packer02", &"WalletPacker", &"BottleFiller"]
 
 var layout: Layout
 var _draw := Primitives.new()
 var _stock := Stock.new(_draw)
 var _industrial := Industrial.new(_draw, _stock)
 var _line := LineModels.new(_industrial)
+var _gum := GumModels.new(_industrial)
+var _gum_mixer: GumModels.MixerModel
+var _pans: Dictionary[StringName, GumModels.PanModel] = {}
+var _tunnel_marks: Dictionary[StringName, Array] = {}
+var _slot_tints: Dictionary[StringName, StandardMaterial3D] = {}
+var _gum_supplies: Array[Node3D] = []
+var _syrup_totes: Array[Node3D] = []
+var _gum_cartons: Array[Node3D] = []
 var _equipment: Dictionary[StringName, Equipment] = {}
 var _logistics: Logistics
 var _staged: Array[Stock.PalletView] = []
@@ -56,7 +77,6 @@ var _erp_enabled := false
 var _cream_motor: Node3D
 var _processing_models: Dictionary[StringName, Processing] = {}
 var _warehouse_views: Array[WarehouseView] = []
-var _cooling_marks: Array[Node3D] = []
 var _cream_supplies: Array[Node3D] = []
 
 
@@ -72,8 +92,14 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	_enrobers.clear()
 	_processing_models.clear()
 	_warehouse_views.clear()
-	_cooling_marks.clear()
+	_tunnel_marks.clear()
 	_cream_supplies.clear()
+	_gum_mixer = null
+	_pans.clear()
+	_slot_tints.clear()
+	_gum_supplies.clear()
+	_syrup_totes.clear()
+	_gum_cartons.clear()
 	layout = floor_plan
 	for child in get_children():
 		remove_child(child)
@@ -231,10 +257,10 @@ func show_route(order: Dictionary) -> void:
 	for op in order.route.operations:
 		if op.type == "pack" and op.equipment == "Packer":
 			steps.append([&"PackagingWIP", "Cart delivery · WIP"])
-		elif op.type in ["spread", "cut", "cool"] or op.equipment == "Packer02":
-			steps.append([&"SFGWarehouse", "Reserved wafer stock"])
+		elif op.type in ["spread", "cut", "cool", "gum_form", "gum_condition", "gum_coat"] or StringName(op.equipment) in PACKING_CELLS:
+			steps.append([&"SFGWarehouse", "Reserved semi-finished stock"])
 		steps.append([StringName(op.equipment), "%02d  %s" % [op.number, op.description]])
-		if op.equipment == "Packer02":
+		if StringName(op.equipment) in PACKING_CELLS:
 			steps.append([&"Palletizer", "Cart delivery · cartons"])
 	for step in steps:
 		var point := layout.center(step[0])
@@ -605,16 +631,41 @@ func _build_cell(id: StringName) -> void:
 		_cream_motor = _line.build_cream_mixer(node, art[1])
 		for index in 4:
 			_cream_supplies.append(_stock.sack(node, Vector3(-2.0, 0.63, -1.68 + index * 0.88), 0.78))
+	elif id == &"GumMixer":
+		_gum_mixer = _gum.build_mixer(node, art[1])
+		# Weighed gum base, polyol and aroma sacks staged on a pallet beside the mixer.
+		_stock.pallet_deck(node, Vector3(-1.75, 0, 1.45), Vector2(1.1, 0.9), 0.14)
+		for index in 4:
+			_gum_supplies.append(_stock.sack(node, Vector3(-1.75, 0.28 + floorf(index / 2.0) * 0.22,
+				1.45 + (index % 2 - 0.5) * 0.44), 0.7))
+	elif _gum_pan(id):
+		_pans[id] = _gum.build_pan(node, art[1], art[0])
+		node.offset_readout(Vector3(0, 0.6, 0))
+		if id == &"GumPan02":
+			# The shared syrup station between the pans: coating syrup in IBC totes.
+			for side: float in [-1.0, 1.0]:
+				_syrup_totes.append(_gum.ibc(node, Vector3(side * 3.0, 0, -0.9), Color("#d9b46a") if side < 0 else Color("#cfe3f0")))
 	else:
 		var model := Processing.new(_industrial, node, id, size.x - 0.30, art[1])
 		_processing_models[id] = model
 		node.offset_readout(Vector3(0, 0.72, -0.68))
-		if id == &"CoolingTunnel":
+		if id in [&"CoolingTunnel", &"GumConditioner"]:
+			var marks: Array[Node3D] = []
+			var half := (size.x - 0.30) * 0.5 - 0.4
 			for index in 6:
-				_cooling_marks.append(_stock.wafer(node, Vector3(-3.46 + 1.3 * index, model.belt_load_height(), 0),
-					Stock.CHOCOLATE, Vector3(0.44, 0.14, 0.66)))
-	var tray_z := 1.78 if id == &"CreamMixer" else 1.50
-	var tray_y := 0.77 if id == &"CreamMixer" else 0.95
+				var tint := Stock.CHOCOLATE if id == &"CoolingTunnel" else Color("#e7e2d2")
+				marks.append(_stock.wafer(node, Vector3(lerpf(-half, half, index / 5.0), model.belt_load_height(), 0),
+					tint, Vector3(0.44, 0.14 if id == &"CoolingTunnel" else 0.06, 0.66)))
+			_tunnel_marks[id] = marks
+		if id == &"WalletPacker":
+			# Cartons, labels and wallet cards for both gum packers on a pallet between them.
+			var stack := _pivot(node, Vector3(5.0, 0, -0.6))
+			_stock.pallet_deck(stack, Vector3.ZERO, Vector2(1.2, 1.0), 0.14)
+			for index in 6:
+				_stock.carton(stack, Vector3(-0.3 + (index % 2) * 0.6, 0.31 + floorf(index / 2.0) * 0.34, 0), Vector3(0.56, 0.32, 0.9))
+			_gum_cartons.append(stack)
+	var tray_z := 1.78 if id in [&"CreamMixer", &"GumMixer"] else 1.50
+	var tray_y := 0.77 if id in [&"CreamMixer", &"GumMixer"] else 0.95
 	# Stainless outfeed table with raised lips.
 	var k := _industrial
 	k.box(node, Vector3(0, tray_y - 0.02, tray_z), Vector3(2.03, 0.04, 0.66), k.stainless)
@@ -626,10 +677,12 @@ func _build_cell(id: StringName) -> void:
 	k.box(node, Vector3(0, 0.25, tray_z), Vector3(1.9, 0.02, 0.5), k.stainless_dark)
 	for index in 4:
 		var at := Vector3(-0.66 + index * 0.44, tray_y + 0.003, tray_z)
-		if id == &"Packer02":
+		if id in PACKING_CELLS:
 			var box := _pivot(node, at)
 			_stock.carton(box, Vector3.UP * 0.10, Vector3(0.37, 0.20, 0.42))
 			node.inventory_slots.append(box)
+		elif id in GUM_CELLS:
+			node.inventory_slots.append(_gum_tote(id, node, at))
 		else:
 			var tint := Stock.CHOCOLATE if id == &"CoolingTunnel" else Stock.COOKED
 			node.inventory_slots.append(_stock.wafer(node, at, tint, Vector3(0.34, 0.16, 0.42)))
@@ -651,32 +704,95 @@ func _refresh_cells(line: Line) -> void:
 			var length_mm: float = spec.get("dimensions_mm", [80])[0]
 			for item in node.inventory_slots:
 				item.scale.x = clampf(length_mm / 80.0, 0.25, 1.25)
+	_show_staged(_cream_supplies, line, "CREAM-IN", 15.0)
+	_show_staged(_gum_supplies, line, "GUM-IN", 10.0)
+	_show_staged(_syrup_totes, line, "GUM-PAN-IN", 20.0)
+	_show_staged(_gum_cartons, line, "GUM-PACK-IN", 1.0)
+	for id: StringName in _tunnel_marks:
+		var tunnel := line.active_cell(id)
+		var marks: Array = _tunnel_marks[id]
+		for index in marks.size():
+			marks[index].visible = tunnel != null and index < ceili(tunnel.inside / tunnel.standard.internal_kg * marks.size())
+	for id: StringName in GUM_CELLS:
+		var order := line.order_at(id)
+		if order.is_empty() or not _equipment.has(id):
+			continue
+		var spec: Dictionary = order.recipe.spec
+		var product := Color(spec.get("coating_color", "#e7e2d2"))
+		var package := Color(spec.get("package_color", spec.get("coating_color", "#e7e2d2")))
+		if _processing_models.has(id):
+			_processing_models[id].tint(product, package)
+		if _pans.has(id):
+			_pans[id].tint(product)
+		if id == &"GumMixer" and _gum_mixer != null:
+			_gum_mixer.tint(product)
+		if _slot_tints.has(id) and _slot_tints[id].albedo_color != product:
+			_slot_tints[id].albedo_color = product
+		for mark in _tunnel_marks.get(id, []):
+			(mark.get_child(0) as MeshInstance3D).material_override = _draw.material(product)
+
+
+func _show_staged(items: Array[Node3D], line: Line, location: String, step: float) -> void:
+	if items.is_empty():
+		return
 	var staged := 0.0
-	for quantity in line.erp.balances["CREAM-IN"].values():
+	for quantity in line.erp.balances.get(location, {}).values():
 		staged += float(quantity)
-	for index in _cream_supplies.size():
-		_cream_supplies[index].visible = staged > index * 15.0
-	var tunnel := line.active_cell(&"CoolingTunnel")
-	for index in _cooling_marks.size():
-		_cooling_marks[index].visible = tunnel != null and index < ceili(tunnel.inside / tunnel.standard.internal_kg * _cooling_marks.size())
+	for index in items.size():
+		items[index].visible = staged > index * step
+
+
+func _gum_pan(id: StringName) -> bool:
+	return String(id).begins_with("GumPan")
+
+
+## Blue food-grade tote holding gum mass, centres or coated gum; the contents take the order colour.
+func _gum_tote(id: StringName, parent: Node3D, at: Vector3) -> Node3D:
+	if not _slot_tints.has(id):
+		var surface := StandardMaterial3D.new()
+		surface.albedo_color = Color("#e7e2d2")
+		surface.roughness = 0.45
+		_slot_tints[id] = surface
+	var tote := _pivot(parent, at)
+	var content := _draw.box(tote, Vector3(0, 0.13, 0), Vector3(0.3, 0.06, 0.36), Color.WHITE)
+	content.material_override = _slot_tints[id]
+	var plastic := Color("#2a6db5")
+	_draw.box(tote, Vector3(0, 0.012, 0), Vector3(0.36, 0.024, 0.42), plastic)
+	for x: float in [-0.17, 0.17]:
+		_draw.box(tote, Vector3(x, 0.09, 0), Vector3(0.02, 0.16, 0.42), plastic)
+	for z: float in [-0.2, 0.2]:
+		_draw.box(tote, Vector3(0, 0.09, z), Vector3(0.36, 0.16, 0.02), plastic)
+	_draw.batch_static(tote, [content])
+	return tote
 
 
 func _animate_cells(line: Line, delta: float) -> void:
 	var mixer := line.active_cell(&"CreamMixer")
 	if mixer != null:
 		_cream_motor.rotation.y = fposmod(mixer.remaining * 3.0, TAU)
-	var tunnel := line.active_cell(&"CoolingTunnel")
 	for id: StringName in CELL_ART:
 		if not _processing_models.has(id):
 			continue
-		var cell := tunnel if id == &"CoolingTunnel" else line.active_cell(id)
+		var cell := line.active_cell(id)
 		_processing_models[id].animate(cell != null and cell.machine.state == Line.Machine.State.RUNNING, delta)
-	if tunnel != null and not tunnel.cohorts.is_empty():
+	var step := delta if line.playing else 0.0
+	if _gum_mixer != null:
+		var batch := line.active_cell(&"GumMixer")
+		_gum_mixer.animate(batch != null and batch.remaining > 0.0, step)
+	for id: StringName in _pans:
+		var pan := line.active_cell(id)
+		_pans[id].animate(pan != null and pan.remaining > 0.0, step)
+	for id: StringName in _tunnel_marks:
+		var tunnel := line.active_cell(id)
+		if tunnel == null or tunnel.cohorts.is_empty():
+			continue
+		var marks: Array = _tunnel_marks[id]
+		var half := (layout.objects[id].size.x - 0.30) * 0.5 - 0.4
 		var residence: float = tunnel.standard.residence_seconds
-		for index in _cooling_marks.size():
-			var cohort: Array = tunnel.cohorts[floori(float(index * tunnel.cohorts.size()) / _cooling_marks.size())]
+		for index in marks.size():
+			var cohort: Array = tunnel.cohorts[floori(float(index * tunnel.cohorts.size()) / marks.size())]
 			var progress := 1.0 - clampf((cohort[0] - line.erp.now) / residence, 0.0, 1.0)
-			_cooling_marks[index].position.x = lerpf(-3.46, 3.46, progress)
+			marks[index].position.x = lerpf(-half, half, progress)
 
 
 func _refresh_erp(line: Line) -> void:

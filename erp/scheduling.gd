@@ -91,7 +91,7 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 			result.internals.append(child)
 			if internal.is_empty():
 				internal = child
-		elif stage in ["mix", "cream"]:
+		elif stage in catalog.PREPARATION_STAGES:
 			result.mix[child] = rates[child]
 		elif stage == "coat":
 			result.coating = child
@@ -99,10 +99,12 @@ static func recipe(catalog, code: String, quantity: float) -> Dictionary:
 	if not is_equal_approx(mass_rate, 1.0):
 		return {"error": "The stage BOM must conserve food mass."}
 	result.input = internal
-	if stage in ["mix", "cream"] and (not internal.is_empty() or result.mix.size() != rates.size()):
+	if stage in catalog.PREPARATION_STAGES and (not internal.is_empty() or result.mix.size() != rates.size()):
 		return {"error": "Ingredient preparation requires external kilogram inputs."}
-	if stage in ["extrude", "bake", "cut", "cool"] and (rates.size() != 1 or internal.is_empty()):
+	if stage in catalog.SINGLE_INPUT_STAGES and (rates.size() != 1 or internal.is_empty()):
 		return {"error": "This operation needs one kilogram input."}
+	if stage == "gum_coat" and (result.internals.size() != 1 or rates.size() < 2 or result.mass_inputs.size() != rates.size()):
+		return {"error": "Pan coating needs one gum centre material and kilogram coating supplies."}
 	if stage == "spread" and (result.internals.size() != 2 or rates.size() != 2):
 		return {"error": "Sandwiching requires a wafer material and a cream material."}
 	if stage == "coat":

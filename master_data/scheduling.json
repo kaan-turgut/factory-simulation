@@ -65,7 +65,9 @@
       ],
       "centers": [
         "WC-PKG-01",
-        "WC-PKG-02"
+        "WC-PKG-02",
+        "WC-PKG-03",
+        "WC-PKG-04"
       ],
       "handling_seconds": 120,
       "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
@@ -123,6 +125,75 @@
       ],
       "handling_seconds": 210,
       "handling": "Workers deliver reserved components and return completed product to wafer stock."
+    },
+    "gum_mix": {
+      "materials": [
+        "MASS-SPEAR-SF",
+        "MASS-PEPP-SF",
+        "MASS-PEPP-XY",
+        "MASS-MELON-XY",
+        "MASS-STRAW",
+        "MASS-ORANGE",
+        "MASS-APPLE"
+      ],
+      "centers": [
+        "WC-GMX-01"
+      ],
+      "handling_seconds": 90,
+      "batch_handling_seconds": 60,
+      "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+    },
+    "gum_form": {
+      "materials": [
+        "CORE-SPEAR-SF",
+        "CORE-PEPP-SF",
+        "CORE-PEPP-XY",
+        "CORE-MELON-XY",
+        "CORE-STRAW",
+        "CORE-ORANGE",
+        "CORE-APPLE"
+      ],
+      "centers": [
+        "WC-GSH-01",
+        "WC-GFF-01"
+      ],
+      "handling_seconds": 90,
+      "handling": "Carts bring gum mass from stock and return formed centres."
+    },
+    "gum_condition": {
+      "materials": [
+        "COND-SPEAR-SF",
+        "COND-PEPP-SF",
+        "COND-PEPP-XY",
+        "COND-MELON-XY",
+        "COND-STRAW",
+        "COND-ORANGE",
+        "COND-APPLE"
+      ],
+      "centers": [
+        "WC-GCD-01"
+      ],
+      "handling_seconds": 150,
+      "handling": "Carts bring formed centres; conditioned centres return to stock."
+    },
+    "gum_coat": {
+      "materials": [
+        "PELLET-SPEAR-SF",
+        "PELLET-PEPP-SF",
+        "PELLET-PEPP-XY",
+        "PELLET-MELON-XY",
+        "FRUIT-STRAW",
+        "FRUIT-ORANGE",
+        "FRUIT-APPLE"
+      ],
+      "centers": [
+        "WC-PAN-01",
+        "WC-PAN-02",
+        "WC-PAN-03"
+      ],
+      "handling_seconds": 120,
+      "batch_handling_seconds": 60,
+      "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
     }
   }
 }

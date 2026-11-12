@@ -1498,5 +1498,1241 @@
         "handling": "Workers deliver wafers and packaging supplies. The forklift receives the pallet."
       }
     ]
+  },
+  {
+    "id": "ROUTE-MASS-SPEAR-SF-WC-GMX-01",
+    "description": "Spearmint gum mass (maltitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-MALTITOL",
+          "RM-GLYCERIN",
+          "RM-AROMA-SPEARMINT"
+        ],
+        "output": "MASS-SPEAR-SF",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-SPEAR-SF-WC-GSH-01",
+    "description": "Spearmint pellet cores (maltitol) / Gum Sheeter 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GSH-01",
+        "input": [
+          "MASS-SPEAR-SF"
+        ],
+        "output": "CORE-SPEAR-SF",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-SPEAR-SF-WC-GCD-01",
+    "description": "Conditioned spearmint pellet cores (maltitol) / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-SPEAR-SF"
+        ],
+        "output": "COND-SPEAR-SF",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-SPEAR-SF-WC-PAN-01",
+    "description": "Spearmint coated pellets (maltitol) / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-SPEAR-SF",
+          "RM-SYRUP-MALTITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-SPEAR-SF",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-SPEAR-SF-WC-PAN-02",
+    "description": "Spearmint coated pellets (maltitol) / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-SPEAR-SF",
+          "RM-SYRUP-MALTITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-SPEAR-SF",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-SPEAR-SF-WC-PAN-03",
+    "description": "Spearmint coated pellets (maltitol) / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-SPEAR-SF",
+          "RM-SYRUP-MALTITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-SPEAR-SF",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-MASS-PEPP-SF-WC-GMX-01",
+    "description": "Peppermint gum mass (maltitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-MALTITOL",
+          "RM-GLYCERIN",
+          "RM-AROMA-PEPPERMINT"
+        ],
+        "output": "MASS-PEPP-SF",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-PEPP-SF-WC-GSH-01",
+    "description": "Peppermint pellet cores (maltitol) / Gum Sheeter 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GSH-01",
+        "input": [
+          "MASS-PEPP-SF"
+        ],
+        "output": "CORE-PEPP-SF",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-PEPP-SF-WC-GCD-01",
+    "description": "Conditioned peppermint pellet cores (maltitol) / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-PEPP-SF"
+        ],
+        "output": "COND-PEPP-SF",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-PEPP-SF-WC-PAN-01",
+    "description": "Peppermint coated pellets (maltitol) / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-PEPP-SF",
+          "RM-SYRUP-MALTITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-PEPP-SF",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-PEPP-SF-WC-PAN-02",
+    "description": "Peppermint coated pellets (maltitol) / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-PEPP-SF",
+          "RM-SYRUP-MALTITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-PEPP-SF",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-PEPP-SF-WC-PAN-03",
+    "description": "Peppermint coated pellets (maltitol) / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-PEPP-SF",
+          "RM-SYRUP-MALTITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-PEPP-SF",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-MASS-PEPP-XY-WC-GMX-01",
+    "description": "Peppermint gum mass (xylitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-XYLITOL",
+          "RM-GLYCERIN",
+          "RM-AROMA-PEPPERMINT"
+        ],
+        "output": "MASS-PEPP-XY",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-PEPP-XY-WC-GSH-01",
+    "description": "Peppermint pellet cores (xylitol) / Gum Sheeter 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GSH-01",
+        "input": [
+          "MASS-PEPP-XY"
+        ],
+        "output": "CORE-PEPP-XY",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-PEPP-XY-WC-GCD-01",
+    "description": "Conditioned peppermint pellet cores (xylitol) / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-PEPP-XY"
+        ],
+        "output": "COND-PEPP-XY",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-PEPP-XY-WC-PAN-01",
+    "description": "Peppermint coated pellets (xylitol) / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-PEPP-XY",
+          "RM-SYRUP-XYLITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-PEPP-XY",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-PEPP-XY-WC-PAN-02",
+    "description": "Peppermint coated pellets (xylitol) / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-PEPP-XY",
+          "RM-SYRUP-XYLITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-PEPP-XY",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-PEPP-XY-WC-PAN-03",
+    "description": "Peppermint coated pellets (xylitol) / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-PEPP-XY",
+          "RM-SYRUP-XYLITOL",
+          "RM-WAX"
+        ],
+        "output": "PELLET-PEPP-XY",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-MASS-MELON-XY-WC-GMX-01",
+    "description": "Watermelon gum mass (xylitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-XYLITOL",
+          "RM-GLYCERIN",
+          "RM-AROMA-WATERMELON"
+        ],
+        "output": "MASS-MELON-XY",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-MELON-XY-WC-GSH-01",
+    "description": "Watermelon pellet cores (xylitol) / Gum Sheeter 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GSH-01",
+        "input": [
+          "MASS-MELON-XY"
+        ],
+        "output": "CORE-MELON-XY",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-MELON-XY-WC-GCD-01",
+    "description": "Conditioned watermelon pellet cores (xylitol) / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-MELON-XY"
+        ],
+        "output": "COND-MELON-XY",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-MELON-XY-WC-PAN-01",
+    "description": "Watermelon coated pellets (xylitol) / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-MELON-XY",
+          "RM-SYRUP-XYLITOL",
+          "RM-COLOR-RED",
+          "RM-WAX"
+        ],
+        "output": "PELLET-MELON-XY",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-MELON-XY-WC-PAN-02",
+    "description": "Watermelon coated pellets (xylitol) / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-MELON-XY",
+          "RM-SYRUP-XYLITOL",
+          "RM-COLOR-RED",
+          "RM-WAX"
+        ],
+        "output": "PELLET-MELON-XY",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-PELLET-MELON-XY-WC-PAN-03",
+    "description": "Watermelon coated pellets (xylitol) / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-MELON-XY",
+          "RM-SYRUP-XYLITOL",
+          "RM-COLOR-RED",
+          "RM-WAX"
+        ],
+        "output": "PELLET-MELON-XY",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-MASS-STRAW-WC-GMX-01",
+    "description": "Strawberry gum mass (sugar and sorbitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-SUGAR",
+          "RM-SORBITOL",
+          "RM-GLUCOSE",
+          "RM-AROMA-STRAWBERRY",
+          "RM-COLOR-RED"
+        ],
+        "output": "MASS-STRAW",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-STRAW-WC-GFF-01",
+    "description": "Strawberry-shaped gum centres / Fruit Gum Former 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GFF-01",
+        "input": [
+          "MASS-STRAW"
+        ],
+        "output": "CORE-STRAW",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-STRAW-WC-GCD-01",
+    "description": "Conditioned strawberry fruit centres / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-STRAW"
+        ],
+        "output": "COND-STRAW",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-STRAW-WC-PAN-01",
+    "description": "Sugar-coated strawberry fruit gum / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-STRAW",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-RED",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-STRAW",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-STRAW-WC-PAN-02",
+    "description": "Sugar-coated strawberry fruit gum / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-STRAW",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-RED",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-STRAW",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-STRAW-WC-PAN-03",
+    "description": "Sugar-coated strawberry fruit gum / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-STRAW",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-RED",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-STRAW",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-MASS-ORANGE-WC-GMX-01",
+    "description": "Orange gum mass (sugar and sorbitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-SUGAR",
+          "RM-SORBITOL",
+          "RM-GLUCOSE",
+          "RM-AROMA-ORANGE",
+          "RM-COLOR-ORANGE"
+        ],
+        "output": "MASS-ORANGE",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-ORANGE-WC-GFF-01",
+    "description": "Orange-shaped gum centres / Fruit Gum Former 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GFF-01",
+        "input": [
+          "MASS-ORANGE"
+        ],
+        "output": "CORE-ORANGE",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-ORANGE-WC-GCD-01",
+    "description": "Conditioned orange fruit centres / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-ORANGE"
+        ],
+        "output": "COND-ORANGE",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-ORANGE-WC-PAN-01",
+    "description": "Sugar-coated orange fruit gum / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-ORANGE",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-ORANGE",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-ORANGE",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-ORANGE-WC-PAN-02",
+    "description": "Sugar-coated orange fruit gum / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-ORANGE",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-ORANGE",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-ORANGE",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-ORANGE-WC-PAN-03",
+    "description": "Sugar-coated orange fruit gum / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-ORANGE",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-ORANGE",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-ORANGE",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-MASS-APPLE-WC-GMX-01",
+    "description": "Green apple gum mass (sugar and sorbitol) / Gum Mixer 01 (Z-blade)",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_mix",
+        "work_center": "WC-GMX-01",
+        "input": [
+          "RM-GUMBASE",
+          "RM-SUGAR",
+          "RM-SORBITOL",
+          "RM-GLUCOSE",
+          "RM-AROMA-APPLE",
+          "RM-COLOR-GREEN"
+        ],
+        "output": "MASS-APPLE",
+        "handling": "Workers stage weighed ingredients; carts return gum mass to semi-finished stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-CORE-APPLE-WC-GFF-01",
+    "description": "Green apple-shaped gum centres / Fruit Gum Former 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_form",
+        "work_center": "WC-GFF-01",
+        "input": [
+          "MASS-APPLE"
+        ],
+        "output": "CORE-APPLE",
+        "handling": "Carts bring gum mass from stock and return formed centres."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-COND-APPLE-WC-GCD-01",
+    "description": "Conditioned green apple fruit centres / Gum Conditioning Tunnel 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_condition",
+        "work_center": "WC-GCD-01",
+        "input": [
+          "CORE-APPLE"
+        ],
+        "output": "COND-APPLE",
+        "handling": "Carts bring formed centres; conditioned centres return to stock."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-APPLE-WC-PAN-01",
+    "description": "Sugar-coated green apple fruit gum / Coating Pan 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-01",
+        "input": [
+          "COND-APPLE",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-GREEN",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-APPLE",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-APPLE-WC-PAN-02",
+    "description": "Sugar-coated green apple fruit gum / Coating Pan 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-02",
+        "input": [
+          "COND-APPLE",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-GREEN",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-APPLE",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FRUIT-APPLE-WC-PAN-03",
+    "description": "Sugar-coated green apple fruit gum / Coating Pan 03",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "gum_coat",
+        "work_center": "WC-PAN-03",
+        "input": [
+          "COND-APPLE",
+          "RM-SYRUP-SUGAR",
+          "RM-COLOR-GREEN",
+          "RM-WAX"
+        ],
+        "output": "FRUIT-APPLE",
+        "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3001-WC-PKG-03",
+    "description": "Fresh Spearmint Sugar-Free Gum, Wallet / Wallet Packer 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-03",
+        "input": [
+          "PELLET-SPEAR-SF",
+          "PK-WALLET",
+          "PK-BOX-3001",
+          "PK-LABEL-3001",
+          "PK-PALLET"
+        ],
+        "output": "FG-3001",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3002-WC-PKG-03",
+    "description": "Intense Peppermint Sugar-Free Gum, Wallet / Wallet Packer 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-03",
+        "input": [
+          "PELLET-PEPP-SF",
+          "PK-WALLET",
+          "PK-BOX-3002",
+          "PK-LABEL-3002",
+          "PK-PALLET"
+        ],
+        "output": "FG-3002",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3003-WC-PKG-04",
+    "description": "Xylitol Peppermint Gum, Bottle / Bottle Filler 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-04",
+        "input": [
+          "PELLET-PEPP-XY",
+          "PK-BOTTLE",
+          "PK-BOX-3003",
+          "PK-LABEL-3003",
+          "PK-PALLET"
+        ],
+        "output": "FG-3003",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3004-WC-PKG-04",
+    "description": "Xylitol Watermelon Gum, Bottle / Bottle Filler 01",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-04",
+        "input": [
+          "PELLET-MELON-XY",
+          "PK-BOTTLE",
+          "PK-BOX-3004",
+          "PK-LABEL-3004",
+          "PK-PALLET"
+        ],
+        "output": "FG-3004",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3005-WC-PKG-02",
+    "description": "Fruity Friends Strawberry Gum / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "FRUIT-STRAW",
+          "PK-POUCH-KIDS",
+          "PK-BOX-3005",
+          "PK-LABEL-3005",
+          "PK-PALLET"
+        ],
+        "output": "FG-3005",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3006-WC-PKG-02",
+    "description": "Fruity Friends Orange Gum / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "FRUIT-ORANGE",
+          "PK-POUCH-KIDS",
+          "PK-BOX-3006",
+          "PK-LABEL-3006",
+          "PK-PALLET"
+        ],
+        "output": "FG-3006",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
+  },
+  {
+    "id": "ROUTE-FG-3007-WC-PKG-02",
+    "description": "Fruity Friends Green Apple Gum / Packaging Line 02",
+    "version": 1,
+    "categories": [
+      "Chewing gum"
+    ],
+    "active": true,
+    "valid_from": 0,
+    "valid_to": 0,
+    "operations": [
+      {
+        "number": 10,
+        "type": "pack",
+        "work_center": "WC-PKG-02",
+        "input": [
+          "FRUIT-APPLE",
+          "PK-POUCH-KIDS",
+          "PK-BOX-3007",
+          "PK-LABEL-3007",
+          "PK-PALLET"
+        ],
+        "output": "FG-3007",
+        "handling": "Workers deliver coated gum and packaging supplies. The forklift receives the pallet."
+      }
+    ]
   }
 ]

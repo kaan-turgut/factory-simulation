@@ -530,7 +530,7 @@ func _materials() -> void:
 				for material in b.catalog.manufacturing_flow(code):
 					var stage := Scheduling.stage_for(b.catalog, material)
 					operations.append("%s %s" % [stage.capitalize(), material])
-					if stage == "spread":
+					if stage in ["spread", "gum_coat"]:
 						var inputs := PackedStringArray()
 						for part in b.catalog.boms[material].parts:
 							inputs.append(part.code)

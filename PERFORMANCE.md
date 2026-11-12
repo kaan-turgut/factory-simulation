@@ -141,3 +141,12 @@ Godot 4.7.2 Compatibility, M4 Pro, 1280 × 800, 30 FPS cap, default ERP scene wi
 | Close-up (spreader) | After | 810 | 180,374 | 4.27–4.53 / 6.04–6.12 | 30.0 |
 
 Ranges are two runs each. The new models add about 0.3 ms of render CPU per frame. GPU time was not measured (the Compatibility GPU timer reports zero).
+
+## Chewing gum hall (Nov 2026)
+
+The same setup as above: the default fresh shift and the home overview, which shows the whole hall, measured over two runs each. The comparison base is the previous commit, without the gum hall.
+
+| Build | Draw calls p50 | Primitives p50 | Render CPU p50 (ms) | FPS |
+| --- | ---: | ---: | ---: | ---: |
+| Before gum hall | 888 | 205,844 | 6.30–6.36 | 30.0 |
+| With gum hall (9 machines) | 1,097 | 253,664 | 7.03–7.06 | 30.0 |

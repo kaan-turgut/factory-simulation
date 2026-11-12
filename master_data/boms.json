@@ -922,5 +922,933 @@
 				"scrap": 0
 			}
 		]
+	},
+	{
+		"parent": "MASS-SPEAR-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-MALTITOL",
+				"qty": 0.53,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLYCERIN",
+				"qty": 0.15,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-SPEARMINT",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-SPEAR-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-SPEAR-SF",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-SPEAR-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-SPEAR-SF",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "PELLET-SPEAR-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-SPEAR-SF",
+				"qty": 0.68,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-MALTITOL",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "MASS-PEPP-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-MALTITOL",
+				"qty": 0.53,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLYCERIN",
+				"qty": 0.15,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-PEPPERMINT",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-PEPP-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-PEPP-SF",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-PEPP-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-PEPP-SF",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "PELLET-PEPP-SF",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-PEPP-SF",
+				"qty": 0.68,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-MALTITOL",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "MASS-PEPP-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-XYLITOL",
+				"qty": 0.53,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLYCERIN",
+				"qty": 0.15,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-PEPPERMINT",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-PEPP-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-PEPP-XY",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-PEPP-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-PEPP-XY",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "PELLET-PEPP-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-PEPP-XY",
+				"qty": 0.68,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-XYLITOL",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "MASS-MELON-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.3,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-XYLITOL",
+				"qty": 0.53,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLYCERIN",
+				"qty": 0.15,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-WATERMELON",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-MELON-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-MELON-XY",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-MELON-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-MELON-XY",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "PELLET-MELON-XY",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-MELON-XY",
+				"qty": 0.68,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-XYLITOL",
+				"qty": 0.29,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-RED",
+				"qty": 0.01,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "MASS-STRAW",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.24,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.4,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SORBITOL",
+				"qty": 0.18,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLUCOSE",
+				"qty": 0.14,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-STRAWBERRY",
+				"qty": 0.025,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-RED",
+				"qty": 0.015,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-STRAW",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-STRAW",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-STRAW",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-STRAW",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FRUIT-STRAW",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-STRAW",
+				"qty": 0.62,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-SUGAR",
+				"qty": 0.34,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-RED",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "MASS-ORANGE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.24,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.4,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SORBITOL",
+				"qty": 0.18,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLUCOSE",
+				"qty": 0.14,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-ORANGE",
+				"qty": 0.025,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-ORANGE",
+				"qty": 0.015,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-ORANGE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-ORANGE",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-ORANGE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-ORANGE",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FRUIT-ORANGE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-ORANGE",
+				"qty": 0.62,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-SUGAR",
+				"qty": 0.34,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-ORANGE",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "MASS-APPLE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "RM-GUMBASE",
+				"qty": 0.24,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SUGAR",
+				"qty": 0.4,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SORBITOL",
+				"qty": 0.18,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-GLUCOSE",
+				"qty": 0.14,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-AROMA-APPLE",
+				"qty": 0.025,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-GREEN",
+				"qty": 0.015,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "CORE-APPLE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "MASS-APPLE",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "COND-APPLE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "CORE-APPLE",
+				"qty": 1.0,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FRUIT-APPLE",
+		"base": 1.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "COND-APPLE",
+				"qty": 0.62,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-SYRUP-SUGAR",
+				"qty": 0.34,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-COLOR-GREEN",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "RM-WAX",
+				"qty": 0.02,
+				"unit": "kg",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3001",
+		"base": 2.8,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "PELLET-SPEAR-SF",
+				"qty": 2.8,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-WALLET",
+				"qty": 200,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3001",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3001",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3002",
+		"base": 2.8,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "PELLET-PEPP-SF",
+				"qty": 2.8,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-WALLET",
+				"qty": 200,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3002",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3002",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3003",
+		"base": 2.88,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "PELLET-PEPP-XY",
+				"qty": 2.88,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOTTLE",
+				"qty": 48,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3003",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3003",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3004",
+		"base": 2.88,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "PELLET-MELON-XY",
+				"qty": 2.88,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-BOTTLE",
+				"qty": 48,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3004",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3004",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3005",
+		"base": 3.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "FRUIT-STRAW",
+				"qty": 3.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-POUCH-KIDS",
+				"qty": 60,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3005",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3005",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3006",
+		"base": 3.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "FRUIT-ORANGE",
+				"qty": 3.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-POUCH-KIDS",
+				"qty": 60,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3006",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3006",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
+	},
+	{
+		"parent": "FG-3007",
+		"base": 3.0,
+		"version": 1,
+		"active": true,
+		"parts": [
+			{
+				"code": "FRUIT-APPLE",
+				"qty": 3.0,
+				"unit": "kg",
+				"scrap": 0
+			},
+			{
+				"code": "PK-POUCH-KIDS",
+				"qty": 60,
+				"unit": "ea",
+				"scrap": 0.0
+			},
+			{
+				"code": "PK-BOX-3007",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-LABEL-3007",
+				"qty": 1,
+				"unit": "ea",
+				"scrap": 0
+			},
+			{
+				"code": "PK-PALLET",
+				"qty": 0.125,
+				"unit": "ea",
+				"scrap": 0
+			}
+		]
 	}
 ]

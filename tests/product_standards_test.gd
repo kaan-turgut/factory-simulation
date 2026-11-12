@@ -158,7 +158,7 @@ func _minimum_lot_and_yield() -> void:
 func _filled_family() -> void:
 	var line := _line()
 	var book := line.erp
-	var moved := line.layout.move(&"Cutter", Vector2i(91, 31), 0)
+	var moved := line.layout.move(&"Cutter", Vector2i(100, 31), 0)
 	_check(moved.is_empty(), "Move the cutter in the expanded hall with valid cart routes")
 	var cutter_dock := line.layout.port(&"Cutter", &"input_dock")
 	var plan := Plan.new()
@@ -289,8 +289,8 @@ func _expanded_scene() -> void:
 	factory.terminal.open(4)
 	factory.terminal._example_demands()
 	factory.terminal._example_demands()
-	_check(factory.line.erp.demands.size() == 3 and factory.terminal.plan.summary.make > 0,
-		"Example adds three demands and reruns MRP without duplicate demands")
+	_check(factory.line.erp.demands.size() == 6 and factory.terminal.plan.summary.make > 0,
+		"Examples add three wafer and three gum demands and rerun MRP without duplicates")
 	var terminal = factory.terminal
 	_check(terminal._table.columns == 9 and terminal._rows.has("BAKED-01"), "MRP opens on the material coverage list")
 	terminal._rows["BAKED-01"].select(0)

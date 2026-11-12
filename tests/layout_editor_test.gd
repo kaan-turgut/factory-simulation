@@ -42,7 +42,7 @@ func _transactions_and_production() -> void:
 	var overlap := editor.preview(id, line.layout.objects[&"Coater"].cell, 0)
 	_check("overlaps" in overlap.reason and not overlap.conflicts.is_empty(), "Overlapping cells are marked")
 	_check("wall" in editor.preview(id, Vector2i(-2, 15), 0).reason, "Reject an outside footprint")
-	_check("obstructed" in editor.preview(&"Oven", Vector2i(18, 16), 1).reason, "Reject an inaccessible dock")
+	_check("obstructed" in editor.preview(&"Oven", Vector2i(36, 21), 0).reason, "Reject an inaccessible dock")
 	_check(not editor.apply(overlap.changes).is_empty() and line.layout.objects[id] == old, "Invalid changes are atomic")
 
 	var rotated := editor.preview(&"Oven", Vector2i(16, 16), 1)
@@ -164,6 +164,10 @@ func _stacked_coaters() -> void:
 func _resize_saved_shift() -> void:
 	var former := Line.Layout.new().snapshot()
 	former.size = [128, 40]
+	# Saves from the 128 × 40 hall predate the gum line; the loader adds it on its own.
+	former.objects = former.objects.filter(func(row: Dictionary) -> bool:
+		return row.id not in ["GumMixer", "GumSheeter", "FruitFormer", "GumConditioner", "GumPan01", "GumPan02",
+			"GumPan03", "WalletPacker", "BottleFiller"])
 	for room in former.objects:
 		if room.id == "Warehouse":
 			room.cell = [117, 14]
@@ -198,6 +202,8 @@ func _resize_saved_shift() -> void:
 	_check(previous.lift_load != null, "Capture a forklift with a pallet in transit")
 	var snapshot := Save.snapshot(previous)
 	snapshot.version = 7
+	# The fixture hall grew when the newer gum line was added; the save still records the old size.
+	snapshot.size = Line.Layout.PREVIOUS_SIZE
 	var saved := Save.restore(snapshot)
 	_check(saved.error.is_empty() and saved.get("refitted", false), "Restore the previous shift in the resized hall")
 	if not saved.error.is_empty():

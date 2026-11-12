@@ -64,12 +64,66 @@
 			"PK-BOX-2005",
 			"PK-LABEL-2005",
 			"PK-WRAP",
-			"PK-WRAP-MINI"
+			"PK-WRAP-MINI",
+			"PK-WALLET",
+			"PK-BOTTLE",
+			"PK-POUCH-KIDS",
+			"PK-BOX-3001",
+			"PK-LABEL-3001",
+			"PK-BOX-3002",
+			"PK-LABEL-3002",
+			"PK-BOX-3003",
+			"PK-LABEL-3003",
+			"PK-BOX-3004",
+			"PK-LABEL-3004",
+			"PK-BOX-3005",
+			"PK-LABEL-3005",
+			"PK-BOX-3006",
+			"PK-LABEL-3006",
+			"PK-BOX-3007",
+			"PK-LABEL-3007"
 		],
 		"id": "SUP-04",
 		"lead": 60.0,
 		"minimum": 5.0,
 		"name": "Foldline Packaging",
 		"price": 0.42
+	},
+	{
+		"codes": [
+			"RM-GUMBASE",
+			"RM-MALTITOL",
+			"RM-XYLITOL",
+			"RM-SORBITOL",
+			"RM-GLUCOSE",
+			"RM-GLYCERIN",
+			"RM-SYRUP-MALTITOL",
+			"RM-SYRUP-XYLITOL",
+			"RM-SYRUP-SUGAR",
+			"RM-WAX"
+		],
+		"id": "SUP-05",
+		"lead": 120.0,
+		"minimum": 5.0,
+		"name": "Polyol & Gum Base Trading",
+		"price": 3.1
+	},
+	{
+		"codes": [
+			"RM-AROMA-SPEARMINT",
+			"RM-AROMA-PEPPERMINT",
+			"RM-AROMA-WATERMELON",
+			"RM-AROMA-STRAWBERRY",
+			"RM-AROMA-ORANGE",
+			"RM-AROMA-APPLE",
+			"RM-COLOR-RED",
+			"RM-COLOR-ORANGE",
+			"RM-COLOR-GREEN"
+		],
+		"id": "SUP-06",
+		"lead": 240.0,
+		"minimum": 1.0,
+		"name": "Aroma House Flavours",
+		"price": 18.5
 	}
 ]

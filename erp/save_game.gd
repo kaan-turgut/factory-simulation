@@ -224,6 +224,8 @@ static func restore(data: Dictionary) -> Dictionary:
 		_migrate_packaging(line.erp)
 	if not data.catalog.has("standards"):
 		_migrate_expansion(line.erp, expansion)
+	elif not old:
+		_add_new_master_data(line.erp, expansion)
 	if data.version < 7 and line.settings[&"floor_count"] == 2 and line.floor_crew.size() == 2:
 		line._add_floor_crew(default_floor_count)
 		line.settings[&"floor_count"] = float(line.floor_crew.size())
@@ -253,7 +255,7 @@ static func _restore_layout(data: Dictionary, dimensions: Vector2i, move_stockro
 			return plan
 		for id in [&"RawWarehouse", &"Warehouse"]:
 			plan.objects[id] = defaults.objects[id]
-	plan.error = plan.validate()
+	plan.error = plan.fit_appended()
 	return plan
 
 
@@ -286,6 +288,43 @@ static func _migrate_packaging(book: Line.ERP) -> void:
 				else book.catalog.recipe(code, demand.boxes)
 			if recipe.error.is_empty():
 				demand.recipe = recipe
+
+
+## Adds product families and resources that joined master data after the save was written.
+## Existing rows, released orders and their frozen snapshots stay as saved; lists of
+## capabilities only gain the new entries.
+static func _add_new_master_data(book: Line.ERP, expansion: Dictionary) -> void:
+	var catalog := book.catalog
+	var new_materials: Array = expansion.materials.keys().filter(func(code: String) -> bool: return not catalog.materials.has(code))
+	var new_centers: Array = expansion.work_centers.keys().filter(func(id: String) -> bool: return not catalog.work_centers.has(id))
+	if new_materials.is_empty() and new_centers.is_empty():
+		return
+	for field in CATALOG_FIELDS:
+		if field != "scheduling":
+			catalog.get(field).merge(expansion[field].duplicate(true))
+	for stage in expansion.scheduling.stages:
+		var added: Dictionary = expansion.scheduling.stages[stage]
+		if not catalog.scheduling.stages.has(stage):
+			catalog.scheduling.stages[stage] = added.duplicate(true)
+			continue
+		for list in ["materials", "centers"]:
+			for item in added.get(list, []):
+				if item not in catalog.scheduling.stages[stage][list]:
+					catalog.scheduling.stages[stage][list].append(item)
+	for id in catalog.work_centers:
+		if id in new_centers or not expansion.work_centers.has(id):
+			continue
+		for list in ["materials", "categories"]:
+			for item in expansion.work_centers[id].get(list, []):
+				if item not in catalog.work_centers[id][list]:
+					catalog.work_centers[id][list].append(item)
+	for id in catalog.suppliers:
+		for code in expansion.suppliers.get(id, {}).get("codes", []):
+			if code not in catalog.suppliers[id].codes:
+				catalog.suppliers[id].codes.append(code)
+	for code in new_materials:
+		if catalog.opening.has(code):
+			book._post(code, catalog.opening[code], "", "RM-WH", "Opening", "EXPANSION", "New product family opening stock")
 
 
 static func _migrate_expansion(book: Line.ERP, expansion: Dictionary) -> void:

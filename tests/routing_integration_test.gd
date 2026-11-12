@@ -23,7 +23,7 @@ func _master_data() -> void:
 	var catalog := Catalog.new()
 	var plan := Line.Layout.new()
 	_check(catalog.error.is_empty() and plan.validate().is_empty(), "External catalog and layout are valid")
-	_check(catalog.routings.has("WAFER-01") and catalog.work_centers.size() == 12, "Legacy routes and twelve work centers")
+	_check(catalog.routings.has("WAFER-01") and catalog.work_centers.size() == 21, "Legacy routes and twenty-one work centers")
 	var folder := "user://routing-fixtures-%d" % OS.get_process_id()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(folder))
 	for file in DirAccess.get_files_at(Master.PROJECT_PATH):

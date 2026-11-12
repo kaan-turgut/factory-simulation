@@ -11,5 +11,8 @@
   "SFG-WH": "Semi-finished warehouse",
   "SFG-DECK": "Prepared dough at mezzanine",
   "CREAM-IN": "Cream mixer ingredient staging",
-  "PACK-IN-02": "Packaging Line 02 supplies"
+  "PACK-IN-02": "Packaging Line 02 supplies",
+  "GUM-IN": "Gum mixer ingredient staging",
+  "GUM-PAN-IN": "Coating syrup station",
+  "GUM-PACK-IN": "Gum packaging supplies"
 }

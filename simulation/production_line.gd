@@ -133,7 +133,7 @@ func enable_erp(explicit: bool = true) -> void:
 		if center.has("input_port") and (center.input_port != "input_dock" or center.output_port != "output_dock"):
 			validation_error = "work_centers.json [%s]: cell ports must reference its validated input and output docks." % center.id
 			return
-		if center.get("supply_location", "") != "" and Layout.SUPPLY_STATIONS.get(center.supply_location) != id:
+		if center.get("supply_location", "") != "" and not Layout.supplies(center.supply_location, id):
 			validation_error = "work_centers.json [%s].supply_location: expected the station’s physical supply dock." % center.id
 			return
 		match center.operation:
@@ -165,7 +165,7 @@ func _equipment_implements(id: StringName, operation: String) -> bool:
 			return id == &"Extruder"
 		"pack":
 			return id == &"Packer" or (definition.ports.has(&"input_dock") and definition.ports.has(&"output_dock"))
-		"cream", "spread", "cut", "cool":
+		"cream", "spread", "cut", "cool", "gum_mix", "gum_form", "gum_condition", "gum_coat":
 			return definition.ports.has(&"input_dock") and definition.ports.has(&"output_dock")
 		"bake":
 			return definition.ports.has(&"raw_dock") and definition.ports.has(&"cooked_dock")
@@ -642,7 +642,7 @@ func _begin_stage(order: Dictionary, restoring: bool = false) -> void:
 		"outbound": null, "pack": null, "store": null, "cycle": tech.get("cycle_seconds", 0.0),
 		"setup": 0.0, "fed": false}
 	runs[order.id] = run
-	if stage in ["cream", "spread", "cut", "cool"] or equipment == &"Packer02":
+	if not String(op.get("input_port", "")).is_empty():
 		run.cell = Cell.new(op, order.recipe, cell_machines[equipment])
 		run.output = run.cell.output
 	if restoring:

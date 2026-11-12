@@ -43,18 +43,22 @@ func advance(line, order: Dictionary, run: Dictionary) -> void:
 	var before := produced + partial
 	match standard.model:
 		"batch":
+			if remaining <= EPS and batch_output <= EPS and not _raw_batch(order):
+				_charge(line, order)
 			if remaining > EPS:
 				remaining = maxf(0.0, remaining - dt * factor)
-				state = "Mixing"
+				state = "Mixing" if _raw_batch(order) else "Coating"
 				if remaining <= EPS:
 					output.apply_transfer(batch_output, 0)
 					produced += batch_output
 					line._add_progress(order.stage, batch_output)
-					line.erp.flow(order.code, batch_output, "", "WIP", "WIP Produced", "Cream batch complete")
+					line.erp.flow(order.code, batch_output, "", "WIP", "WIP Produced", "Batch complete")
 					batch_output = 0
 					batch_count += 1
-			else:
+			elif _raw_batch(order):
 				state = "Ready" if output.quantity > EPS else "Waiting for a batch load"
+			else:
+				state = "Ready" if output.quantity > EPS else "Waiting for input carts"
 		"residence":
 			_cool(line, order, dt, factor)
 		"packaging":
@@ -145,6 +149,36 @@ func _pack(line, order: Dictionary, dt: float, factor: float) -> void:
 	state = "Packaging" if stock.quantity < before else "Waiting for wafers or packaging supplies"
 
 
+## Batch cells either blend purchased ingredients (cream, gum mass) or, like a coating pan,
+## charge semi-finished centres from their input stock plus supplies staged at the station.
+func _raw_batch(order: Dictionary) -> bool:
+	return order.recipe.internals.is_empty()
+
+
+func _charge(line, order: Dictionary) -> void:
+	if handling or produced + EPS >= order.recipe.target:
+		return
+	var batch := batch_size(order)
+	if batch <= EPS or output.free_space() + EPS < batch:
+		return
+	var location: String = order.route.operations[0].supply_location
+	var rates: Dictionary = order.recipe.mass_inputs
+	for code in rates:
+		var have: float = inputs[code].quantity if inputs.has(code) else line.erp.stock(code, location)
+		if have + EPS < batch * rates[code]:
+			return
+	for code in rates:
+		var amount: float = batch * rates[code]
+		if inputs.has(code):
+			line.erp.flow(code, inputs[code].remove(amount), "WIP", "", "WIP Used", "Batch charged")
+		else:
+			line.erp._consume(order, code, amount, location, "Batch charged")
+	batch_output = batch
+	remaining = standard.cycle_seconds
+	line._start_stage()
+	line._record_scrap(order, batch_output, standard.yield_factor)
+
+
 func batch_size(order: Dictionary) -> float:
 	var count := Standards.batch_count(standard, order.recipe.target)
 	return minf(order.recipe.target - produced, order.recipe.target / count)
@@ -176,8 +210,8 @@ func jobs(line, run: Dictionary, order: Dictionary) -> Array:
 	if line._available(intake, cart_type.Site.CELL_IN):
 		if intake.stock.quantity > EPS:
 			result.append(line._handling(kinds.CELL_INPUT, intake, "Unload " + intake.material))
-		elif standard.model == "batch" and active and _can_load_raw(line, order, run):
-			result.append(line._handling(kinds.CELL_BATCH, intake, "Load cream ingredients"))
+		elif standard.model == "batch" and _raw_batch(order) and active and _can_load_raw(line, order, run):
+			result.append(line._handling(kinds.CELL_BATCH, intake, "Load batch ingredients"))
 		else:
 			result.append(line._move(intake, cart_type.Site.PARKING, intake.home, "Return input cart"))
 	if line._available(outbound, cart_type.Site.CELL_OUT):
@@ -209,10 +243,11 @@ func jobs(line, run: Dictionary, order: Dictionary) -> Array:
 				if load_limit > EPS and (output.quantity + EPS >= load_limit or produced + EPS >= order.recipe.target
 						or standard.model == "batch"):
 					result.append(_move(line, cart, cart_type.Site.CELL_OUT, line.layout.port(run.equipment, out_port), "Collect cell output", order.code))
-		if intake == null and standard.model == "batch" and _can_load_raw(line, order, run):
-			var cart = line._parked_category("cooked")
-			if cart != null:
-				result.append(line._move(cart, cart_type.Site.CELL_IN, line.layout.port(run.equipment, in_port), "Load cream mixer"))
+		if intake == null and standard.model == "batch" and _raw_batch(order):
+			if _can_load_raw(line, order, run):
+				var cart = line._parked_category("cooked")
+				if cart != null:
+					result.append(line._move(cart, cart_type.Site.CELL_IN, line.layout.port(run.equipment, in_port), "Bring batch ingredients"))
 		elif intake == null and line.sfg_dock == null:
 			for code in inputs:
 				if float(order.remaining.get(code, 0)) <= EPS or inputs[code].free_space() <= EPS or line.erp.stock(code, "SFG-WH") <= EPS:
@@ -231,7 +266,7 @@ func _move(line, cart, site: int, point: Vector3, title: String, code: String):
 
 
 func _can_load_raw(line, order: Dictionary, run: Dictionary) -> bool:
-	if handling or remaining > EPS or batch_output > EPS or produced + EPS >= order.recipe.target:
+	if not _raw_batch(order) or handling or remaining > EPS or batch_output > EPS or produced + EPS >= order.recipe.target:
 		return false
 	var batch := batch_size(order)
 	if output.free_space() + EPS < batch:

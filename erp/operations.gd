@@ -6,7 +6,8 @@ const Catalog = preload("res://erp/catalog.gd")
 const Operator = preload("res://simulation/operator.gd")
 const Storage = preload("res://simulation/storage.gd")
 const EPS := Storage.MASS_EPSILON
-const RAW_LOCATIONS := ["CREAM-IN", "PACK-IN-02", "RM-WH", "RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN", "TRANSIT"]
+const RAW_LOCATIONS := ["CREAM-IN", "PACK-IN-02", "RM-WH", "RM-STAGE", "COAT-IN", "COAT-IN-02", "PACK-IN", "TRANSIT",
+	"GUM-IN", "GUM-PAN-IN", "GUM-PACK-IN"]
 const SFG_LOCATIONS := ["SFG-WH", "SFG-DECK"]
 const OPEN := ["Created", "Released", "In Progress"]
 const LINE := "LINE-01"
@@ -99,6 +100,9 @@ func _post(code: String, qty: float, source: String, target: String, kind: Strin
 		warehouse_revision += 1
 	if balances.has(source):
 		balances[source][code] = maxf(0.0, stock(code, source) - qty)
+	if not balances.has(target) and target in RAW_LOCATIONS + SFG_LOCATIONS:
+		# Saves from before a location existed restore without it.
+		balances[target] = {}
 	if balances.has(target):
 		balances[target][code] = stock(code, target) + qty
 	_record(code, qty, source, target, kind, document, reason)
@@ -242,7 +246,7 @@ func component_available(order: Dictionary, code: String) -> float:
 			locations = ["SFG-WH"]
 		"coat":
 			locations = ["SFG-WH"] if code == order.recipe.input else ["RM-WH", order.route.operations[0].supply_location]
-		"pack", "cream", "spread", "cut", "cool":
+		"pack", "cream", "spread", "cut", "cool", "gum_mix", "gum_form", "gum_condition", "gum_coat":
 			locations = ["SFG-WH"] if code in order.recipe.get("internals", [order.recipe.input]) else ["RM-WH", order.route.operations[0].supply_location]
 	var accessible := 0.0
 	for location in locations:
@@ -663,16 +667,18 @@ func _release_manual_shipment() -> void:
 
 
 func _supply_request(order: Dictionary, sack: float) -> Dictionary:
-	if order.has("standard") and (order.stage == "cream" or order.route.operations[0].equipment == "Packer02"):
+	var cell_supply: String = order.route.operations[0].get("supply_location", "") if order.has("stage") else ""
+	if order.has("standard") and not cell_supply.is_empty() and not String(order.route.operations[0].get("input_port", "")).is_empty():
+		# Stock-to-stock cells: keep about two batches, or 32 cartons of packaging, staged.
 		var items := {}
-		var location: String = order.route.operations[0].supply_location
+		var location := cell_supply
 		var per_box: Dictionary = order.recipe.get("packaging_per_box", {})
 		for code in order.remaining:
 			if catalog.materials[code].procurement != "External":
 				continue
 			var on_hand := stock(code, location)
 			var per_batch: float = order.standard.batch_kg * order.standard.yield_factor * order.recipe.mass_inputs[code] \
-				if order.stage == "cream" else 16.0 * float(per_box.get(code, 1))
+				if order.standard.model == "batch" else 16.0 * float(per_box.get(code, 1))
 			var required := minf(order.remaining[code], 2.0 * per_batch)
 			if on_hand + EPS >= minf(required, per_batch):
 				continue

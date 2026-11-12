@@ -15,6 +15,7 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - `world/industrial_models.gd` is also the shared model kit: public helpers (`box`, `cylinder`, `pipe`, `leg`, `handrail`, `caster`, `drive_motor`, `stack_light`, `finish`, …) and materials (`stainless`, `polished`, `grating`, `rubber`, `paint(color)`, …). Build new equipment with it and call `finish(root)` so static parts merge per material.
 - `world/line_models.gd`: extruder, ingredient hopper, cream mixer, roller conveyors, palletizing table, wire and long-span shelving. `world/processing_models.gd`: spreader, cutter, cooling tunnel and flow wrappers on a shared stainless conveyor with a scrolling belt. Their pivot names (`MeteringRoller`, `CuttingHead`, `CoolingFan`, `SealingJaw`, `FeedReel`) are checked by `tests/product_standards_test.gd`.
 - Workers, carts and the forklift (`world/logistics_view.gd`), pallets/cartons/sacks/wafers (`world/stock_models.gd`, generated wood, cardboard, woven and waffle textures) and the warehouse racking (`world/warehouse_view.gd`) were rebuilt in Nov 2026. Each worker pivot (body, legs, arms) is merged per material.
+- `world/gum_models.gd`: Z-blade gum mixer, rotating coating pans (open polished drum, charge tinted to the order) and IBC syrup totes. Sheeter, fruit former, wallet packer, bottle filler and gum conditioning are modes of `world/processing_models.gd`.
 - Everything in `world/` is visual only and must never write simulation state.
 
 ## Agent interface (added Nov 2026)
@@ -29,6 +30,12 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - Material settings: optional `planning` object in `materials.json`, read through `catalog.planning(code)`, validated by `catalog.set_planning`. Finished goods must stay lot-for-lot (demand linking assumes one order per demand).
 - Run `tests/mrp_planning_test.gd` after touching MRP, planned orders or material planning settings.
 - Known gap (phase 2): MRP plans with unlimited capacity while conversion schedules finitely, so converted orders can land later than MRP assumed. Exceptions report it; nothing levels it yet.
+
+## Chewing gum (Nov 2026)
+- Stages `gum_mix` → `gum_form` → `gum_condition` → `gum_coat` → `pack`; 7 products FG-3001…3007 (wallet, bottle, kids pouch on Packer02). Master data was generated with one script and follows the filled-wafer conventions. See README and DEVELOPMENT.md.
+- Cells are detected by `input_port` on the work center, not by stage name. Pans are batch cells that charge semi-finished centres plus staged syrup (`production_cell._charge`).
+- Saves gain new master data and equipment on load (`save_game._add_new_master_data`, `Layout.fit_appended`). The owner's own save has a rearranged floor; its gum block lands behind the cream line.
+- Run `tests/gum_line_test.gd` after touching gum master data, cells, shared supplies or save migration.
 
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.

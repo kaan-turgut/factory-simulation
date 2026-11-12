@@ -20,6 +20,15 @@ const STATIONS := {
 	&"Cutter": ["Wafer Cutter 01", "CONTINUOUS PROCESS", []],
 	&"CoolingTunnel": ["Cooling Tunnel 01", "RESIDENCE PROCESS", []],
 	&"Packer02": ["Packaging Line 02", "CARTON LINE", []],
+	&"GumMixer": ["Gum Mixer 01", "BATCH PROCESS  ·  Z-BLADE", []],
+	&"GumSheeter": ["Gum Sheeter 01", "CONTINUOUS PROCESS", []],
+	&"FruitFormer": ["Fruit Gum Former 01", "CONTINUOUS PROCESS", []],
+	&"GumConditioner": ["Gum Conditioning Tunnel 01", "RESIDENCE PROCESS", []],
+	&"GumPan01": ["Coating Pan 01", "BATCH PAN COATING", []],
+	&"GumPan02": ["Coating Pan 02", "BATCH PAN COATING", []],
+	&"GumPan03": ["Coating Pan 03", "BATCH PAN COATING", []],
+	&"WalletPacker": ["Wallet Packer 01", "BLISTER WALLET LINE", []],
+	&"BottleFiller": ["Bottle Filler 01", "BOTTLE LINE", []],
 	&"RawWarehouse": ["Raw material warehouse", "ERP  ·  RM-WH", []],
 	&"SFGWarehouse": ["Wafer stock", "ERP  ·  SFG-WH", []],
 	&"Platform": ["Ingredient platform", "LAYOUT  ·  ELEVATED FLOOR", []],
@@ -167,16 +176,17 @@ func refresh(line: Line) -> void:
 			pallet.id, pallet.sku, pallet.order_id, pallet.boxes, pallet.mass] if pallet != null else "Pallet dispatched."
 		return
 	match _selection:
-		&"CreamMixer", &"Spreader", &"Cutter", &"CoolingTunnel", &"Packer02":
+		&"CreamMixer", &"Spreader", &"Cutter", &"CoolingTunnel", &"Packer02", &"GumMixer", &"GumSheeter", &"FruitFormer", \
+				&"GumConditioner", &"GumPan01", &"GumPan02", &"GumPan03", &"WalletPacker", &"BottleFiller":
 			var cell := line.active_cell(_selection)
 			_status(line.work_center_status(_selection), Palette.IDLE if cell == null else Palette.color(cell.machine.state))
 			_readout.text = "Awaiting order" if cell == null else "Output Staging   %s" % _stock(cell.output)
 			if cell != null:
 				for code in cell.inputs:
 					_readout.text += "\n%s   %s" % [code, _stock(cell.inputs[code])]
-				if _selection == &"CoolingTunnel":
+				if _selection in [&"CoolingTunnel", &"GumConditioner"]:
 					_readout.text += "\nInside tunnel   %.1f kg" % cell.inside
-				elif _selection == &"CreamMixer":
+				elif cell.standard.model == "batch":
 					_readout.text += "\nBatch remaining   %.1f s" % cell.remaining
 		&"SFGWarehouse":
 			var total := 0.0
@@ -257,7 +267,8 @@ func refresh(line: Line) -> void:
 
 	if _uses_standard:
 		_readout.text += "\n" + line.standard_readout(_selection, line.order_at(_selection))
-	if line.erp != null and _selection in [&"Hopper", &"Extruder", &"Oven", &"Oven02", &"Coater", &"Coater02", &"Packer", &"CreamMixer", &"Spreader", &"Cutter", &"CoolingTunnel", &"Packer02"]:
+	if line.erp != null and (_selection in [&"Hopper", &"Extruder", &"Oven", &"Oven02", &"Coater", &"Coater02", &"Packer"]
+			or line.cell_machines.has(_selection)):
 		var order := line.order_at(_selection)
 		_readout.text += "\nOrder %s · SKU %s" % [order.get("id", "—"), order.get("code", "—")]
 		if _selection == &"Packer" and not order.is_empty():

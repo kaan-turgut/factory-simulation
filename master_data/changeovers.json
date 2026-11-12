@@ -46,5 +46,37 @@
     "from_value": "hazelnut",
     "to_value": "plain",
     "seconds": 900
+  },
+  {
+    "id": "GUM-FLAVOR",
+    "operation": "gum_mix",
+    "dimension": "flavor",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 240
+  },
+  {
+    "id": "GUM-SHELL",
+    "operation": "gum_coat",
+    "dimension": "coating",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 480
+  },
+  {
+    "id": "GUM-COLOUR",
+    "operation": "gum_coat",
+    "dimension": "flavor",
+    "from_value": "*",
+    "to_value": "*",
+    "seconds": 300
+  },
+  {
+    "id": "GUM-SUGAR-CLEAN",
+    "operation": "*",
+    "dimension": "cleaning_group",
+    "from_value": "gum-sugar",
+    "to_value": "gum-sugarfree",
+    "seconds": 900
   }
 ]

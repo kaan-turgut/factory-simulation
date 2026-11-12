@@ -18,5 +18,25 @@
         "due": 43200
       }
     ]
+  },
+  {
+    "id": "Chewing gum demonstration",
+    "demands": [
+      {
+        "code": "FG-3001",
+        "boxes": 24,
+        "due": 21600
+      },
+      {
+        "code": "FG-3003",
+        "boxes": 24,
+        "due": 28800
+      },
+      {
+        "code": "FG-3005",
+        "boxes": 30,
+        "due": 36000
+      }
+    ]
   }
 ]

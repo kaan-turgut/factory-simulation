@@ -82,7 +82,7 @@ For conversion, `layout.grid.to_world(Vector2(20.5, 14.5))` returns the center o
 
 ## ChocoERP
 
-- **Materials and BOMs.** Ten finished products ship with fictional demonstration recipes across classic coated and filled wafers. The material master distinguishes kilograms from eaches, consumer packs from shipping boxes, and boxes from pallets. Hierarchical BOM edits affect future planning. Executable stage BOMs must fit the physical process and preserve food mass.
+- **Materials and BOMs.** Seventeen finished products ship with fictional demonstration recipes across classic coated wafers, filled wafers and chewing gum. The material master distinguishes kilograms from eaches, consumer packs from shipping boxes, and boxes from pallets. Hierarchical BOM edits affect future planning. Executable stage BOMs must fit the physical process and preserve food mass.
 - **Production Orders.** Select a manufactured material, quantity, work center, and simulated start. Use kilograms for dough and wafer stock, and shipping boxes for finished goods. **Check stock** lists immediate component shortages. **Component inventory** opens the relevant stock report. **Peg supply** links an upstream order to a downstream BOM requirement. **Supply orders** opens the linked documents. Release checks physical stock and freezes the route, BOM, and technical parameters. Released orders can be cancelled before commitment. Completed orders can close.
 - **MRP.** Planning nets unreserved stock, purchase receipts, scheduled stage output and firmed planned orders level by level. It creates numbered planned orders (**PLO-…**) for manufactured material and purchase requisitions for bought material, then flags exceptions. See *MRP workspace* below.
 - **Inventory.** The material handler brings purchased supplies by pallet jack from **RM-WH**. Prepared dough is received into **SFG-DECK**. Workers move wafers and cream through **SFG-WH** by cart. The inventory report also shows controlled **WIP**, the packaging bay, and **FG-WH**. Goods movements link stock issues and receipts to their orders.
@@ -130,6 +130,24 @@ In **Material Requirements Planning**, choose **Load filled-wafer example** to a
 Cream has its own mixer order and stock receipt. Sandwiching reserves both baked wafers and the recipe's exact cream. Coated wafers, including the original five flavors, need an independent cooling order before packaging. Uncoated products reserve cut wafer stock. The new machines are selectable and movable in Build Mode.
 
 The modeled cutter makes 20 g fingers and 5 g mini bites. Filled wafers use four coated fingers or five uncoated fingers per 100 g pack. A 50 g mini pouch holds ten bites. ERP tracks retail film in wrapper equivalents and consumes it with each completed shipping carton.
+
+## Chewing gum production
+
+The gum hall behind the wafer lines has nine machines: a Z-blade **Gum Mixer**, a **Gum Sheeter** (pre-extruder, sizing rollers, dusting and scoring), a **Fruit Gum Former** (rope sizer and rotary fruit die), a **Gum Conditioning** tunnel, three rotating **Coating Pans**, a **Wallet Packer** and a **Bottle Filler**. Kids' fruit gum is packed in 50 g pouches on Packaging Line 02. In **Material Requirements Planning**, the example loader also adds three gum demands.
+
+| Product | Gum mass | Shape and shell | Packaging |
+| --- | --- | --- | --- |
+| FG-3001 Fresh Spearmint Sugar-Free Gum | Gum base, maltitol, glycerin, spearmint aroma | Pellets, maltitol shell | Wallet, 10 pellets (Wallet Packer) |
+| FG-3002 Intense Peppermint Sugar-Free Gum | Gum base, maltitol, glycerin, peppermint aroma | Pellets, maltitol shell | Wallet (Wallet Packer) |
+| FG-3003 Xylitol Peppermint Gum | Gum base, xylitol, glycerin, peppermint aroma | Pellets, xylitol shell | 60 g bottle (Bottle Filler) |
+| FG-3004 Xylitol Watermelon Gum | Gum base, xylitol, glycerin, watermelon aroma | Pellets, pink xylitol shell | 60 g bottle (Bottle Filler) |
+| FG-3005 Fruity Friends Strawberry Gum | Gum base, sugar, sorbitol, glucose syrup, strawberry aroma, red colour | Strawberry shapes, red sugar shell | Kids pouch (Line 02) |
+| FG-3006 Fruity Friends Orange Gum | As above with orange aroma and colour | Orange shapes, orange sugar shell | Kids pouch (Line 02) |
+| FG-3007 Fruity Friends Green Apple Gum | As above with apple aroma and green colour | Apple shapes, green sugar shell | Kids pouch (Line 02) |
+
+Each product has five independent stage orders: **mass** (Gum Mixer batch from staged ingredients), **cores** (Sheeter or Fruit Former), **conditioning** (residence in the tunnel), **coating** (a pan batch that charges conditioned centres from a cart plus syrup and polishing wax from the syrup station between the pans) and **packing**. Any of the three pans can coat any product. Switching a pan or a stage from sugar to sugar-free products adds a cleaning changeover.
+
+Purchased gum inputs are gum base, maltitol, xylitol, sorbitol, glucose syrup, glycerin, six aromas, three natural colours, three coating syrups, carnauba wax, wallet blisters, bottles, kids pouches, cartons and labels. Demonstration timings are short: a 5-minute mix, a 4-minute conditioning residence and a 7-minute pan batch.
 
 ### Production standards
 
@@ -264,6 +282,7 @@ godot --headless --path . --script res://tests/detailed_scheduling_test.gd
 godot --headless --path . --script res://tests/product_standards_test.gd
 godot --headless --path . --script res://tests/agent_api_test.gd
 godot --headless --path . --script res://tests/mrp_planning_test.gd
+godot --headless --path . --script res://tests/gum_line_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

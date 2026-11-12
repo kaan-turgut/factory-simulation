@@ -19,8 +19,17 @@ const PARAMETERS := {
 	"spread": {"rate": [1.0, 36000.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
 	"cut": {"rate": [1.0, 36000.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
 	"cool": {"rate": [1.0, 36000.0], "internal_kg": [1.0, 500.0]},
-	"pack": {"rate": [0.0, 36000.0], "setup_seconds": [0.0, 86400.0]}
+	"pack": {"rate": [0.0, 36000.0], "setup_seconds": [0.0, 86400.0]},
+	"gum_mix": {"batch_kg": [1.0, 300.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
+	"gum_form": {"rate": [1.0, 36000.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]},
+	"gum_condition": {"rate": [1.0, 36000.0], "internal_kg": [1.0, 500.0]},
+	"gum_coat": {"batch_kg": [1.0, 300.0], "input_kg": [1.0, 500.0], "output_kg": [1.0, 500.0]}
 }
+## Stages that blend purchased ingredients only, and stages that turn one kilogram input into another.
+const PREPARATION_STAGES := ["mix", "cream", "gum_mix"]
+const SINGLE_INPUT_STAGES := ["extrude", "bake", "cut", "cool", "gum_form", "gum_condition"]
+## Stages run by stock-to-stock cells with their own input and output docks.
+const CELL_STAGES := ["cream", "spread", "cut", "cool", "gum_mix", "gum_form", "gum_condition", "gum_coat"]
 
 var materials := {}
 var boms := {}
@@ -175,7 +184,7 @@ func _validate() -> String:
 			return "work_centers.json [%s]: invalid or duplicate equipment, capabilities or availability." % id
 		if not item.materials is Array or not item.models is Array:
 			return "work_centers.json [%s]: invalid material or processing-model capability." % id
-		if item.operation in ["coat", "cream", "pack"] and not locations.has(item.get("supply_location")):
+		if item.operation in ["coat", "cream", "pack", "gum_mix", "gum_coat"] and not locations.has(item.get("supply_location")):
 			return "work_centers.json [%s].supply_location: unknown storage location." % id
 		if item.has("input_port") and (not item.input_port is String or not item.get("output_port") is String \
 				or not Master.number(item.technical.get("input_kg"), 1.0) or not Master.number(item.technical.get("output_kg"), 1.0)):

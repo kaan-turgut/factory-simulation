@@ -95,8 +95,12 @@ func _factory_constraints() -> void:
 	var oven := plan.objects[&"Oven"]
 	_check("overlaps" in plan.validate_move(&"Oven", plan.objects[&"Coater"].cell, 0),
 		"A move cannot claim another machine's cells")
-	_check("route" in plan.validate_move(&"Oven", Vector2i(18, 16), 1),
-		"A footprint can fit while its rotated cart approach is obstructed")
+	# Routes search around equipment, so a dock is only unreachable when it is boxed in:
+	# here the oven's raw dock sits against the rear of Coater 01.
+	_check("route" in plan.validate_move(&"Oven", Vector2i(36, 21), 0),
+		"A footprint can fit while its cart dock is boxed in behind another machine")
+	_check(plan.validate_move(&"Oven", Vector2i(18, 16), 1).is_empty(),
+		"A rotated oven is reachable when carts can drive around it")
 	_check("belt" in plan.validate_move(&"Packer", Vector2i(59, 17), 0),
 		"Packaging stays connected to the outbound carton conveyor")
 	_check(not plan.move(&"Oven", Vector2i(-1, 16), 0).is_empty() and plan.objects[&"Oven"] == oven,

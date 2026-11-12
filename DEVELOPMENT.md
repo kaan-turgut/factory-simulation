@@ -30,6 +30,16 @@ Native save version 6 stores the planning catalog, planned orders and their numb
 
 Use `tests/detailed_scheduling_test.gd` for the milk-wafer demand through shipment scenario, concurrent work centers, finite windows, in-flight save/load, MRP conversion, and Gantt input. The commands in README run the existing routing, transaction, layout and physical simulation regressions. See PERFORMANCE.md for measurements.
 
+## Chewing gum family
+
+The gum stages are `gum_mix`, `gum_form`, `gum_condition` and `gum_coat`. They run in the same stock-to-stock production cells as the filled-wafer stages. Any work center with an input dock runs as a cell, and `Catalog.PREPARATION_STAGES` and `SINGLE_INPUT_STAGES` hold the recipe rules. A batch cell whose recipe has a semi-finished input (a coating pan) charges itself once its input stock and the staged supplies cover a batch. Cream-style batches still load purchased ingredients by cart.
+
+Supply locations can be shared. `Layout.SHARED_SUPPLY` lets the three pans draw from **GUM-PAN-IN** and both gum packers from **GUM-PACK-IN**. The shuttle delivers to the station named in `SUPPLY_STATIONS`.
+
+Equipment behind other rows reaches the cart aisle through `Layout._grid_approach`, an axis-aligned grid search. It runs only when the direct and single-detour approaches fail, so existing routes stay as they were.
+
+Saves made before a family existed gain its master data on load (`_add_new_master_data`): new rows are added, and capability lists only gain entries. Its new equipment is placed at its default cells, or `Layout.fit_appended` moves the whole new group to the nearest place where the plan validates.
+
 ## Product standards and filled wafers
 
 The scheduler resolves a dated standard using material, operation, resource, and optional routing or production-version scope. A more specific scope takes precedence. Standard values and cleaning rules freeze on release. A work center's maximum limits its effective runtime flow. The original combined-line mode remains available to resume legacy orders and run regressions.

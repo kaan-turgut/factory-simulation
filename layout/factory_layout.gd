@@ -30,11 +30,21 @@ const LINKS := {
 }
 
 const LINKED_GROUPS := [[&"Extruder", &"Hopper"], [&"Packer", &"PackagingWIP", &"Palletizer"]]
-const SUPPLY_STATIONS := {"COAT-IN": &"Coater", "COAT-IN-02": &"Coater02", "PACK-IN": &"Packer", "CREAM-IN": &"CreamMixer", "PACK-IN-02": &"Packer02"}
+const SUPPLY_STATIONS := {"COAT-IN": &"Coater", "COAT-IN-02": &"Coater02", "PACK-IN": &"Packer", "CREAM-IN": &"CreamMixer", "PACK-IN-02": &"Packer02",
+	"GUM-IN": &"GumMixer", "GUM-PAN-IN": &"GumPan02", "GUM-PACK-IN": &"WalletPacker"}
+## Supply locations used by several neighbouring stations. Deliveries go to the station
+## named in SUPPLY_STATIONS; the others draw from the same staged stock.
+const SHARED_SUPPLY := {"GUM-PAN-IN": [&"GumPan01", &"GumPan02", &"GumPan03"], "GUM-PACK-IN": [&"WalletPacker", &"BottleFiller"]}
+
+
+static func supplies(location: String, station: StringName) -> bool:
+	return SUPPLY_STATIONS.get(location) == station or station in SHARED_SUPPLY.get(location, [])
 
 var error := ""
 var grid: Grid
 var objects: Dictionary[StringName, Placement] = {}
+## Equipment that joined the master data after a saved layout was written.
+var appended: Array[StringName] = []
 var reserved: Array[Rect2i] = []
 var _route_obstacles := {}
 var _cart_blockers := {}
@@ -74,6 +84,7 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 		for row in defaults.data.objects:
 			if not definitions.any(func(saved: Dictionary) -> bool: return saved.get("id") == row.id):
 				definitions.append(row)
+				appended.append(StringName(row.id))
 				missing = true
 		if missing:
 			for definition in definitions:
@@ -381,6 +392,45 @@ func move(id: StringName, anchor: Vector2i, orientation: int) -> String:
 	return reason
 
 
+## Saved layouts receive new equipment at its default cells. If those cells are taken,
+## move the new equipment together, keeping its arrangement, to the nearest place where
+## the whole plan validates. Returns the remaining problem, if any.
+func fit_appended() -> String:
+	var problem := validate()
+	var group := appended.filter(func(id: StringName) -> bool: return objects.has(id) and objects[id].movable)
+	if problem.is_empty() or group.is_empty():
+		return problem
+	var originals := {}
+	var bounds := Rect2i()
+	for id: StringName in group:
+		originals[id] = objects[id]
+		var area: Rect2i = objects[id].required_area()
+		bounds = area if bounds.size == Vector2i.ZERO else bounds.merge(area)
+	var others: Array[Rect2i] = []
+	for item: Placement in objects.values():
+		if item.id not in group and is_zero_approx(item.elevation) and item.kind != &"parking":
+			others.append(item.required_area())
+	var room := Rect2i(Vector2i.ZERO, grid.size)
+	for radius in range(1, maxi(grid.size.x, grid.size.y)):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dy)) != radius:
+					continue
+				var shifted := Rect2i(bounds.position + Vector2i(dx, dy), bounds.size)
+				if not room.encloses(shifted) or others.any(func(area: Rect2i) -> bool: return area.intersects(shifted)):
+					continue
+				for id: StringName in group:
+					var item: Placement = originals[id]
+					objects[id] = item.at(item.cell + Vector2i(dx, dy), item.turns)
+				invalidate_routes()
+				if validate().is_empty():
+					return ""
+	for id: StringName in group:
+		objects[id] = originals[id]
+	invalidate_routes()
+	return problem
+
+
 func validate() -> String:
 	if not error.is_empty():
 		return error
@@ -544,7 +594,7 @@ func _aisle_approach(point: Vector3, lane: float, radius: float, blockers: Dicti
 		sides.append(area.position.x - 0.30)
 		sides.append(area.end.x + 0.30)
 	if nearest < 0.20:
-		return []
+		return _grid_approach(point, lane, radius, blockers, ignore)
 	sides.sort_custom(func(a: float, b: float) -> bool:
 		var left := absf(a - cell.x)
 		var right := absf(b - cell.x)
@@ -556,7 +606,66 @@ func _aisle_approach(point: Vector3, lane: float, radius: float, blockers: Dicti
 			var join := Vector3(bypass.x, point.y, aisle_z)
 			if _path_clear(point, [turn, bypass, join], radius, blockers, ignore):
 				return [turn, bypass, join]
-	return []
+	return _grid_approach(point, lane, radius, blockers, ignore)
+
+
+## Fallback for stops behind other equipment: an axis-aligned grid search around every
+## blocker to the aisle. Equipment with a direct or single-detour approach never gets here,
+## so established routes stay exactly as they were.
+func _grid_approach(point: Vector3, lane: float, radius: float, blockers: Dictionary, ignore: Array) -> Array[Vector3]:
+	const STEP := 0.5
+	var cells := Vector2i(ceili(grid.size.x / STEP), ceili(grid.size.y / STEP))
+	var search := AStarGrid2D.new()
+	search.region = Rect2i(Vector2i.ZERO, cells)
+	search.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
+	search.default_compute_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
+	search.default_estimate_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
+	search.update()
+	var margin := radius + STEP * 0.5
+	var edge := ceili(margin / STEP)
+	search.fill_solid_region(Rect2i(0, 0, cells.x, edge))
+	search.fill_solid_region(Rect2i(0, cells.y - edge, cells.x, edge))
+	search.fill_solid_region(Rect2i(0, 0, edge, cells.y))
+	search.fill_solid_region(Rect2i(cells.x - edge, 0, edge, cells.y))
+	for id in blockers:
+		if id in ignore:
+			continue
+		var area: Rect2 = blockers[id].grow(margin)
+		var low := Vector2i(floori(area.position.x / STEP), floori(area.position.y / STEP))
+		var high := Vector2i(ceili(area.end.x / STEP), ceili(area.end.y / STEP))
+		search.fill_solid_region(Rect2i(low, high - low))
+	var start_cell := grid.coordinates(point)
+	var start := Vector2i(roundi(start_cell.x / STEP), roundi(start_cell.y / STEP))
+	var row := roundi(lane / STEP)
+	if not search.region.has_point(start) or search.is_point_solid(start):
+		return []
+	# Join the aisle at the open lane point nearest the stop.
+	var finish := Vector2i(-1, row)
+	for offset in cells.x:
+		for x in [start.x - offset, start.x + offset]:
+			if x >= 0 and x < cells.x and not search.is_point_solid(Vector2i(x, row)):
+				finish.x = x
+				break
+		if finish.x >= 0:
+			break
+	if finish.x < 0:
+		return []
+	var steps := search.get_id_path(start, finish)
+	if steps.size() < 2:
+		return []
+	var result: Array[Vector3] = []
+	for index in range(1, steps.size()):
+		var turning := index == steps.size() - 1 or steps[index + 1] - steps[index] != steps[index] - steps[index - 1]
+		if turning:
+			result.append(grid.to_world(Vector2(steps[index]) * STEP, point.y))
+	# The first leg leaves the stop along its own axis, so the path stays axis-aligned.
+	var first := grid.coordinates(result[0])
+	if not is_equal_approx(first.x, start_cell.x) and not is_equal_approx(first.y, start_cell.y):
+		var horizontal := steps[1].y == steps[0].y
+		var corner := Vector2(first.x, start_cell.y) if horizontal else Vector2(start_cell.x, first.y)
+		result.push_front(grid.to_world(corner, point.y))
+	result[result.size() - 1].z = lane_z(lane)
+	return result if _path_clear(point, result, radius, blockers, ignore) else []
 
 
 func invalidate_routes() -> void:
