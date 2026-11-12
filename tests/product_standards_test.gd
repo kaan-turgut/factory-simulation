@@ -158,7 +158,7 @@ func _minimum_lot_and_yield() -> void:
 func _filled_family() -> void:
 	var line := _line()
 	var book := line.erp
-	var moved := line.layout.move(&"Cutter", Vector2i(100, 31), 0)
+	var moved := line.layout.move(&"Cutter", Vector2i(60, 44), 0)
 	_check(moved.is_empty(), "Move the cutter in the expanded hall with valid cart routes")
 	var cutter_dock := line.layout.port(&"Cutter", &"input_dock")
 	var plan := Plan.new()

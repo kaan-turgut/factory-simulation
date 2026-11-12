@@ -226,8 +226,56 @@ func _wall(
 				# Wall extract fan between columns.
 				_cylinder(solid, Vector3(middle_x, 4.3, -0.04), 0.52, 0.22, _frame, true)
 				_cylinder(solid, Vector3(middle_x, 4.3, -0.16), 0.46, 0.03, _models.vent, true)
+	_pipe_runs(solid, grid, layout, node, stations, along_z)
 	_finish(solid)
 	_finish(wall.glazing)
+
+
+func _pipe_runs(solid: Node3D, grid: Grid, layout: Variant, node: Node3D, stations: Array[float], _along_z: bool) -> void:
+	# Service pipes on wall brackets: compressed air (blue), cooling water (green) and an
+	# insulated hot-water line. Runs stop where a room or machine stands against the wall;
+	# there they elbow into the wall. Some bays drop a branch to a valve station.
+	var air := _models.paint(Color("#2f6fb0"))
+	var water := _models.paint(Color("#3f8a52"))
+	var lines := [[4.3, 0.065, air], [4.6, 0.085, water], [4.95, 0.14, _models.cladding]]
+	var depth := -0.82
+	var open: Array[bool] = []
+	for index in range(stations.size() - 1):
+		open.append(_open(grid, layout, node, (stations[index] + stations[index + 1]) * 0.5, -1.2))
+	for index in open.size():
+		if not open[index]:
+			continue
+		var a := stations[index]
+		var b := stations[index + 1]
+		for line: Array in lines:
+			var y: float = line[0]
+			var radius: float = line[1]
+			_models.pipe(solid, Vector3(a, y, depth), Vector3(b, y, depth), radius, line[2])
+			for end_index in [index, index + 1]:
+				var neighbour: int = end_index - 1 if end_index == index else end_index
+				var at: float = a if end_index == index else b
+				if neighbour < 0 or neighbour >= open.size() or not open[neighbour]:
+					_models.joint(solid, Vector3(at, y, depth), radius * 1.15, line[2])
+					_models.pipe(solid, Vector3(at, y, depth), Vector3(at, y, -0.06), radius, line[2])
+					_box(solid, Vector3(at, y, -0.1), Vector3(radius * 3.2, radius * 3.2, 0.03), _frame)
+		# Insulation bands and bracket at the column.
+		for band in range(1, floori((b - a) / 1.2)):
+			_models.cylinder(solid, Vector3(a + band * 1.2, 4.95, depth), 0.15, 0.05, _models.stainless_dark, Industrial.X, 16)
+		_box(solid, Vector3(a, 4.18, depth + 0.12), Vector3(0.07, 0.07, 0.62), _frame)
+		_box(solid, Vector3(a, 4.62, -0.55), Vector3(0.07, 0.95, 0.07), _frame)
+		if index % 3 == 1:
+			# Branch drop: air to a filter-regulator and a ball valve; water to a hose valve.
+			var x := (a + b) * 0.5
+			_models.joint(solid, Vector3(x, 4.3, depth), 0.06, air)
+			_models.pipe(solid, Vector3(x, 4.3, depth), Vector3(x, 1.55, depth), 0.03, air)
+			_box(solid, Vector3(x, 1.4, depth), Vector3(0.14, 0.26, 0.12), _models.stainless_dark)
+			_models.cylinder(solid, Vector3(x, 1.22, depth), 0.04, 0.14, _models.glass, Industrial.Y, 12)
+			_box(solid, Vector3(x + 0.12, 1.75, depth), Vector3(0.16, 0.03, 0.03), _models.signal_red)
+			_models.cylinder(solid, Vector3(x, 1.62, depth - 0.06), 0.05, 0.02, _models.gauge, Industrial.Z, 14)
+			_models.joint(solid, Vector3(x + 0.5, 4.58, depth), 0.075, water)
+			_models.pipe(solid, Vector3(x + 0.5, 4.58, depth), Vector3(x + 0.5, 1.0, depth), 0.04, water)
+			_models.cylinder(solid, Vector3(x + 0.5, 1.05, depth - 0.08), 0.08, 0.03, _models.signal_red, Industrial.Z, 14)
+			_box(solid, Vector3(x + 0.5, 3.2, depth + 0.02), Vector3(0.08, 0.06, 0.12), _frame)
 
 
 func _open(grid: Grid, layout: Variant, node: Node3D, x: float, inset: float) -> bool:

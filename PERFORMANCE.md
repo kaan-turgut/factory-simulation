@@ -150,3 +150,13 @@ The same setup as above: the default fresh shift and the home overview, which sh
 | --- | ---: | ---: | ---: | ---: |
 | Before gum hall | 888 | 205,844 | 6.30–6.36 | 30.0 |
 | With gum hall (9 machines) | 1,097 | 253,664 | 7.03–7.06 | 30.0 |
+
+## Zoned layout and site details (Nov 2026)
+
+The setup matches the gum hall run above, with the new standard layout and the site details (walkways, safety zones, offices, canteen, workshop, pallet store, kitting, marshalling). Results are from two runs.
+
+| Build | Draw calls p50 | Primitives p50 | Render CPU p50 (ms) | FPS |
+| --- | ---: | ---: | ---: | ---: |
+| Gum hall, previous layout | 1,097 | 253,664 | 7.03–7.06 | 30.0 |
+| Zoned layout with site details | 1,172 | 320,068 | 7.13–7.21 | 30.0 |
+| With wall pipes and cartons; dock squares and aisle paint removed (one run) | 1,229 | 363,590 | 5.99 | 30.0 |

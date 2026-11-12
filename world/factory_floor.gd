@@ -13,6 +13,7 @@ const Industrial = preload("res://world/industrial_models.gd")
 const Hall = preload("res://world/hall_models.gd")
 const LineModels = preload("res://world/line_models.gd")
 const GumModels = preload("res://world/gum_models.gd")
+const Site = preload("res://world/site_models.gd")
 const Palette = preload("res://ui/status_colors.gd")
 
 const INK := Color("#253541")
@@ -125,7 +126,7 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 		_build_sfg_warehouse()
 		for id: StringName in CELL_ART:
 			_build_cell(id)
-		_bay(layout.cart_body_center(layout.port(&"Palletizer", &"cart_dock")) + Vector3.UP * 0.032, Vector2(1.5, 1.45), TEAL)
+	Site.new().build(self, layout, _industrial, _draw, _stock)
 	_draw.batch_static(self, _warehouse_markers)
 	for station in _equipment.values():
 		_draw.batch_static(station, [station.beacon])
@@ -317,8 +318,6 @@ func _build_hall() -> void:
 			_draw.box(self, grid.to_world(Vector2(x, z), 0.7), Vector3(0.44, 1.56, 0.36), INK)
 	_hall.build(self, grid, layout)
 	var aisle_end := layout.cart_aisle_end()
-	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end, layout.lane_z(Layout.CART_LANE),
-		1.65, Color("#637b7d"))
 	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end - 1.0, layout.lane_z(Layout.WALK_LANE),
 		0.87, Color("#a6acaa"))
 	var lift_z := layout.lane_z(Layout.LIFT_LANE)
@@ -343,32 +342,12 @@ func _build_hall() -> void:
 			Vector3(0.64, 0.014, 0.045), PALE)
 	_floor_text(grid.to_world(Vector2(30.5, 2.7), 0.04), "CHOCOLATE WORKS   /   02", PALE, 0.031)
 	_floor_text(grid.to_world(Vector2(width - 12.0, 2.9), 0.04), "FORKLIFT ONLY  ›", SAFETY, 0.025)
-	_floor_text(grid.to_world(Vector2(22.7, Layout.CART_LANE - 0.2), 0.04),
-		"CART TRANSFER AISLE", PALE, 0.014)
 	_floor_text(outbound, "OUTBOUND", SAFETY, 0.025)
 	for id in [&"RawParking", &"CookedParking"]:
 		_station(id, "", PALE, false)
 	if _erp_enabled:
 		_station(&"CoatedParking", "", Color("#b88bc7"), false)
 		_floor_text(layout.center(&"CoatedParking") + Vector3(0, 0.04, 1.15), "COATED CARTS", Color("#e0b3ee"), 0.014)
-	for index in Layout.MAX_CARTS:
-		if _erp_enabled:
-			_bay(layout.cart_body_center(layout.coated_cart_home(index)) + Vector3.UP * 0.024,
-				Vector2(1.41, 1.35), Color("#b88bc7"))
-		_bay(layout.cart_body_center(layout.cart_home(index, true)) + Vector3.UP * 0.024,
-			Vector2(1.41, 1.35), Color("#9ebec0"))
-		_bay(layout.cart_body_center(layout.cart_home(index, false)) + Vector3.UP * 0.024,
-			Vector2(1.41, 1.35), Color("#bfa57d"))
-	# The service bank is decorative and sits against the rear wall.
-	for x: float in [19, 25, 34, 40, 46, width - 6]:
-		var cell := Vector2i(int(x), length - 2)
-		if layout.objects[&"RawWarehouse"].footprint().has_point(cell) \
-				or layout.objects[&"Warehouse"].footprint().has_point(cell):
-			continue
-		var base := grid.to_world(Vector2(x, length - 1.1))
-		_draw.box(self, base + Vector3(0, 0.87, 0), Vector3(1.55, 1.73, 0.83), INK)
-		_draw.box(self, base + Vector3(0, 1.12, 0.43), Vector3(1.35, 1.13, 0.08), METAL)
-		_draw.box(self, base + Vector3(0.45, 1.22, 0.5), Vector3(0.14, 0.23, 0.08), TEAL)
 
 
 func _build_platform() -> void:
@@ -460,7 +439,6 @@ func _build_extruder() -> void:
 	var feed: Vector3 = layout.objects[&"Extruder"].ports[&"feed"]
 	feed.z = -feed.z
 	_auger = _line.build_extruder(node, TEAL, feed)
-	_bay(layout.cart_body_center(layout.port(&"Extruder", &"raw_dock")) + Vector3.UP * 0.028, Vector2(1.47, 1.4), SAFETY)
 
 
 func _build_oven(id: StringName, title: String) -> void:
@@ -468,16 +446,11 @@ func _build_oven(id: StringName, title: String) -> void:
 	var model := _industrial.build_oven(node, title, OVEN_RED)
 	_oven_doors[id] = model.door
 	_oven_heaters[id] = model.heater
-	for dock: Vector3 in [layout.port(id, &"raw_dock"), layout.port(id, &"cooked_dock")]:
-		_bay(layout.cart_body_center(dock) + Vector3.UP * 0.027, Vector2(1.48, 1.42), SAFETY)
 
 
 func _build_coater(id: StringName, title: String) -> void:
 	var node := _station(id, title, COCOA)
 	_enrobers[id] = _industrial.build_enrober(node, title, COCOA)
-	_bay(layout.cart_body_center(layout.port(id, &"cooked_dock")) + Vector3.UP * 0.027, Vector2(1.46, 1.41), SAFETY)
-	if _erp_enabled:
-		_bay(layout.cart_body_center(layout.port(id, &"coated_dock")) + Vector3.UP * 0.027, Vector2(1.46, 1.41), Color("#b88bc7"))
 
 
 func _build_pack_wip() -> void:
@@ -489,7 +462,6 @@ func _build_pack_wip() -> void:
 		for x: float in [-0.07, 0.66, 1.43, 2.16]:
 			node.inventory_slots.append(_stock.wafer(node, Vector3(x, y + 0.012, -0.38),
 				Stock.CHOCOLATE, Vector3(0.61, 0.22, 0.75)))
-	_bay(layout.cart_body_center(layout.port(&"PackagingWIP", &"coated_dock")) + Vector3.UP * 0.033, Vector2(1.51, 1.46), Color("#e0b3ee"))
 
 
 func _build_packer() -> void:
@@ -619,8 +591,6 @@ func _build_sfg_warehouse() -> void:
 		node.add_child(stock)
 		_stock.carton(stock, Vector3.ZERO, Vector3(1.8, 0.32, 1.0))
 		node.inventory_slots.append(stock)
-	_bay(layout.cart_body_center(layout.port(&"SFGWarehouse", &"stock_dock")) + Vector3.UP * 0.033,
-		Vector2(1.51, 1.46), TEAL)
 
 
 func _build_cell(id: StringName) -> void:
@@ -686,8 +656,6 @@ func _build_cell(id: StringName) -> void:
 		else:
 			var tint := Stock.CHOCOLATE if id == &"CoolingTunnel" else Stock.COOKED
 			node.inventory_slots.append(_stock.wafer(node, at, tint, Vector3(0.34, 0.16, 0.42)))
-	for port in [&"input_dock", &"output_dock"]:
-		_bay(layout.cart_body_center(layout.port(id, port)) + Vector3.UP * 0.032, Vector2(1.5, 1.45), art[1])
 
 
 func _refresh_cells(line: Line) -> void:

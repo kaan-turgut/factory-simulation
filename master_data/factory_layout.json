@@ -521,8 +521,8 @@
       "id": "CreamMixer",
       "kind": "machine",
       "cell": [
-        75,
-        25
+        16,
+        32
       ],
       "size": [
         5,
@@ -560,8 +560,8 @@
       "id": "Spreader",
       "kind": "machine",
       "cell": [
-        81,
-        24
+        23,
+        33
       ],
       "size": [
         6,
@@ -599,8 +599,8 @@
       "id": "Cutter",
       "kind": "machine",
       "cell": [
-        91,
-        24
+        31,
+        33
       ],
       "size": [
         5,
@@ -638,8 +638,8 @@
       "id": "CoolingTunnel",
       "kind": "machine",
       "cell": [
-        100,
-        24
+        38,
+        33
       ],
       "size": [
         8,
@@ -677,8 +677,8 @@
       "id": "Packer02",
       "kind": "machine",
       "cell": [
-        110,
-        24
+        58,
+        33
       ],
       "size": [
         6,
@@ -716,8 +716,8 @@
       "id": "GumMixer",
       "kind": "machine",
       "cell": [
-        58,
-        33
+        84,
+        32
       ],
       "size": [
         5,
@@ -755,8 +755,8 @@
       "id": "GumSheeter",
       "kind": "machine",
       "cell": [
-        66,
-        34
+        91,
+        33
       ],
       "size": [
         7,
@@ -789,8 +789,8 @@
       "id": "FruitFormer",
       "kind": "machine",
       "cell": [
-        76,
-        34
+        100,
+        33
       ],
       "size": [
         6,
@@ -823,8 +823,8 @@
       "id": "GumConditioner",
       "kind": "machine",
       "cell": [
-        85,
-        34
+        108,
+        33
       ],
       "size": [
         8,
@@ -857,8 +857,8 @@
       "id": "GumPan01",
       "kind": "machine",
       "cell": [
-        57,
-        44
+        88,
+        43
       ],
       "size": [
         4,
@@ -891,8 +891,8 @@
       "id": "GumPan02",
       "kind": "machine",
       "cell": [
-        63,
-        44
+        97,
+        43
       ],
       "size": [
         4,
@@ -930,8 +930,8 @@
       "id": "GumPan03",
       "kind": "machine",
       "cell": [
-        69,
-        44
+        106,
+        43
       ],
       "size": [
         4,
@@ -964,8 +964,8 @@
       "id": "WalletPacker",
       "kind": "machine",
       "cell": [
-        75,
-        44
+        66,
+        33
       ],
       "size": [
         6,
@@ -1003,8 +1003,8 @@
       "id": "BottleFiller",
       "kind": "machine",
       "cell": [
-        85,
-        44
+        74,
+        33
       ],
       "size": [
         6,

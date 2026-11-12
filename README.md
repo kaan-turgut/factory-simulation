@@ -182,6 +182,19 @@ godot --path . -- --fresh-shift
 
 This starts from the current JSON and disables automatic save on close for that session. ChocoERP’s **Save** button writes to the same slot. Exported builds can load a complete editable `master_data` folder beside the executable or macOS app bundle. Include `master_data/*.json` in Godot’s export filters to ship the built-in files.
 
+## Factory layout
+
+The standard layout groups the hall into departments that face the cart aisle, with the product flow running left to right:
+
+- **Front row:** ingredient deck and extruder, the two ovens, the two coaters, then Packaging Line 01 with its carton conveyor and palletizing bays.
+- **Second row:** the filled-wafer cells (cream mixer, spreader, cutter, cooling tunnel) end at the semi-finished stock hub. Packaging Line 02, the wallet packer and the bottle filler follow, then the gum line (mixer, sheeter, fruit former, conditioning).
+- **Third row:** the three coating pans sit behind the gum line, centred on the gaps between its machines.
+- **Behind the rows:** a raw-material kitting area, the production office and QC lab, the canteen with changing room and hand-wash point, and outbound marshalling lanes in front of the finished-goods store. The maintenance workshop (a walled room with a roller door) and the empty-pallet store with forklift charging stand against the rear wall.
+
+Green walkways link the areas. Yellow lines mark each machine's operating clearance, and boards above the rows name each department. Compressed air, cooling water and insulated hot-water pipes run on wall brackets with branch drops to valve stations. Loose cartons, opened, torn, crushed or broken down, lie around the packing and storage areas. Workers and vehicles keep their own routes; the markings and furniture are visual only and are left out wherever they would sit on a route or a machine.
+
+A saved shift keeps its own floor plan. To switch it to the standard layout, finish or pause production so no order is running, open **Build Mode** and choose **Default**. The move is validated first and can be undone.
+
 ## How the factory works
 
 | Stage | What happens |
