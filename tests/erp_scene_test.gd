@@ -94,9 +94,9 @@ func _run() -> void:
 	_check("Missing RM-COAT-1002" not in terminal._detail.text, "Replenishment clears the obsolete shortage warning")
 	_button(terminal, "Release").pressed.emit()
 	_check(order.status == "Released", "Replenished order releases from the same row")
-	_button(terminal, "Pause shift").pressed.emit()
+	_button(terminal, "Pause simulation").pressed.emit()
 	_check(not factory.line.playing, "ERP pause control pauses the factory")
-	_button(terminal, "Play shift").pressed.emit()
+	_button(terminal, "Play simulation").pressed.emit()
 	_check(factory.line.playing, "ERP resume control starts the factory")
 	_button(terminal, "Close  ×").pressed.emit()
 	await create_timer(0.35).timeout
@@ -118,9 +118,9 @@ func _run() -> void:
 		wip_link.pressed.emit()
 		await process_frame
 		_check(terminal._search.text == "PACK-WIP", "Packaging WIP links to its inventory location")
-	factory._save_load_error = "Unavailable saved equipment."
-	factory._save_shift()
-	_check(terminal._status.text.begins_with("Existing save preserved"), "A failed restore protects the existing slot")
+	# A run that is not a saved instance (or whose instance failed to load) never writes a save.
+	factory._save_instance()
+	_check(terminal._status.text.begins_with("This run is not a saved simulation instance"), "An unsaved run does not write any save")
 	print("ChocoERP scene interaction checks, %d failures." % _failures)
 	quit(int(_failures > 0))
 

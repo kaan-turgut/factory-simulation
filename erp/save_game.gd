@@ -26,7 +26,7 @@ const ERP_FIELDS := ["balances", "orders", "purchases", "demands", "reservations
 
 static func save(line: Line, path: String = PATH) -> String:
 	if line.erp == null:
-		return "No ERP shift is open."
+		return "No simulation instance is open."
 	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if file == null:
 		return "Could not open the save location."
@@ -44,7 +44,7 @@ static func save(line: Line, path: String = PATH) -> String:
 static func load_line(path: String = PATH) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return {"error": "No saved shift found."}
+		return {"error": "No saved simulation instance found."}
 	var data: Variant = file.get_var(false)
 	file.close()
 	if not data is Dictionary or data.get("version", -1) not in SUPPORTED_VERSIONS:
@@ -519,7 +519,7 @@ static func _migrate_v1(line: Line, coated_kg: float) -> void:
 				book._apply_route(order, route)
 	var order: Dictionary = book.orders.get(book.active_id, {})
 	if order.is_empty() and not line.floor_assignments.is_empty():
-		# A Phase 3 shift could finish while an empty cart was returning.
+		# A Phase 3 save could finish while an empty cart was returning.
 		for candidate in book.orders.values():
 			if candidate.status in ["Completed", "Closed"] \
 			and (order.is_empty() or candidate.completed > order.completed):

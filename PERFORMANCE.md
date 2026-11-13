@@ -131,7 +131,7 @@ godot --headless --path . --max-fps 30 --script res://tests/benchmarks/product_e
 
 ## Detailed equipment and crew (Nov 2026)
 
-Godot 4.7.2 Compatibility, M4 Pro, 1280 × 800, 30 FPS cap, default ERP scene with a fresh shift, 60 warm-up and 150 measured frames. Both builds ran from clean copies of the same commit; the second adds only the new `world/` visuals. Render CPU is the viewport's measured render time plus frame setup.
+Godot 4.7.2 Compatibility, M4 Pro, 1280 × 800, 30 FPS cap, default ERP scene with a new simulation instance, 60 warm-up and 150 measured frames. Both builds ran from clean copies of the same commit; the second adds only the new `world/` visuals. Render CPU is the viewport's measured render time plus frame setup.
 
 | View | Build | Draw calls p50 | Primitives p50 | Render CPU p50 / p95 (ms) | FPS |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -144,7 +144,7 @@ Ranges are two runs each. The new models add about 0.3 ms of render CPU per fram
 
 ## Chewing gum hall (Nov 2026)
 
-The same setup as above: the default fresh shift and the home overview, which shows the whole hall, measured over two runs each. The comparison base is the previous commit, without the gum hall.
+The same setup as above: the default new simulation instance and the home overview, which shows the whole hall, measured over two runs each. The comparison base is the previous commit, without the gum hall.
 
 | Build | Draw calls p50 | Primitives p50 | Render CPU p50 (ms) | FPS |
 | --- | ---: | ---: | ---: | ---: |

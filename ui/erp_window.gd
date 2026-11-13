@@ -13,7 +13,6 @@ const Style = preload("res://ui/hud_style.gd")
 signal closed
 signal play_requested(enabled: bool)
 signal save_requested
-signal load_requested
 signal locate_requested(location: String)
 signal route_requested(id: String)
 
@@ -129,7 +128,7 @@ func _poll() -> void:
 	if not _open:
 		return
 	_clock.text = Book.date(line.elapsed_seconds())
-	_pause.text = "Pause shift" if line.playing else "Play shift"
+	_pause.text = "Pause simulation" if line.playing else "Play simulation"
 	if _page == SCHEDULE_PAGE:
 		if _board_time != line.erp.now or _revision != line.erp.revision:
 			_board_time = line.erp.now
@@ -169,7 +168,7 @@ func _build() -> void:
 	_spacer(header)
 	_clock = _label("", 14, MUTED)
 	header.add_child(_clock)
-	_pause = _button(header, "Pause shift", func() -> void:
+	_pause = _button(header, "Pause simulation", func() -> void:
 		play_requested.emit(not line.playing)
 		_poll())
 	_auto_release = CheckButton.new()
@@ -179,14 +178,10 @@ func _build() -> void:
 	_auto_release.toggled.connect(func(enabled: bool) -> void:
 		line.erp.auto_release = enabled
 		line.erp.changed()
-		notice("Auto Release is on. Orders will release as stock becomes available during the shift." if enabled
+		notice("Auto Release is on. Orders will release as stock becomes available as the simulation runs." if enabled
 			else "Auto Release is off. Use Release to authorize planned orders."))
 	header.add_child(_auto_release)
 	_button(header, "Save", func() -> void: save_requested.emit())
-	_button(header, "Load", func() -> void:
-		_form("Load saved shift", [], func(_values: Dictionary) -> String:
-			load_requested.emit()
-			return ""))
 	_button(header, "Close  ×", close)
 	stack.add_child(HSeparator.new())
 	var body := HBoxContainer.new()
@@ -383,7 +378,7 @@ func _build_actions() -> void:
 				_selected = {}
 				_render())
 		8:
-			_action("Schedule adherence / Shift history", func() -> void:
+			_action("Schedule adherence / Simulation history", func() -> void:
 				_schedule_report = not _schedule_report
 				_render())
 		STANDARDS_PAGE:
@@ -401,7 +396,7 @@ func _render() -> void:
 	_revision = book.revision
 	_title.text = MODULES[_page]
 	_clock.text = Book.date(line.elapsed_seconds())
-	_pause.text = "Pause shift" if line.playing else "Play shift"
+	_pause.text = "Pause simulation" if line.playing else "Play simulation"
 	_auto_release.visible = book.explicit_planning
 	_auto_release.set_pressed_no_signal(book.auto_release)
 	_rows.clear()

@@ -1,6 +1,6 @@
 # Chocolate Works
 
-A playable 3D chocolate wafer factory built with **Godot 4.7.2** and GDScript. Run a shift, follow carts and workers around the hall, and change settings to see where the line backs up.
+A playable 3D chocolate wafer factory built with **Godot 4.7.2** and GDScript. Run a simulation, follow carts and workers around the hall, and change settings to see where the line backs up.
 
 **This project is a work in progress.**
 
@@ -11,11 +11,11 @@ A playable 3D chocolate wafer factory built with **Godot 4.7.2** and GDScript. R
 
 1. Install and open the standard edition of [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/).
 2. In Godot's Project Manager, choose **Import**, select this folder's `project.godot`, then choose **Import & Edit**.
-3. Press **F5** or click **Run Project** in the upper-right corner of the editor. The factory opens paused.
+3. Press **F5** or click **Run Project** in the upper-right corner of the editor. The opening page appears. Name a **new simulation instance** and choose **Create and open**, or choose **Continue** next to one you saved earlier. **Rename** changes a saved instance's name, and **Delete** removes one for good after a confirmation. The factory opens paused, with the instance name in the header.
 4. Choose **20×** and open **ERP** in the bottom-right corner, or press **E**. In **Material Requirements Planning**, choose **Create demand**. For a first run, use **FG-1001**, **10 shipping boxes**, and a due time **one simulated hour** ahead.
 5. Run MRP and enable **Proposals only**. Select each **Production proposal** and choose **Convert proposal**. Accept or edit its quantity, version, and start. This puts a planned order on **Detailed Scheduling**. Return to MRP for the next proposal. If ingredients are short, convert the relevant purchase proposal and wait for the receipt in **Procurement**.
-6. Release orders as their components arrive. The sequence is **DOUGH-01** → **RAW-01** → **BAKED-01** → **COATED-1001** → **COOLED-1001** → **FG-1001**. Release dough first and click **Play shift**. Once dough has been received at the deck, release raw wafers. Continue with the other orders as their input stock arrives. A released order waits for its scheduled start. To automate release, turn on **Auto Release** in the ChocoERP header and play the shift.
-7. Close ERP to follow the crew and carts. A forklift receipt puts the finished pallets in the warehouse. Select a pallet to see its SKU and order. **Dispatch one** and **Dispatch all** free warehouse slots. Use **Save** in ChocoERP before stopping a run from the editor.
+6. Release orders as their components arrive. The sequence is **DOUGH-01** → **RAW-01** → **BAKED-01** → **COATED-1001** → **COOLED-1001** → **FG-1001**. Release dough first and click **Play simulation**. Once dough has been received at the deck, release raw wafers. Continue with the other orders as their input stock arrives. A released order waits for its scheduled start. To automate release, turn on **Auto Release** in the ChocoERP header and play the simulation.
+7. Close ERP to follow the crew and carts. A forklift receipt puts the finished pallets in the warehouse. Select a pallet to see its SKU and order. **Dispatch one** and **Dispatch all** free warehouse slots. Use **Save** in ChocoERP before stopping a run from the editor. The **Main menu** button in the bottom bar saves the instance and returns to the opening page, after asking first.
 
 The game defaults to a 30 FPS rendering cap and redraws the view as needed. The simulation runs on fixed quarter-second ticks.
 
@@ -43,7 +43,7 @@ Zoom in on the cream spreader, wafer cutter, cooling tunnel, and packaging lines
 | Cmd+Z / Cmd+Shift+Z | Undo / redo a layout change on macOS. Use Ctrl on other systems. |
 | Esc or × | Cancel placement or close the inspector |
 
-Use an inspector slider, or type a number and press **Enter**. The factory starts with four floor workers. Older shifts using the original two-worker setting gain two workers when loaded. **Reset** pauses an ERP shift and applies crew and cart pool changes between orders. Documents and inventory are preserved. Product packaging comes from the order's frozen specification. The optional sandbox scene mode retains the original reset behavior.
+Use an inspector slider, or type a number and press **Enter**. The factory starts with four floor workers. Older saves using the original two-worker setting gain two workers when loaded. Crew and cart counts change as soon as no order is running, or at once if the line is idle. Product packaging comes from the order's frozen specification.
 
 ## Using the factory grid
 
@@ -51,7 +51,7 @@ Hover over the floor or mezzanine to read the cell's X and Z coordinates and ele
 
 ### Build Mode
 
-1. Click **Build Mode** or press **B**. This pauses the shift and shows the grid, occupied footprints, and reserved aisles.
+1. Click **Build Mode** or press **B**. This pauses the simulation and shows the grid, occupied footprints, and reserved aisles.
 2. Select and drag a station. Release on a green preview to place it. A red preview explains what blocks placement. You can also click **Move** and then click a destination. **R** rotates clockwise, **Shift+R** rotates counterclockwise, and **Esc** cancels the preview.
 3. Use **Undo** or **Redo** to revisit the last 32 confirmed edits. Click **Save Layout** to reuse the arrangement. **Load Layout** reads that file, and **Default** restores the master-data positions.
 4. Exit with **B**, then press **Play** to resume.
@@ -60,13 +60,13 @@ The editor waits for active production and transport jobs to finish. An occupied
 
 Equipment can move along both floor axes. Workers, tray carts, and the material handler can take short detours from their main aisles to reach docks. On the default floor plan, move **Coater 02** to **X 35, Z 24** to place it directly behind **Coater 01**.
 
-**Save Layout** writes only IDs, grid cells, and orientations to `user://factory_layout.json`. On macOS this is `~/Library/Application Support/Godot/app_userdata/Chocolate Works/factory_layout.json`. A new shift uses the saved layout if it validates. An existing shift keeps its own placements unless there is a newer saved layout and the shift is safe to edit. Otherwise **Load Layout** can apply it once the shift is idle. The ERP **Save** button also includes the current placements in the operational save.
+**Save Layout** writes only IDs, grid cells, and orientations to `user://factory_layout.json`. On macOS this is `~/Library/Application Support/Godot/app_userdata/Chocolate Works/factory_layout.json`. A new simulation instance uses the saved layout if it validates. A saved instance keeps its own placements unless there is a newer saved layout and the instance is safe to edit. Otherwise **Load Layout** can apply it once production is idle. The ERP **Save** button also includes the current placements in the operational save.
 
 ### Defining a floor plan
 
 The origin is the building's front-left interior corner. Grid X increases to the right, grid Z increases toward the rear, and Y is elevation. Each cell is 1 × 1 m. The default factory is 120 m wide by 100 m deep. Both ovens and both coaters sit on the production side of the cart aisle. Change `size` in the layout file or set the **Building Cells** override on the **Factory** scene root. Leave the override at zero to use the file. The warehouse anchors follow the rear wall when a building size override is used, and the layout validator checks the resulting transport routes.
 
-Older shifts load into the rear-warehouse plan when the rooms and routes fit alongside their saved equipment. Existing pallets keep their slot numbers and the material handler and forklift resume their tasks against the new docks. A customized layout that conflicts with the new rooms keeps its previous layout.
+Older saves load into the rear-warehouse plan when the rooms and routes fit alongside their saved equipment. Existing pallets keep their slot numbers and the material handler and forklift resume their tasks against the new docks. A customized layout that conflicts with the new rooms keeps its previous layout.
 
 The definitions live in `master_data/factory_layout.json`. The example below has a 4 × 2 cell footprint, a height of 2.2 m, and a 90° orientation. Its rotated footprint occupies X cells 20–21 and Z cells 14–17.
 
@@ -95,9 +95,9 @@ For conversion, `layout.grid.to_world(Vector2(20.5, 14.5))` returns the center o
   - A delivery is put away when it arrives, as far as free positions allow. The rest waits at the dock, and the procurement list shows **At dock**. It is put away automatically once consumption frees space, and the waiting time is recorded on the PO.
   - Running all lines flat out for 24 hours (three shifts) takes about 82 positions, one day of every racked material, so the racks hold roughly a day of production. The opening stock uses 69. Order too early or too much and trucks queue at the dock. Order too late and lines stop for material.
   - MRP flags requisitions and POs that will not fit when they arrive, and deliveries already waiting at the dock. The dashboard, inventory, procurement list and warehouse inspector show positions used. In 3D, the racks fill pallet by pallet: sack stacks for powders, wrapped cases for everything else.
-- **Save and load.** ChocoERP saves the active catalog, schedules, release snapshots, actual progress, stock, reservations, pegging, in-flight logistics, purchases, and journal. Loads open paused. Closing the game window saves automatically. Use the terminal's **Save** before stopping an editor run.
+- **Simulation instances.** Each instance is a separate saved run with its own name. A save holds the active catalog, schedules, release snapshots, actual progress, stock, reservations, pegging, in-flight logistics, purchases, and journal. Instances open paused. ChocoERP's **Save** writes the open instance, closing the game window saves it automatically, and **Main menu** in the bottom bar saves it and returns to the opening page. Saves live in `user://instances/`; on macOS that is `~/Library/Application Support/Godot/app_userdata/Chocolate Works/instances/`. A save from before instances existed is copied in once as **My factory**, and the original file is left in place.
 
-**Auto Release** is off by default and saved with the shift. When it is on, the running shift releases planned orders once their immediate BOM components are physically available and unreserved. Eligible orders are considered by scheduled start, then priority. MRP proposals must still be converted into orders, and a released order waits for its scheduled start.
+**Auto Release** is off by default and saved with the simulation instance. When it is on, the running simulation releases planned orders once their immediate BOM components are physically available and unreserved. Eligible orders are considered by scheduled start, then priority. MRP proposals must still be converted into orders, and a released order waits for its scheduled start.
 
 ### MRP workspace
 
@@ -122,11 +122,11 @@ MRP plans with unlimited capacity, as SAP MRP does. Converting a planned order s
 
 Choose Oven 01 or Oven 02 for baking. Choose an eligible coater and packaging line for the material. Coater 02 supports milk, dark, and white. The prep station and extruder share the staging crew. The two ovens and the two coaters can work on separate orders concurrently, with each order retaining its own carts and buffers. One stock dock and the main cart aisle are shared.
 
-**Routing Master** lists stage assignments alongside the WAFER-01 through WAFER-04 templates used by legacy combined-route shifts. Current orders execute a single stage with a selected work center and frozen parameters. Finished goods have a separate production version for each eligible packaging line. **Show route** highlights the selected order’s assigned equipment.
+**Routing Master** lists stage assignments alongside the WAFER-01 through WAFER-04 templates used by legacy combined-route saves. Current orders execute a single stage with a selected work center and frozen parameters. Finished goods have a separate production version for each eligible packaging line. **Show route** highlights the selected order’s assigned equipment.
 
 ## Filled-wafer production
 
-In **Material Requirements Planning**, choose **Load filled-wafer example** to add 48 cartons of milk chocolate vanilla cream, 60 cartons of uncoated vanilla, and 120 cartons of dark chocolate hazelnut cream. The demand dates put hazelnut last on shared equipment. For a shorter run, create demand for four cartons of **FG-2001** instead. Run MRP, convert the production and purchase proposals, then release the planned orders as stock becomes available. **Auto Release** handles those releases while the shift runs. Dispatch pallets as warehouse space fills.
+In **Material Requirements Planning**, choose **Load filled-wafer example** to add 48 cartons of milk chocolate vanilla cream, 60 cartons of uncoated vanilla, and 120 cartons of dark chocolate hazelnut cream. The demand dates put hazelnut last on shared equipment. For a shorter run, create demand for four cartons of **FG-2001** instead. Run MRP, convert the production and purchase proposals, then release the planned orders as stock becomes available. **Auto Release** handles those releases while the simulation runs. Dispatch pallets as warehouse space fills.
 
 | Product | Additional processing | Packaging |
 | --- | --- | --- |
@@ -171,25 +171,25 @@ Open **Production Standards** to compare work centers by product, material, oper
 
 The fictional cleaning rules add setup between materials. A hazelnut-to-plain transition can require extra cleaning on a shared work center.
 
-In a fresh staged shift, ovens use about two minutes per batch and receive 1 kg of baked wafer for every 2 kg of wet sheets. The journal records the difference as evaporated water under yield loss. The cooling tunnel holds coated wafers for 7½ minutes. Baking estimates include a cart-handling allowance per batch. Batter prep and extrusion include handling time proportional to the order size. These allowances describe the default layout and crew. Queues, a changed layout, and dispatch delays affect actual completion.
+In a new simulation instance, ovens use about two minutes per batch and receive 1 kg of baked wafer for every 2 kg of wet sheets. The journal records the difference as evaporated water under yield loss. The cooling tunnel holds coated wafers for 7½ minutes. Baking estimates include a cart-handling allowance per batch. Batter prep and extrusion include handling time proportional to the order size. These allowances describe the default layout and crew. Queues, a changed layout, and dispatch delays affect actual completion.
 
 ## Editing master data
 
 - `materials.json`, `products.json`, and `boms.json` define the material IDs, product specs, opening balances, and multilevel recipes. An optional `planning` object on a material sets MRP lot sizing and safety time: `lot_size` (`EX`, `FX` or `PB`), `fixed_lot`, `period_seconds`, `min_lot`, `max_lot`, `rounding` and `safety_time` (simulated seconds). Carton mass and pallet mass derive from product specs. Each finished BOM uses one carton as its base and includes retail film, one carton and label, and the pallet allocation. Packaging with `packaging_role` set to `retail_wrap` uses one unit per consumer pack.
-- `routings.json` lists operation numbers and work center references. `work_centers.json` holds equipment IDs, capabilities, availability, and design limits. `production_versions.json` ties each SKU to a BOM version and routing version with lot and date limits. Dates are simulated seconds from shift start. A zero `valid_to` means open-ended.
+- `routings.json` lists operation numbers and work center references. `work_centers.json` holds equipment IDs, capabilities, availability, and design limits. `production_versions.json` ties each SKU to a BOM version and routing version with lot and date limits. Dates are simulated seconds from the simulation start. A zero `valid_to` means open-ended.
 - `production_standards.json` holds native rates, batch parameters, residence limits, and yield by material, operation, and work center. Optional routing or production version references narrow applicability. `changeovers.json` defines cleaning and setup. `planning_examples.json` contains the example demand.
 - `scheduling.json` defines stage-to-material and work-center eligibility, handling estimates, and simulated daily availability intervals. The shipped calendar is 24/7.
 - `factory_layout.json` contains positions, footprints, ports, and the packaging WIP receiving bay. `storage_locations.json`, `suppliers.json`, and `simulation_defaults.json` contain locations, supplier offers, and operating defaults. `storage_capacity.json` sets the raw-material warehouse's pallet positions. Every purchased material in `materials.json` has a `storage` type (`rack`, `tank`, `pallet_store` or `shelf`), and racked ones a `pallet_qty` in their base unit.
 
-Keep existing identifiers stable. To add an alternative, add a routing using supported operations and existing centers. Add a production version with the matching routing and BOM version numbers. Use **Reload Standards** to read edited rate and cleaning files into a shift. Start a fresh shift for changes to other master-data files. Released orders keep their snapshots. A validation error reports the offending file and, where available, the record and field.
+Keep existing identifiers stable. To add an alternative, add a routing using supported operations and existing centers. Add a production version with the matching routing and BOM version numbers. Use **Reload Standards** to read edited rate and cleaning files into a running simulation instance. Start a new instance for changes to other master-data files. Released orders keep their snapshots. A validation error reports the offending file and, where available, the record and field.
 
-Saved shifts preserve their active catalog and layout along with frozen orders. On first load, older shifts update the original demo packaging sizes and BOMs while keeping custom sizes, frozen orders, and physical stock. Re-select the production version on an older draft order to use the current rates and BOM. Older saves open in the enlarged hall, with the warehouse shifted outward to clear the new docks. Cart and vehicle jobs are replanned from safe positions, and any coated stock left on the former conveyors is recovered into the same order’s coater outfeed. Orders already in progress from an earlier combined-route save can finish on their original assignments. Older created or released combined-route orders are held with their reservations and can be cancelled before re-planning as individual stages. Start a fresh shift to use edited files while keeping the saved shift available. From the project directory, run:
+Saved simulation instances preserve their active catalog and layout along with frozen orders. On first load, older saves update the original demo packaging sizes and BOMs while keeping custom sizes, frozen orders, and physical stock. Re-select the production version on an older draft order to use the current rates and BOM. Older saves open in the enlarged hall, with the warehouse shifted outward to clear the new docks. Cart and vehicle jobs are replanned from safe positions, and any coated stock left on the former conveyors is recovered into the same order’s coater outfeed. Orders already in progress from an earlier combined-route save can finish on their original assignments. Older created or released combined-route orders are held with their reservations and can be cancelled before re-planning as individual stages. To try edited files without touching any saved instance, start an unsaved run from the project directory:
 
 ```sh
-godot --path . -- --fresh-shift
+godot --path . -- --new-instance
 ```
 
-This starts from the current JSON and disables automatic save on close for that session. ChocoERP’s **Save** button writes to the same slot. Exported builds can load a complete editable `master_data` folder beside the executable or macOS app bundle. Include `master_data/*.json` in Godot’s export filters to ship the built-in files.
+This skips the opening page, starts from the current JSON, and saves nothing on close. A new instance created on the opening page also starts from the current JSON. Exported builds can load a complete editable `master_data` folder beside the executable or macOS app bundle. Include `master_data/*.json` in Godot’s export filters to ship the built-in files.
 
 ## Factory layout
 
@@ -202,7 +202,7 @@ The standard layout groups the hall into departments that face the cart aisle, w
 
 Green walkways link the areas. Yellow lines mark each machine's operating clearance, and boards above the rows name each department. Compressed air, cooling water and insulated hot-water pipes run on wall brackets with branch drops to valve stations. Loose cartons, opened, torn, crushed or broken down, lie around the packing and storage areas. Workers and vehicles keep their own routes; the markings and furniture are visual only and are left out wherever they would sit on a route or a machine.
 
-A saved shift keeps its own floor plan. To switch it to the standard layout, finish or pause production so no order is running, open **Build Mode** and choose **Default**. The move is validated first and can be undone.
+A saved simulation instance keeps its own floor plan. To switch it to the standard layout, finish or pause production so no order is running, open **Build Mode** and choose **Default**. The move is validated first and can be undone.
 
 ## How the factory works
 
@@ -222,7 +222,7 @@ The default floor crew has four workers, two raw carts, and two cooked carts. Ra
 
 Production rates use kilograms, pieces, or cartons per simulated hour, or timed batch cycles. The engine advances in fixed quarter-second ticks, including travel and handling. Ingredient supply comes from opening stock and purchasing. Coating adds the actual chocolate consumed. Any standard yield loss is recorded as scrap. The mass ledger includes material in sacks being carried, every buffer and cart, the oven, partial cartons, pallets on the floor and forklift, and dispatched stock.
 
-Capacity reductions must cover current stock and any incoming reservations. An oven batch's capacity is locked through cooking and unloading. Movement speeds can change during a shift. Technical settings on an idle work center apply to future releases. Released orders keep the parameters they reserved. The forklift uses marked waypoints, and cart moves reserve the shared aisle one at a time. People use fixed pedestrian approaches and can pass one another.
+Capacity reductions must cover current stock and any incoming reservations. An oven batch's capacity is locked through cooking and unloading. Movement speeds can change while the simulation runs. Technical settings on an idle work center apply to future releases. Released orders keep the parameters they reserved. The forklift uses marked waypoints, and cart moves reserve the shared aisle one at a time. People use fixed pedestrian approaches and can pass one another.
 
 ## AI planning agent (headless)
 
@@ -232,18 +232,18 @@ An AI agent can plan and run the factory without the game window and without cli
 - `agent/work_center_monitor.gd` records how long each work center spends working, in setup, starved, blocked, handling oven loads, or without work. These shares are the main evidence for bottleneck analysis. It only reads simulation state.
 - `agent/server.gd` serves those commands as one JSON object per line over TCP on 127.0.0.1.
 - `agent/mcp_bridge.py` starts the server and exposes each command as an MCP tool named `factory_<command>`. It needs only Python 3 and has no packages to install.
-- `scenarios/*.json` set up a shift: demands, stock adjustments, operating factors (50–120%), MRP `planning` settings per material, `raw_warehouse_positions`, auto-release and a horizon. `evaluator_notes` is never returned to the agent, but an agent with file access could read it. For blind tests, keep scenarios with answers outside the agent's reach.
+- `scenarios/*.json` set up a simulation run: demands, stock adjustments, operating factors (50–120%), MRP `planning` settings per material, `raw_warehouse_positions`, auto-release and a horizon. `evaluator_notes` is never returned to the agent, but an agent with file access could read it. For blind tests, keep scenarios with answers outside the agent's reach.
 
 MRP commands mirror the MRP workspace: `run_mrp` returns numbered planned orders, exceptions and coverage, `mrp_material` returns one material's stock/requirements list, and `convert_all`, `firm_planned_order`, `change_planned_order` and `set_planning` act on them.
 
-Time only moves when the agent calls `advance` or `run_until`. `run_until` stops at events such as a completed order, a received purchase or a missed due date. A 12-hour shift simulates in a few seconds. `snapshot` and `restore` keep whole shifts in memory, so an agent can test a change and then rewind. Runs are deterministic.
+Time only moves when the agent calls `advance` or `run_until`. `run_until` stops at events such as a completed order, a received purchase or a missed due date. A 12-hour run simulates in a few seconds. `snapshot` and `restore` keep whole simulation states in memory, so an agent can test a change and then rewind. Runs are deterministic.
 
-**With Claude Code.** `.mcp.json` registers the bridge as the `chocolate-works` server. Open Claude Code in this folder, approve the server, and ask, for example: *Load res://scenarios/constrained_shift.json, plan the shift, run it to the horizon, and report the bottlenecks with evidence and recommendations.* Set `GODOT_BIN` if Godot is not in `/Applications`.
+**With Claude Code.** `.mcp.json` registers the bridge as the `chocolate-works` server. Open Claude Code in this folder, approve the server, and ask, for example: *Load res://scenarios/constrained_12h.json, plan the run, run it to the horizon, and report the bottlenecks with evidence and recommendations.* Set `GODOT_BIN` if Godot is not in `/Applications`.
 
 **Without MCP.** Start the server and send lines with any language:
 
 ```sh
-godot --headless --path . --script res://agent/server.gd -- --port 8765 --scenario res://scenarios/filled_wafer_shift.json
+godot --headless --path . --script res://agent/server.gd -- --port 8765 --scenario res://scenarios/filled_wafer_12h.json
 ```
 
 ```json
@@ -263,12 +263,12 @@ godot --path . -- --agent-port 8765
 python3 agent/mcp_bridge.py --connect 8765
 ```
 
-In Claude Code, change the `chocolate-works` entry in `.mcp.json` to `"args": ["agent/mcp_bridge.py", "--connect", "8765"]`, start the game first, then start the agent. The agent then plans the shift you are looking at, and the ERP terminal shows its orders as it creates them.
+In Claude Code, change the `chocolate-works` entry in `.mcp.json` to `"args": ["agent/mcp_bridge.py", "--connect", "8765"]`, start the game first, then start the agent. The agent then plans the simulation you are looking at, and the ERP terminal shows its orders as it creates them.
 
-- Time commands play the shift on screen and reply when the simulated time has passed, so they take real time: simulated seconds divided by the speed. The agent can choose 1×, 5×, 20× or the new 60× with `set_speed`. One simulated hour takes a minute at 60×.
-- After each time command the game pauses again until the agent's next move. You can pause, play, change speed, move the camera and open ERP at any time. Your own ERP actions change the same shift the agent is running.
-- `load_scenario` replaces the shift on screen. `restore` rewinds the view to a snapshot. `run_until` can overshoot its stop by up to one frame of simulated time.
-- With an agent port open, closing the window does not autosave, so an agent run never overwrites your saved shift. To keep an agent's shift, the agent can call `save_shift` with a path, or with `replace_game_save` so the game's **Load** button opens it.
+- Time commands play the simulation on screen and reply when the simulated time has passed, so they take real time: simulated seconds divided by the speed. The agent can choose 1×, 5×, 20× or the new 60× with `set_speed`. One simulated hour takes a minute at 60×.
+- After each time command the game pauses again until the agent's next move. You can pause, play, change speed, move the camera and open ERP at any time. Your own ERP actions change the same simulation the agent is running.
+- `load_scenario` replaces the simulation on screen. `restore` rewinds the view to a snapshot. `run_until` can overshoot its stop by up to one frame of simulated time.
+- With an agent port open, the game skips the opening page and runs an unsaved simulation, and closing the window saves nothing, so an agent never overwrites your instances. To keep its run, the agent calls `save_instance` with a name; the run then appears on the opening page, ready to continue.
 
 Current limits: the agent controls planning, purchasing and release. It cannot edit the layout, crews or master data. The simulation has no breakdowns or random variability yet.
 
@@ -306,6 +306,7 @@ godot --headless --path . --script res://tests/agent_api_test.gd
 godot --headless --path . --script res://tests/mrp_planning_test.gd
 godot --headless --path . --script res://tests/gum_line_test.gd
 godot --headless --path . --script res://tests/raw_warehouse_test.gd
+godot --headless --path . --script res://tests/instances_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

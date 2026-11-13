@@ -137,7 +137,7 @@ func _older_save() -> void:
 	_check(loaded.layout.objects[&"CreamMixer"].cell == Vector2i(66, 34), "Saved placements are kept")
 	_check(loaded.layout.objects[&"GumSheeter"].cell != Vector2i(66, 34) and loaded.layout.validate().is_empty(),
 		"New equipment moves clear of the saved layout and the plan validates")
-	_check(loaded.erp.create_order("FG-3005", 4, loaded.erp.now, 5, "").error.is_empty(), "Gum orders can be planned in the older shift")
+	_check(loaded.erp.create_order("FG-3005", 4, loaded.erp.now, 5, "").error.is_empty(), "Gum orders can be planned in the older save")
 
 
 func _check(condition: bool, message: String) -> void:

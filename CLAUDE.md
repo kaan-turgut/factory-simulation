@@ -21,7 +21,7 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 
 ## Agent interface (added Nov 2026)
 - `agent/` exposes the ERP and simulation to AI planning agents: `agent_api.gd` (JSON commands), `work_center_monitor.gd` (read-only state-time buckets), `server.gd` (TCP, newline JSON) and `mcp_bridge.py` (stdlib-only MCP stdio bridge, registered in `.mcp.json`). Scenarios live in `scenarios/`.
-- Live mode: `godot --path . -- --agent-port 8765` starts `agent/agent_link.gd` inside `scenes/factory.gd`. The API then attaches to the game's line (`attach`), time commands reply from `live_step` after the game has played them, and `on_line_replaced` hands scenario loads and restores back to the scene. Autosave on close is off while the link is open. The link refuses `shutdown` in the game.
+- Live mode: `godot --path . -- --agent-port 8765` skips the opening page and starts `agent/agent_link.gd` inside `scenes/factory.gd`. The API then attaches to the game's line (`attach`), time commands reply from `live_step` after the game has played them, and `on_line_replaced` hands scenario loads and restores back to the scene. Autosave on close is off while the link is open. The link refuses `shutdown` in the game.
 - Agent actions must go through the same ERP functions as the UI. Never give the agent a shortcut that bypasses release checks, reservations or the ledger.
 - Command argument specs follow `"[optional ]<string|number|int|bool|array>[: note]"`. The bridge builds MCP schemas from them.
 - Run `tests/agent_api_test.gd` after changing anything in `agent/`, ERP command signatures, MRP output, or order/demand fields.
@@ -42,6 +42,13 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - RM-WH holds 90 pallet positions (`master_data/storage_capacity.json`), sized to about one full-rate 24 h day (about 82 positions). Purchased materials carry `storage` (`rack`/`tank`/`pallet_store`/`shelf`) and racked ones `pallet_qty`. Helpers: `catalog.positions`, `catalog.pallet_qty`, `catalog.raw_capacity`, `operations.raw_room`, `operations.raw_warehouse`.
 - Receipts put away only what fits; the rest waits as `po.at_dock`. MRP raises `storage_full` and `at_dock`. The rack view (`factory_floor._refresh_raw_slots`) draws one instanced pallet per occupied position.
 - Opening stock must fit (catalog validation). Run `tests/raw_warehouse_test.gd` after touching storage, receipts or pallet sizes.
+
+## Simulation instances and wording (Nov 2026)
+- The project has no work shifts. A run is a **simulation instance**: never call it a "shift" in UI or docs. ("Three shifts" in the warehouse sizing means real work shifts.)
+- `scenes/start_menu.tscn` (`ui/start_menu.gd`) is the main scene: create, continue and rename instances. `erp/instances.gd` keeps one save per instance in `user://instances/` plus `index.json`, imports the old single save (`SaveGame.PATH`) once as "My factory" without deleting it, and hands the chosen instance to `scenes/factory.gd` through `Instances.pending`.
+- The factory scene saves only when it runs an instance (`_instance_id`). Opened directly (tests, `--new-instance`, `--agent-port`), it is an unsaved run. ERP has Save; the factory bottom bar has Main menu (with a confirmation); the single-slot Load button is gone. The opening page can rename and delete (with confirmation) instances. The agent saves with `save_instance`.
+- The Reset button was removed. Crew/cart counts apply through `Line.sync_fleet()` once no order runs. `line.reset()` remains for the sandbox mode and tests.
+- Tests must set `Instances.directory` to their own folder (see `tests/instances_test.gd`) so they never touch the player's instances. Run that suite after touching instances, the opening page or save/close handling.
 
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.

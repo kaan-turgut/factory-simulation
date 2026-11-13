@@ -1,6 +1,6 @@
 {
-	"name": "Filled wafer shift",
-	"description": "Twelve-hour shift with three filled wafer demands and one milk wafer demand. Plan production and purchasing so every demand is stored as finished goods by its due time.",
+	"name": "Filled wafer 12-hour run",
+	"description": "Twelve-hour simulation run with three filled wafer demands and one milk wafer demand. Plan production and purchasing so every demand is stored as finished goods by its due time.",
 	"horizon_seconds": 43200,
 	"auto_release": false,
 	"demands": [

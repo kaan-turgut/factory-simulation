@@ -3,7 +3,7 @@
 
 Starts `godot --headless --script res://agent/server.gd` on a free local port, or connects with
 --connect PORT to a server that is already running: a headless server, or the visible game started
-with `-- --agent-port PORT` (live mode, where time commands play the shift on screen). Reads the
+with `-- --agent-port PORT` (live mode, where time commands play the simulation on screen). Reads the
 command list from the server's `describe` reply and exposes each command as an MCP tool named
 `factory_<command>`.
 
@@ -45,7 +45,7 @@ class Factory:
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             self._wait_ready()
             connect_port = port
-        # A live game replies to time commands only when the shift has played that far.
+        # A live game replies to time commands only when the simulation has played that far.
         self.sock = socket.create_connection(("127.0.0.1", connect_port), timeout=600 if self.process else None)
         self.reader = self.sock.makefile("r", encoding="utf-8")
         self.lock = threading.Lock()
@@ -174,7 +174,7 @@ def send(payload):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--connect", type=int, help="Use an agent server already listening on this port.")
-    parser.add_argument("--scenario", help="Scenario to load at start, e.g. res://scenarios/constrained_shift.json")
+    parser.add_argument("--scenario", help="Scenario to load at start, e.g. res://scenarios/constrained_12h.json")
     options = parser.parse_args()
     factory = Factory(options.connect, options.scenario)
     try:

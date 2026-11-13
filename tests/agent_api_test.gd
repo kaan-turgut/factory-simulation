@@ -53,7 +53,7 @@ func _plan_everything(api: API) -> int:
 
 func _full_shift() -> void:
 	var api := API.new()
-	var loaded := _call(api, "load_scenario", {"path": "res://scenarios/filled_wafer_shift.json"})
+	var loaded := _call(api, "load_scenario", {"path": "res://scenarios/filled_wafer_12h.json"})
 	_check(loaded.ok and loaded.demands.size() == 4, "Load scenario with four demands: " + String(loaded.get("error", "")))
 	_check(_call(api, "material", {"code": "FG-2001", "quantity": 48}).options.size() > 0, "Material lookup lists eligible work centers")
 	var converted := _plan_everything(api)
@@ -79,7 +79,7 @@ func _full_shift() -> void:
 			total += value
 		_check(absf(total - api.monitor.observed) < 0.5, "Time buckets add up for " + center.id)
 	var score := _call(api, "score")
-	print("  filled wafer shift score: ", JSON.stringify(score))
+	print("  filled wafer run score: ", JSON.stringify(score))
 	_check(score.on_time + score.late + score.open_overdue <= score.demands, "Score counts each demand once")
 	_check(score.finished_boxes.size() > 0, "Finished boxes are reported")
 	_call(api, "log_decision", {"text": "Test decision"})
@@ -88,7 +88,7 @@ func _full_shift() -> void:
 
 func _snapshots() -> void:
 	var api := API.new()
-	_call(api, "load_scenario", {"path": "res://scenarios/constrained_shift.json"})
+	_call(api, "load_scenario", {"path": "res://scenarios/constrained_12h.json"})
 	_check(is_equal_approx(api.line.operating_factors[&"Oven"], 0.5), "Scenario operating factor applied")
 	_plan_everything(api)
 	_call(api, "set_auto_release", {"enabled": true})
@@ -117,7 +117,7 @@ func _live() -> void:
 	var replaced := []
 	api.on_line_replaced = func(next: Line) -> void: replaced.append(next)
 	_check(api.live and api.line == shown and not shown.playing, "Live API attaches to the shown line")
-	var loaded := api.handle({"cmd": "load_scenario", "args": {"path": "res://scenarios/filled_wafer_shift.json"}})
+	var loaded := api.handle({"cmd": "load_scenario", "args": {"path": "res://scenarios/filled_wafer_12h.json"}})
 	_check(loaded.ok and replaced.size() == 1 and replaced[0] == api.line and api.line != shown, "Live scenario load hands the game a new line")
 	_check(not api.line.playing and api.line.erp.demands.size() == 4, "New live shift starts paused with its demands")
 	api.handle({"cmd": "convert_all", "args": {}})
@@ -148,10 +148,20 @@ func _live() -> void:
 	_frame(api, 0.5)
 	_check(api.handle({"cmd": "snapshot", "args": {"name": "s"}}).ok and api.handle({"cmd": "restore", "args": {"name": "s"}}).ok
 		and replaced.size() == 2, "Live restore hands the rewound line to the game")
-	_check(not api.handle({"cmd": "save_shift", "args": {}}).ok, "Saving over the game's slot needs explicit consent")
-	var saved := api.handle({"cmd": "save_shift", "args": {"path": "user://agent_test.save"}})
-	_check(saved.ok and FileAccess.file_exists("user://agent_test.save"), "Save the agent's shift to a named file")
+	var saved := api.handle({"cmd": "save_instance", "args": {"path": "user://agent_test.save"}})
+	_check(saved.ok and FileAccess.file_exists("user://agent_test.save"), "Save the agent's run to a named file")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://agent_test.save"))
+	# Saving as an instance goes to a test folder, never the player's list.
+	API.Instances.directory = "user://agent_test_instances"
+	API.Instances.import_legacy = false
+	var listed := api.handle({"cmd": "save_instance", "args": {"name": "Agent test run"}})
+	_check(listed.ok and API.Instances.find(listed.instance).name == "Agent test run"
+		and FileAccess.file_exists(API.Instances.path(listed.instance)), "Save the agent's run as a named simulation instance")
+	_check(not api.handle({"cmd": "save_instance", "args": {"name": "Agent test run"}}).ok, "Instance names stay unique")
+	for file in DirAccess.get_files_at("user://agent_test_instances"):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://agent_test_instances".path_join(file)))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://agent_test_instances"))
+	API.Instances.directory = "user://instances"
 
 
 func _live_link() -> void:

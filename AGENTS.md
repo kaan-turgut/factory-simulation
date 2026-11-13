@@ -65,7 +65,7 @@ The goal is to combine realistic industrial production behavior with an accessib
 - Keep the Gantt a readout and editor of authoritative orders. Run the detailed scheduling test for changes to planning, routing, WIP handoffs, or ERP persistence.
 
 ## External Master Data
-- Keep demonstration definitions in `master_data/` and validate references, machine capabilities, and physical ports before starting a shift.
+- Keep demonstration definitions in `master_data/` and validate references, machine capabilities, and physical ports before starting a simulation run.
 - Preserve released routing and BOM snapshots. Keep work-center commitments and cart ownership tied to production order IDs.
 - Run the alternative routing integration test when changing dispatch, transport, eligibility, or save migration. Run the production standards suite for changes to rate models, expanded cells, or their save data.
 

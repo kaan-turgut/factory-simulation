@@ -6,7 +6,7 @@ extends RefCounted
 ##
 ## Headless: the API owns its line, and `advance`/`run_until` simulate instantly and deterministically.
 ## Live: `attach` binds the API to the factory shown in the game. Time commands then play the
-## shift on screen and reply when they finish (handle returns {"pending": true} and the reply
+## simulation on screen and reply when they finish (handle returns {"pending": true} and the reply
 ## comes from `live_step`). With `agent_paced`, the game pauses again after each time command.
 
 const Line = preload("res://simulation/production_line.gd")
@@ -14,6 +14,7 @@ const Plan = preload("res://erp/mrp.gd")
 const Save = preload("res://erp/save_game.gd")
 const Schedule = preload("res://erp/scheduling.gd")
 const Monitor = preload("res://agent/work_center_monitor.gd")
+const Instances = preload("res://erp/instances.gd")
 
 const SAMPLE_SECONDS := 1.0
 const MAX_ADVANCE := 7.0 * 86400.0
@@ -42,8 +43,8 @@ var _demand_flagged := {}
 ## Argument specs read "[optional ]<string|number|int|bool|array>[: note]"; the MCP bridge builds schemas from them.
 var COMMANDS := {
 	"describe": {"description": "List the available commands and their arguments.", "args": {}},
-	"load_scenario": {"description": "Start a fresh shift from a scenario JSON file. Clears snapshots and logs.",
-		"args": {"path": "string: res:// or absolute path, e.g. res://scenarios/constrained_shift.json"}},
+	"load_scenario": {"description": "Start a fresh simulation instance from a scenario JSON file. Clears snapshots and logs.",
+		"args": {"path": "string: res:// or absolute path, e.g. res://scenarios/constrained_12h.json"}},
 	"status": {"description": "Clock, order counts, running work centers, delays and warnings, demand coverage.", "args": {}},
 	"master_data": {"description": "Products, materials, work centers (rates, calendars, operating factors) and suppliers.",
 		"args": {"section": "optional string: products | materials | work_centers | suppliers"}},
@@ -85,11 +86,11 @@ var COMMANDS := {
 	"advance": {"description": "Run the simulation for a number of seconds. Returns the events that happened.", "args": {"seconds": "number"}},
 	"run_until": {"description": "Run until one of the stop events happens or max_seconds pass.",
 		"args": {"max_seconds": "number", "stop_on": "optional array: any of " + ", ".join(EVENT_KINDS) + "; default " + ", ".join(DEFAULT_STOPS)}},
-	"snapshot": {"description": "Save the whole shift in memory under a name, for what-if experiments.", "args": {"name": "string"}},
+	"snapshot": {"description": "Save the whole simulation state in memory under a name, for what-if experiments.", "args": {"name": "string"}},
 	"restore": {"description": "Go back to a named snapshot, discarding everything since. In live mode the game view rewinds too.", "args": {"name": "string"}},
 	"set_speed": {"description": "Live mode: game speed while time commands run (1, 5, 20 or 60x). Headless runs ignore it.", "args": {"multiplier": "int"}},
-	"save_shift": {"description": "Write the shift to a save file. Without a path it replaces the game's own save slot, which the game's Load button reads; that needs replace_game_save true.",
-		"args": {"path": "optional string: user:// or absolute path", "replace_game_save": "optional bool"}},
+	"save_instance": {"description": "Save this run as a new named simulation instance. The player can continue it from the game's opening page. With a path, write a save file there instead.",
+		"args": {"name": "optional string: instance name, default 'Agent run' plus the date", "path": "optional string: user:// or absolute file path"}},
 	"score": {"description": "Service level, lateness, finished boxes, working share per work center and purchase spend so far.", "args": {}},
 	"log_decision": {"description": "Record a decision, finding or recommendation with its reasoning in the run log.", "args": {"text": "string"}},
 	"run_log": {"description": "All actions, decisions and events so far.", "args": {}},
@@ -122,7 +123,7 @@ func handle(request: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "Unknown command '%s'. Call describe." % command}
 	if line == null or not line.validation_error.is_empty():
 		if command != "load_scenario" and command != "describe":
-			return {"ok": false, "error": "The shift is not valid: " + (line.validation_error if line else "no line")}
+			return {"ok": false, "error": "The simulation is not valid: " + (line.validation_error if line else "no line")}
 	if live and command in ["advance", "run_until"]:
 		return _start_job(command, args)
 	if live and not _job.is_empty() and command in ["load_scenario", "restore"]:
@@ -163,7 +164,7 @@ func _new_line() -> void:
 
 
 func _cmd_describe(_args: Dictionary) -> Dictionary:
-	return {"commands": COMMANDS, "units": "Time in simulated seconds from shift start. FG quantities in boxes, others in kg or each.",
+	return {"commands": COMMANDS, "units": "Time in simulated seconds from the simulation start. FG quantities in boxes, others in kg or each.",
 		"scenario": scenario.get("name", "default")}
 
 
@@ -713,14 +714,19 @@ func _cmd_set_speed(args: Dictionary) -> Dictionary:
 	return {"speed": line.multiplier}
 
 
-func _cmd_save_shift(args: Dictionary) -> Dictionary:
+func _cmd_save_instance(args: Dictionary) -> Dictionary:
 	var path := String(args.get("path", ""))
-	if path.is_empty():
-		if not bool(args.get("replace_game_save", false)):
-			return {"error": "This would replace the game's save slot. Pass replace_game_save true, or give a path."}
-		path = Save.PATH
-	var error: String = Save.save(line, path)
-	return _acted("save_shift", args, error, {"path": path, "absolute": ProjectSettings.globalize_path(path)})
+	if not path.is_empty():
+		var written: String = Save.save(line, path)
+		return _acted("save_instance", args, written, {"path": path, "absolute": ProjectSettings.globalize_path(path)})
+	var title := String(args.get("name", ""))
+	if title.strip_edges().is_empty():
+		title = "Agent run " + Time.get_datetime_string_from_system(false, true).left(16)
+	var created := Instances.create(title)
+	if not created.error.is_empty():
+		return _acted("save_instance", args, created.error, {})
+	var error := Instances.save(created.id, line)
+	return _acted("save_instance", args, error, {"instance": created.id, "name": Instances.find(created.id).get("name", title)})
 
 
 # --- Experiments and evaluation ---------------------------------------------

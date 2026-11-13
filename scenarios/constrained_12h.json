@@ -1,6 +1,6 @@
 {
-	"name": "Constrained shift",
-	"description": "Twelve-hour shift with mixed wafer demand. Plan production and purchasing, find what limits output, and recommend improvements.",
+	"name": "Constrained 12-hour run",
+	"description": "Twelve-hour simulation run with mixed wafer demand. Plan production and purchasing, find what limits output, and recommend improvements.",
 	"horizon_seconds": 43200,
 	"auto_release": false,
 	"evaluator_notes": "Not returned to the agent. Planted constraints: Oven 01 runs at 50% of its standard rate, and wheat flour opening stock is cut to 500 kg so batter needs a timely purchase.",

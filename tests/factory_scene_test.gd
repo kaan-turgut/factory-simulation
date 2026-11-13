@@ -124,9 +124,10 @@ func _run() -> void:
 		if line.warehouse_count() > 0:
 			break
 	_check(line.warehouse_count() > 0, "Live scene resumes deliveries after dispatch")
-	_click_button("Reset")
+	_check(_find_button("Reset") == null, "No Reset button in the transport bar")
+	line.reset()
 	_check(line.elapsed_ticks == 0 and not line.playing and line.warehouse_count() == 0
-		and line.warehouse.size() == 24, "Reset clears the run and keeps fixed capacity")
+		and line.warehouse.size() == 24, "Sandbox reset clears the run and keeps fixed capacity")
 	_key(KEY_ESCAPE)
 	_check(not inspector.visible, "Escape closes inspector")
 
@@ -206,6 +207,13 @@ func _edit_setting(key: StringName, value: String) -> void:
 	if spin == null:
 		return
 	await _enter_setting(spin.get_line_edit(), value)
+
+
+func _find_button(copy: String) -> Button:
+	for node in _factory.find_children("*", "Button", true, false):
+		if (node as Button).text == copy:
+			return node
+	return null
 
 
 func _click_button(copy: String) -> void:

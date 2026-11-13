@@ -176,7 +176,7 @@ func _equipment_implements(id: StringName, operation: String) -> bool:
 
 func layout_edit_problem(moving: Array = []) -> String:
 	if playing:
-		return "Pause the shift before moving equipment."
+		return "Pause the simulation before moving equipment."
 	if not runs.is_empty():
 		return "An order is using the line. Finish production before editing."
 	if not floor_assignments.is_empty() or _lift_phase != LiftPhase.WAIT 			or (erp != null and not erp.shipment.is_empty()):
@@ -401,6 +401,25 @@ func reset() -> void:
 	_lift_phase = LiftPhase.WAIT
 
 
+## ERP mode: rebuild the crew and cart fleet to the configured counts once nothing is running.
+## Returns true when the fleet matches the settings afterwards.
+func sync_fleet() -> bool:
+	if erp == null:
+		return false
+	var raw_count := carts.filter(func(cart: Cart) -> bool: return cart.raw).size()
+	var coated_count := carts.filter(func(cart: Cart) -> bool: return cart.coated).size()
+	if floor_crew.size() == int(settings[&"floor_count"]) and raw_count == int(settings[&"raw_count"]) \
+			and coated_count == int(settings[&"coated_cart_count"]) \
+			and carts.size() - raw_count - coated_count == int(settings[&"cooked_count"]):
+		return true
+	var busy := not runs.is_empty() or not floor_assignments.is_empty() \
+		or carts.any(func(cart: Cart) -> bool: return cart.stock.quantity > EPSILON)
+	if busy:
+		return false
+	_configure_crews_and_carts()
+	return true
+
+
 func _configure_crews_and_carts() -> void:
 	raw_at_extruder = null
 	raw_at_oven = null
@@ -487,6 +506,8 @@ func _step_explicit() -> void:
 	_retire_routes()
 	if elapsed_ticks % 4 == 3:
 		_dispatch_stages()
+		if runs.is_empty():
+			sync_fleet()
 	erp.active_id = ""
 	erp.coat_remaining = 0.0
 	erp.pack_remaining = 0.0

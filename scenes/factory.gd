@@ -12,6 +12,8 @@ const Layout = Line.Layout
 const Editor = preload("res://layout/layout_editor.gd")
 const NO_CELL := Vector2i(-2147483648, -2147483648)
 const AgentAPI = preload("res://agent/agent_api.gd")
+const Instances = preload("res://erp/instances.gd")
+const START_MENU := "res://scenes/start_menu.tscn"
 const AgentLink = preload("res://agent/agent_link.gd")
 
 @export var building_cells := Vector2i.ZERO
@@ -48,26 +50,32 @@ var _highlighted_order := ""
 var _save_load_error := ""
 var _layout_refitted := false
 var _agent_link: AgentLink
+## The saved simulation instance this scene runs, or empty for an unsaved run (tests, agent runs).
+var _instance_id := ""
 @onready var floor_view: Floor = $Floor
 @onready var camera: Orbit = $OrbitCamera
 @onready var hud: HUD = $HUD
 
 
 func _ready() -> void:
-	var fresh_shift := "--fresh-shift" in OS.get_cmdline_user_args()
-	if fresh_shift:
-		resume_saved = false
+	var args := OS.get_cmdline_user_args()
+	var fresh := "--new-instance" in args or "--fresh-shift" in args
+	var request: Dictionary = Instances.pending
+	Instances.pending = {}
+	_instance_id = String(request.get("id", "")) if erp_enabled and resume_saved and not fresh else ""
+	var opening_new: bool = request.get("new", false)
 	line = Line.new(Layout.new(building_cells))
 	if erp_enabled:
 		line.enable_erp(explicit_planning)
-		if resume_saved and FileAccess.file_exists(SaveGame.PATH):
-			var saved := SaveGame.load_line()
+		if not _instance_id.is_empty() and not opening_new:
+			var saved := Instances.load_line(_instance_id)
 			if saved.error.is_empty():
 				line = saved.line
 				_layout_refitted = saved.get("refitted", false)
 			else:
+				# Keep the instance file untouched; this run starts fresh and is not saved over it.
 				_save_load_error = saved.error
-				resume_saved = false
+				_instance_id = ""
 				push_warning(saved.error)
 	var layout := line.layout
 	var error := line.validation_error if erp_enabled or not line.validation_error.is_empty() else layout.validate()
@@ -80,7 +88,7 @@ func _ready() -> void:
 		return
 	editor = Editor.new(line)
 	var layout_note := ""
-	if (resume_saved or fresh_shift) and FileAccess.file_exists(Editor.PATH):
+	if erp_enabled and (not _instance_id.is_empty() or fresh) and FileAccess.file_exists(Editor.PATH):
 		layout_note = editor.load_layout(Editor.PATH, true)
 	_rebuild_world()
 	if erp_enabled:
@@ -89,25 +97,27 @@ func _ready() -> void:
 		terminal.bind(line)
 		terminal.play_requested.connect(_set_playing)
 		terminal.closed.connect(_resume_camera)
-		terminal.save_requested.connect(_save_shift)
-		terminal.load_requested.connect(_load_shift)
+		terminal.save_requested.connect(_save_instance)
 		terminal.locate_requested.connect(_locate_stock)
 		terminal.route_requested.connect(_highlight_order)
 		hud.erp_requested.connect(_open_erp)
 		if _save_load_error.is_empty():
-			hud.set_hint("Saved shift fitted to the updated factory. Transport resumes when you press Play." if _layout_refitted
+			hud.set_hint("Saved simulation instance fitted to the updated factory. Transport resumes when you press Play." if _layout_refitted
 				else "Open ERP to create and release a production order.")
 		else:
-			hud.set_hint("Existing save preserved. " + _save_load_error)
-			terminal.notice("Existing save preserved. " + _save_load_error)
-		if resume_saved:
+			hud.set_hint("Could not open the saved simulation instance, so this run starts fresh and will not overwrite it. " + _save_load_error)
+			terminal.notice("Could not open the saved simulation instance, so this run starts fresh and will not overwrite it. " + _save_load_error)
+		if not _instance_id.is_empty():
 			get_tree().auto_accept_quit = false
+			hud.set_instance_name(String(Instances.find(_instance_id).get("name", "")))
+			if opening_new:
+				_save_instance()
 	hud.enable_erp(erp_enabled)
 	camera.floor_clicked.connect(_pick)
 	hud.selection_requested.connect(_select)
+	hud.menu_requested.connect(_confirm_start_menu)
 	hud.play_requested.connect(_set_playing.bind(true))
 	hud.pause_requested.connect(_set_playing.bind(false))
-	hud.reset_requested.connect(_reset)
 	hud.speed_requested.connect(_set_speed)
 	hud.setting_requested.connect(_set_setting)
 	hud.dispatch_requested.connect(_dispatch)
@@ -301,10 +311,10 @@ func _set_build_mode(enabled: bool) -> void:
 	_select(_selected)
 	_cursor_screen = Vector2.INF
 	if enabled:
-		hud.set_hint("Build Mode · Shift paused · Select or drag a station")
+		hud.set_hint("Build Mode · Simulation paused · Select or drag a station")
 	else:
-		hud.set_hint("Shift paused · Use Save Layout to reuse your edits." if editor.dirty()
-			else "Shift paused. Press Play to resume.")
+		hud.set_hint("Simulation paused · Use Save Layout to reuse your edits." if editor.dirty()
+			else "Simulation paused. Press Play to resume.")
 	_refresh()
 
 
@@ -557,29 +567,14 @@ func _set_playing(enabled: bool) -> void:
 	if _placing:
 		_end_placement()
 	line.set_playing(enabled)
-	hud.set_hint("Select stations, carts, or crew to follow the shift." if enabled
-		else "Shift paused. Adjust equipment or press Play to resume.")
+	hud.set_hint("Select stations, carts, or crew to follow the simulation." if enabled
+		else "Simulation paused. Adjust equipment or press Play to resume.")
 	_refresh()
 
 
 func _set_speed(value: int) -> void:
 	line.set_multiplier(value)
 	_refresh()
-
-
-func _reset() -> void:
-	if _placing:
-		_end_placement()
-	line.reset()
-	_select(_selected)
-	var message := "Shift reset. Press Play to run with the current settings."
-	if erp_enabled:
-		message = "ERP shift paused. Current order and stock are preserved."
-		if line.erp.active_id.is_empty():
-			message = "ERP shift paused. Fleet settings applied and stock preserved."
-	hud.set_hint(message)
-	_refresh()
-	floor_view.animate(line, 0.0)
 
 
 func _set_setting(key: StringName, value: float) -> void:
@@ -600,7 +595,12 @@ func _set_setting(key: StringName, value: float) -> void:
 		else:
 			message = "Capacity must cover current and reserved stock."
 	elif key in [&"floor_count", &"raw_count", &"cooked_count", &"coated_cart_count"]:
-		message = "Fleet size takes effect on Reset between orders." if erp_enabled else "Fleet size takes effect on Reset."
+		if not erp_enabled:
+			message = "Fleet size takes effect when the sandbox restarts."
+		elif line.sync_fleet():
+			message = "Fleet updated."
+		else:
+			message = "Fleet size changes as soon as no orders are running."
 	hud.inspector.feedback(message)
 	_refresh()
 
@@ -674,28 +674,41 @@ func _locate_stock(location: String) -> void:
 		_: _select(&"Oven")
 
 
-func _save_shift() -> void:
-	if not _save_load_error.is_empty():
-		terminal.notice("Existing save preserved. Resolve the load error or start with --fresh-shift.")
+func _save_instance() -> void:
+	if _instance_id.is_empty():
+		terminal.notice("This run is not a saved simulation instance. Start one from the opening page to save it.")
 		return
-	var error := SaveGame.save(line)
-	terminal.notice("Shift saved at " + Line.ERP.date(line.elapsed_seconds()) if error.is_empty() else error)
+	var error := Instances.save(_instance_id, line)
+	terminal.notice("Simulation instance saved at " + Line.ERP.date(line.elapsed_seconds()) if error.is_empty() else error)
 
 
-func _load_shift() -> void:
-	var saved := SaveGame.load_line()
-	if not saved.error.is_empty():
-		terminal.notice(saved.error)
-		return
-	_save_load_error = ""
-	_adopt_line(saved.line)
+func _confirm_start_menu() -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Main menu"
+	dialog.dialog_text = "Save this simulation instance and return to the opening page?" if not _instance_id.is_empty() \
+		else "Return to the opening page? This run is not a saved simulation instance, so its progress will be lost."
+	dialog.ok_button_text = "Return"
+	dialog.confirmed.connect(_open_start_menu)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	add_child(dialog)
+	dialog.popup_centered()
+
+
+## Save this simulation instance and return to the opening page.
+func _open_start_menu() -> void:
+	if not _instance_id.is_empty() and _agent_link == null:
+		var error := Instances.save(_instance_id, line)
+		if not error.is_empty():
+			hud.set_hint(error)
+			return
 	if _agent_link != null:
-		_agent_link.api.attach(line)
-	terminal.notice("Saved shift fitted to the updated factory and paused." if saved.get("refitted", false)
-		else "Saved shift restored and paused.")
+		_agent_link.stop()
+	get_tree().auto_accept_quit = true
+	get_tree().change_scene_to_file(START_MENU)
 
 
-## Show a different shift: after loading a save, or when the agent loads a scenario or restores a snapshot.
+## Show a different simulation: when the agent loads a scenario or restores a snapshot.
 func _adopt_line(next: Line) -> void:
 	_select(&"")
 	line = next
@@ -707,7 +720,7 @@ func _adopt_line(next: Line) -> void:
 	floor_view.animate(line, 0.0)
 
 
-## `-- --agent-port 8765` lets an AI agent plan and run this visible shift over the agent protocol.
+## `-- --agent-port 8765` lets an AI agent plan and run this visible simulation over the agent protocol.
 func _start_agent_link() -> void:
 	var args := OS.get_cmdline_user_args()
 	var index := args.find("--agent-port")
@@ -725,16 +738,17 @@ func _start_agent_link() -> void:
 		_agent_link = null
 		hud.set_hint("Agent link not started. " + error)
 		return
-	# An agent run must never overwrite the player's saved shift on close.
+	# An agent run must never overwrite a saved simulation instance on close.
+	_instance_id = ""
 	get_tree().auto_accept_quit = true
 	print("AGENT_SERVER_READY %d" % port)
-	hud.set_hint("Agent link open on port %d. Agent time commands play the shift here; your own save is not touched on close." % port)
+	hud.set_hint("Agent link open on port %d. Agent time commands play the simulation here; saved instances are not touched on close." % port)
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and erp_enabled and resume_saved and line != null and line.erp != null \
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and erp_enabled and not _instance_id.is_empty() and line != null and line.erp != null \
 			and _agent_link == null:
-		var error := SaveGame.save(line)
+		var error := Instances.save(_instance_id, line)
 		if error.is_empty():
 			get_tree().quit()
 		else:

@@ -86,7 +86,7 @@ func configure(bold: Font) -> void:
 	_tag.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(_tag)
 	_place = _button(top, "Place", func() -> void: placement_requested.emit())
-	_place.tooltip_text = "Reposition and rotate this station before starting a shift"
+	_place.tooltip_text = "Reposition and rotate this station before running the simulation"
 	_erp_link = _button(top, "ERP stock", func() -> void:
 		var location := {&"RawWarehouse": "RM-WH", &"SFGWarehouse": "SFG-WH", &"PackagingWIP": "PACK-WIP", &"Warehouse": "FG-WH"}
 		erp_requested.emit(3, location[_selection]))

@@ -11,7 +11,7 @@ const RAW_LOCATIONS := ["CREAM-IN", "PACK-IN-02", "RM-WH", "RM-STAGE", "COAT-IN"
 const SFG_LOCATIONS := ["SFG-WH", "SFG-DECK"]
 const OPEN := ["Created", "Released", "In Progress"]
 const LINE := "LINE-01"
-const MATERIAL_HANDLER_ID := &"SupplyShuttle" # Stable ID in existing shifts.
+const MATERIAL_HANDLER_ID := &"SupplyShuttle" # Stable ID in existing saves.
 const MATERIAL_HANDLER_TITLE := "Material handler"
 const MATERIAL_HANDLER_SPEED := 2.4
 

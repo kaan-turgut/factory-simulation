@@ -9,12 +9,12 @@ const CLOCK := &"Clock"
 
 signal play_requested
 signal pause_requested
-signal reset_requested
 signal speed_requested(multiplier: int)
 signal selection_requested(id: StringName)
 signal setting_requested(key: StringName, value: float)
 signal dispatch_requested(all_stock: bool)
 signal home_requested
+signal menu_requested
 signal zoom_requested(inward: bool)
 signal grid_requested(enabled: bool)
 signal placement_requested
@@ -33,6 +33,7 @@ var _crew_status: Label
 var _play: Button
 var _pause: Button
 var _hint: Label
+var _instance_label: Label
 var _cursor: Label
 var _grid_button: Button
 var _build_button: Button
@@ -93,6 +94,11 @@ func refresh(line: Line) -> void:
 	inspector.refresh(line)
 
 
+## Show which saved simulation instance is open.
+func set_instance_name(title: String) -> void:
+	_instance_label.text = "  ·  " + title.to_upper() if not title.is_empty() else ""
+
+
 func set_hint(message: String) -> void:
 	_hint.text = message
 
@@ -138,6 +144,8 @@ func _build_overview() -> void:
 	badge.add_child(_label("02", 19, Style.ACCENT, true))
 	heading.add_child(_label("Chocolate Works", 28, Style.TEXT, true))
 	heading.add_child(_label("  /  WAFER FACTORY", 13, Style.DIM, true))
+	_instance_label = _label("", 13, Style.ACCENT, true)
+	heading.add_child(_instance_label)
 	_spacer(heading)
 	_crew_status = _label("", 13, Style.MUTED)
 	heading.add_child(_crew_status)
@@ -219,7 +227,7 @@ func _build_controls() -> void:
 	bottom.offset_top = -18
 	bottom.offset_bottom = -18
 
-	_hint = _label("Select equipment or crew to inspect it. Press Play to start the shift.", 15, Style.TEXT)
+	_hint = _label("Select equipment or crew to inspect it. Press Play to start the simulation.", 15, Style.TEXT)
 	var tips := _row(16)
 	bottom.add_child(tips)
 	tips.add_child(_hint)
@@ -232,12 +240,13 @@ func _build_controls() -> void:
 	var controls := _row(8)
 	shell.add_child(controls)
 
+	var menu := _button(controls, "Main menu", func() -> void: menu_requested.emit())
+	menu.tooltip_text = "Save this simulation instance and return to the opening page"
+	controls.add_child(VSeparator.new())
 	_play = _button(controls, "▶  Play", func() -> void: play_requested.emit(), true)
 	_play.tooltip_text = "Start the simulation (Space)"
 	_pause = _button(controls, "Pause", func() -> void: pause_requested.emit())
 	_pause.tooltip_text = "Pause the simulation (Space)"
-	var reset := _button(controls, "Reset", func() -> void: reset_requested.emit())
-	reset.tooltip_text = "Pause an ERP shift and apply fleet settings between orders."
 
 	controls.add_child(_label("   SPEED", 12, Style.DIM, true))
 	var group := ButtonGroup.new()

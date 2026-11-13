@@ -330,7 +330,7 @@ func _floor_crew_migration() -> void:
 	var previous := current.duplicate(true)
 	previous.version = 6
 	var result := Save.restore(previous)
-	_check(result.error.is_empty(), "Restore the old two-worker shift")
+	_check(result.error.is_empty(), "Restore the old two-worker save")
 	if not result.error.is_empty():
 		return
 	var restored: Line = result.line
