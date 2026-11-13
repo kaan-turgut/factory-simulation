@@ -49,7 +49,7 @@ var COMMANDS := {
 		"args": {"section": "optional string: products | materials | work_centers | suppliers"}},
 	"material": {"description": "Bill of materials and eligible work centers with the earliest finite slot for a quantity; suppliers for bought materials.",
 		"args": {"code": "string: material code", "quantity": "optional number: boxes for finished goods, kg otherwise"}},
-	"stock": {"description": "On hand, reserved, available and incoming quantity per material.", "args": {"codes": "optional array: material codes"}},
+	"stock": {"description": "On hand, reserved, available and incoming quantity per material, plus raw-warehouse pallet positions (capacity, used, free, deliveries waiting at the dock).", "args": {"codes": "optional array: material codes"}},
 	"orders": {"description": "Production orders with plan vs actual times, delays, shortages and pegging.",
 		"args": {"status": "optional string: Created | Released | In Progress | Completed | Cancelled | open", "code": "optional string: material code"}},
 	"demands": {"description": "Customer demands with coverage and lateness.", "args": {}},
@@ -188,6 +188,12 @@ func load_scenario_data(data: Dictionary) -> Dictionary:
 		var message := line.erp.adjust(String(adjustment.code), float(adjustment.qty), String(adjustment.get("reason", "Scenario")))
 		if not message.is_empty():
 			problems.append("%s: %s" % [adjustment.code, message])
+	if data.has("raw_warehouse_positions"):
+		var positions := int(data.raw_warehouse_positions)
+		if positions < 1:
+			problems.append("raw_warehouse_positions must be at least 1")
+		else:
+			line.erp.catalog.storage_capacity["RM-WH"].positions = positions
 	var planning: Dictionary = data.get("planning", {})
 	for code in planning:
 		var message: String = line.erp.catalog.set_planning(String(code), planning[code])
@@ -231,6 +237,7 @@ func _cmd_status(_args: Dictionary) -> Dictionary:
 	return {"scenario": scenario.get("name", "default"), "horizon_seconds": scenario.get("horizon_seconds", 0),
 		"mode": "live" if live else "headless", "playing": line.playing, "speed": line.multiplier,
 		"orders_by_status": counts, "open_purchase_orders": open_po, "auto_release": line.erp.auto_release,
+		"raw_warehouse": _raw_warehouse(),
 		"active_work_centers": running, "orders_with_delay_or_warning": delayed,
 		"demands": _demand_summary(), "finished_boxes": _finished_boxes()}
 
@@ -284,6 +291,10 @@ func _cmd_material(args: Dictionary) -> Dictionary:
 			if code in supplier.codes:
 				suppliers.append({"id": supplier.id, "lead": maxf(supplier.lead, item.lead), "minimum": supplier.minimum, "price": supplier.price})
 		out.suppliers = suppliers
+		out.storage = item.get("storage", "")
+		if catalog.pallet_qty(code) > 0.0:
+			out.pallet_qty = catalog.pallet_qty(code)
+			out.room_in_rm_wh = _t(line.erp.raw_room(code))
 		return out
 	if quantity <= 0.0:
 		return {"error": "Give a positive quantity to explode the BOM and fit a slot."}
@@ -319,7 +330,8 @@ func _cmd_stock(args: Dictionary) -> Dictionary:
 		if po.status != "Received":
 			if not incoming.has(po.code):
 				incoming[po.code] = []
-			incoming[po.code].append({"po": po.id, "qty": _t(po.qty - po.received), "due": _t(po.due)})
+			incoming[po.code].append({"po": po.id, "qty": _t(po.qty - po.received), "due": _t(po.due),
+				"at_dock": _t(po.get("at_dock", 0.0))})
 	var fg: Dictionary = line.erp_fg()
 	var rows := []
 	for code in book.catalog.materials:
@@ -332,10 +344,22 @@ func _cmd_stock(args: Dictionary) -> Dictionary:
 			continue
 		var row := {"code": code, "unit": item.unit if item.type != "FERT" else "kg", "on_hand": _t(on_hand),
 			"reserved": _t(reserved), "available": _t(on_hand - reserved)}
+		if book.catalog.pallet_qty(code) > 0.0:
+			row.pallets_in_rm_wh = book.catalog.positions(code, book.stock(code, "RM-WH"))
+			row.pallet_qty = book.catalog.pallet_qty(code)
 		if incoming.has(code):
 			row.incoming = incoming[code]
 		rows.append(row)
-	return {"stock": rows, "note": "Raw and semi-finished stock is from the ERP ledger; finished goods from stored pallets."}
+	return {"stock": rows, "raw_warehouse": _raw_warehouse(),
+		"note": "Raw and semi-finished stock is from the ERP ledger; finished goods from stored pallets. Racked materials use whole RM-WH pallet positions (pallets column); deliveries that do not fit wait at the dock."}
+
+
+func _raw_warehouse() -> Dictionary:
+	var room: Dictionary = line.erp.raw_warehouse()
+	var waiting := []
+	for row in room.waiting:
+		waiting.append({"po": row.po, "code": row.code, "qty": _t(row.qty), "pallets": row.pallets, "waited_seconds": _t(row.seconds)})
+	return {"capacity_positions": room.capacity, "used_positions": room.used, "free_positions": room.free, "waiting_at_dock": waiting}
 
 
 func _cmd_orders(args: Dictionary) -> Dictionary:

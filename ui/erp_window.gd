@@ -502,6 +502,7 @@ func _dashboard() -> void:
 		["Today's production", _qty(b.today_kg()) + " kg received"],
 		["Open orders / purchases", "%d orders / %d purchase orders" % [open_orders, pending_po]],
 		["Material shortages", ", ".join(PackedStringArray(shortages.keys())) if not shortages.is_empty() else "—"],
+		["Raw material warehouse", _raw_summary()],
 		["Finished warehouse", "%d / %d pallets · %s kg" % [line.warehouse_count(), line.warehouse.size(), _qty(line.warehouse_mass())]],
 		["Setup remaining", "%s s coating / %s s packing" % [_qty(b.coat_remaining), _qty(b.pack_remaining)]],
 		["Shortage idle time", "%s sim min (sampled)" % _qty(b.delay_seconds / 60.0)],
@@ -519,6 +520,8 @@ func _materials() -> void:
 		var settings: Dictionary = b.catalog.planning(code)
 		var detail := "%s · Safety stock %s %s · Lead %s min · Lot size %s · Safety time %s min" % [item.name, _qty(item.minimum),
 			item.unit, _qty(item.lead / 60.0), b.catalog.lot_caption(code), _qty(settings.safety_time / 60.0)]
+		if item.has("storage"):
+			detail += " · Storage %s" % ("rack, %s %s per pallet" % [_qty(item.pallet_qty), item.unit] if item.storage == "rack" else item.storage.replace("_", " "))
 		if item.type == "FERT":
 			detail += "\n%s / %s · %s · Pack %s kg × %d = %s kg per shipping box\n%d boxes per pallet · %s kg net per pallet · BOM %s · %s\nShelf life %d days · Standard batch %s kg" % [
 				item.coating, item.wafer, item.family, _qty(item.pack_kg), item.packs_per_box, _qty(item.box_kg),
@@ -585,10 +588,21 @@ func _bom_node(parent: TreeItem, code: String, parent_code: String, quantity: fl
 	row.collapsed = not bom.is_empty()
 
 
+func _raw_summary() -> String:
+	var room: Dictionary = line.erp.raw_warehouse()
+	var text := "%d / %d pallet positions used · %d free" % [room.used, room.capacity, room.free]
+	if not room.waiting.is_empty():
+		var pallets := 0
+		for row in room.waiting:
+			pallets += row.pallets
+		text += " · %d PO%s with %d pallets waiting at the dock" % [room.waiting.size(), "" if room.waiting.size() == 1 else "s", pallets]
+	return text
+
+
 func _inventory() -> void:
 	var b := line.erp
-	var root := _header(["Material", "Description", "Location", "On hand", "Reserved", "Available", "In transit", "Unit"],
-		"Raw stock comes from the ledger. WIP and finished goods come from physical buffers and pallets.")
+	var root := _header(["Material", "Description", "Location", "On hand", "Reserved", "Available", "In transit", "Pallets", "Unit"],
+		"RM-WH  ·  " + _raw_summary() + "\nRaw stock comes from the ledger. WIP and finished goods come from physical buffers and pallets.")
 	for code in b.catalog.materials:
 		var item: Dictionary = b.catalog.materials[code]
 		if item.procurement != "External":
@@ -619,11 +633,18 @@ func _inventory() -> void:
 func _inventory_row(root: TreeItem, code: String, location: String, qty: float, reserved: float) -> void:
 	var item: Dictionary = line.erp.catalog.materials[code]
 	var moving := location == "TRANSIT"
+	var catalog = line.erp.catalog
+	var pallets := ""
+	if location == "RM-WH":
+		var storage: String = item.get("storage", "")
+		pallets = str(catalog.positions(code, qty)) if storage == "rack" else {"tank": "tank", "pallet_store": "pallet store", "shelf": "shelf"}.get(storage, "")
+	var detail := "%s · %s · %s %s\nReservations are assigned across locations for display." % [
+		code, catalog.locations[location], _qty(qty), item.unit]
+	if location == "RM-WH" and catalog.pallet_qty(code) > 0.0:
+		detail += "\n%s %s per pallet · room for %s more in RM-WH" % [_qty(catalog.pallet_qty(code)), item.unit, _qty(line.erp.raw_room(code))]
 	_row(root, [code, item.name, location, _qty(0.0 if moving else qty), _qty(reserved),
-		_qty(0.0 if moving else maxf(0.0, qty - reserved)), _qty(qty if moving else 0.0), item.unit],
-		{"key": code + location, "code": code, "location": location,
-			"detail": "%s · %s · %s %s\nReservations are assigned across locations for display." % [
-				code, line.erp.catalog.locations[location], _qty(qty), item.unit]})
+		_qty(0.0 if moving else maxf(0.0, qty - reserved)), _qty(qty if moving else 0.0), pallets, item.unit],
+		{"key": code + location, "code": code, "location": location, "detail": detail})
 
 
 func _mrp() -> void:
@@ -914,10 +935,20 @@ func _procurement() -> void:
 				{"key": supplier.id, "detail": ", ".join(PackedStringArray(supplier.codes))})
 		return
 	var root := _header(["PO", "Supplier", "Material", "Ordered", "Received", "Expected", "Status"],
-		"Open purchases receive automatically when simulated time reaches the delivery date.")
+		"Deliveries are put away when they arrive, as far as raw-warehouse pallet positions allow. The rest waits at the dock.\nRM-WH  ·  " + _raw_summary())
 	for po in b.purchases.values():
-		_row(root, [po.id, po.supplier, po.code, _qty(po.qty), _qty(po.received), Book.date(po.due), po.status],
-			{"key": po.id, "detail": "%s · %s · %s per %s" % [po.id, b.catalog.suppliers[po.supplier].name, _qty(po.price), b.catalog.materials[po.code].unit]})
+		var waiting := float(po.get("at_dock", 0.0))
+		var status: String = po.status
+		if status != "Received" and waiting > Book.EPS:
+			status = "At dock · %s" % _qty(waiting)
+		var detail := "%s · %s · %s per %s · %d pallet%s" % [po.id, b.catalog.suppliers[po.supplier].name, _qty(po.price),
+			b.catalog.materials[po.code].unit, b.catalog.positions(po.code, po.qty), "" if b.catalog.positions(po.code, po.qty) == 1 else "s"]
+		if float(po.get("dock_seconds", 0.0)) > 0.0:
+			detail += "\nWaited %s sim min at the dock for warehouse space" % _qty(po.dock_seconds / 60.0)
+		var row := _row(root, [po.id, po.supplier, po.code, _qty(po.qty), _qty(po.received), Book.date(po.due), status],
+			{"key": po.id, "detail": detail})
+		if row != null and waiting > Book.EPS:
+			row.set_custom_color(6, Color("#a14532"))
 
 
 func _movements() -> void:

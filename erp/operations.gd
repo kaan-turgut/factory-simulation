@@ -151,6 +151,8 @@ func manual_transfer(code: String, qty: float, source: String, target: String, r
 		return "The mezzanine holds raw ingredients."
 	if minf(stock(code, source) - _planned_pickups(code, source), available(code)) + EPS < qty:
 		return "Insufficient unreserved stock."
+	if target == "RM-WH" and qty > raw_room(code) + EPS:
+		return "The raw material warehouse has no free pallet position for this return."
 	reservations[code] = float(reservations.get(code, 0.0)) + qty
 	manual_shipments.append({"source": source, "target": target, "items": {code: qty},
 		"order": _id("TR"), "reason": reason, "manual": true})
@@ -426,10 +428,53 @@ func receive(id: String, qty: float) -> String:
 			or not _quantity(po.code, qty) or qty > po.qty - po.received + EPS:
 		return "Receipt is early, already complete, or outside the open quantity."
 	qty = minf(qty, po.qty - po.received)
-	po.received += qty
+	# Put away only what fits on the raw-material racks; the rest waits on the truck at the dock.
+	var room := raw_room(po.code)
+	if room <= EPS:
+		po.at_dock = po.qty - po.received
+		return "The raw material warehouse is full. %s waits at the dock." % id
+	var stored := minf(qty, room)
+	if catalog.materials[po.code].unit == "ea":
+		stored = floorf(stored + EPS)
+	if stored <= EPS:
+		po.at_dock = po.qty - po.received
+		return "The raw material warehouse is full. %s waits at the dock." % id
+	po.received += stored
 	po.status = "Received" if po.received + EPS >= po.qty else "Partial"
-	_post(po.code, qty, "", "RM-WH", "PO Receipt", id, "Supplier delivery")
-	return ""
+	po.at_dock = 0.0 if po.status == "Received" else po.qty - po.received
+	_post(po.code, stored, "", "RM-WH", "PO Receipt", id, "Supplier delivery")
+	return "" if stored + EPS >= qty else "Only %s %s fitted in the warehouse. The rest waits at the dock." % [
+		String.num(stored, 3), catalog.materials[po.code].unit]
+
+
+# --- Raw-material warehouse capacity -------------------------------------------
+
+## Pallet positions occupied in RM-WH, optionally ignoring one material.
+func raw_positions_used(except: String = "") -> int:
+	var used := 0
+	for code in balances["RM-WH"]:
+		if code != except:
+			used += catalog.positions(code, stock(code, "RM-WH"))
+	return used
+
+
+## Base-unit quantity of a material that still fits in RM-WH. Unlimited for materials not stored on racks.
+func raw_room(code: String) -> float:
+	var per_pallet: float = catalog.pallet_qty(code)
+	if per_pallet <= 0.0:
+		return INF
+	var free_positions := catalog.raw_capacity() - raw_positions_used(code)
+	return maxf(0.0, free_positions * per_pallet - stock(code, "RM-WH"))
+
+
+func raw_warehouse() -> Dictionary:
+	var waiting := []
+	for po in purchases.values():
+		if po.status != "Received" and float(po.get("at_dock", 0.0)) > EPS:
+			waiting.append({"po": po.id, "code": po.code, "qty": po.at_dock, "pallets": catalog.positions(po.code, po.at_dock),
+				"seconds": float(po.get("dock_seconds", 0.0))})
+	var used := raw_positions_used()
+	return {"capacity": catalog.raw_capacity(), "used": used, "free": maxi(0, catalog.raw_capacity() - used), "waiting": waiting}
 
 
 func active() -> Dictionary:
@@ -443,6 +488,8 @@ func clock(seconds: float) -> void:
 		for po in purchases.values():
 			if po.status != "Received" and po.due <= now:
 				receive(po.id, po.qty - po.received)
+				if po.status != "Received":
+					po.dock_seconds = float(po.get("dock_seconds", 0.0)) + 1.0
 		if explicit_planning and auto_release and revision != _auto_release_checked:
 			_auto_release_orders()
 			_auto_release_checked = revision

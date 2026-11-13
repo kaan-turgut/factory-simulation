@@ -195,8 +195,11 @@ func refresh(line: Line) -> void:
 			_status("SFG-WH · Wafer stock", Palette.SFG)
 			_readout.text = "%.1f kg received at the tray-cart dock." % total
 		&"RawWarehouse":
-			_status("RM-WH · Raw inventory", Palette.SFG)
-			_readout.text = "Flour and sugar · Oils and inputs · Coatings · Cartons · Labels\nOpen ERP stock to inspect and manage balances."
+			var room: Dictionary = line.erp.raw_warehouse()
+			var full: bool = room.free == 0 or not room.waiting.is_empty()
+			_status("RM-WH · %d / %d pallet positions" % [room.used, room.capacity], Palette.BLOCKED if full else Palette.SFG)
+			_readout.text = "%d free positions · %d deliveries waiting at the dock\nOne position per pallet, part-full pallets included.\nOpen ERP stock to inspect and manage balances." % [
+				room.free, room.waiting.size()]
 		&"Hopper":
 			_status("Ingredient replenishment", Palette.SFG)
 			_readout.text = "On hand   %s\nReserved for incoming sacks   %.1f kg" % [

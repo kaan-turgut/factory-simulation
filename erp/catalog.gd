@@ -8,6 +8,9 @@ const OPERATIONS := ["extrude", "bake", "coat", "pack"]
 const MATERIAL_STAGES := ["dough", "raw", "baked", "coated", "finished"]
 ## MRP lot-sizing procedures. Finished goods stay lot-for-lot because each order is linked to one demand.
 const LOT_PROCEDURES := {"EX": "Lot-for-lot", "FX": "Fixed lot", "PB": "Period lot"}
+## Where external materials live. Only "rack" uses raw-material warehouse pallet positions;
+## water comes from a tank, empty pallets from the pallet store, labels from shelving.
+const STORAGE_TYPES := ["rack", "tank", "pallet_store", "shelf"]
 const PLANNING_DEFAULTS := {"lot_size": "EX", "fixed_lot": 0.0, "period_seconds": 0.0, "min_lot": 0.0,
 	"max_lot": 0.0, "rounding": 0.0, "safety_time": 0.0}
 const PARAMETERS := {
@@ -43,6 +46,8 @@ var scheduling := {}
 var standards := {}
 var changeovers := {}
 var planning_examples := {}
+## Physical capacity per storage location, from storage_capacity.json. RM-WH counts pallet positions.
+var storage_capacity := {}
 var error := ""
 
 
@@ -94,6 +99,13 @@ func _load(directory: String) -> String:
 	for center in work_centers.values():
 		if center.technical is Dictionary and center.technical.has("max_rate_kg_h"):
 			center.technical.rate = center.technical.max_rate_kg_h
+	result = Master.read("storage_capacity", directory)
+	if not result.error.is_empty():
+		return result.error
+	if not result.data is Dictionary or not result.data.get("RM-WH") is Dictionary \
+			or not Master.number(result.data["RM-WH"].get("positions"), 1, 10000, true):
+		return "storage_capacity.json [RM-WH].positions: expected a whole number of pallet positions."
+	storage_capacity = result.data
 	result = Master.read("scheduling", directory)
 	if not result.error.is_empty():
 		return result.error
@@ -101,6 +113,12 @@ func _load(directory: String) -> String:
 		return "scheduling.json: expected an object."
 	scheduling = result.data
 	var problem := _validate()
+	if problem.is_empty():
+		var used := 0
+		for code in opening:
+			used += positions(code, opening[code])
+		if used > raw_capacity():
+			problem = "materials.json: opening stock needs %d raw-warehouse pallet positions, more than the %d in storage_capacity.json." % [used, raw_capacity()]
 	if problem.is_empty():
 		problem = _validate_scheduling()
 	return Standards.validate(self) if problem.is_empty() else problem
@@ -143,6 +161,11 @@ func _validate() -> String:
 				return "materials.json [%s].opening: opening stock must be external and at RM-WH." % code
 			opening[code] = item.opening
 		item.erase("opening")
+		if item.procurement == "External":
+			if item.get("storage") not in STORAGE_TYPES:
+				return "materials.json [%s].storage: expected one of %s." % [code, ", ".join(PackedStringArray(STORAGE_TYPES))]
+			if item.storage == "rack" and not Master.number(item.get("pallet_qty"), 0.001, INF, item.unit == "ea"):
+				return "materials.json [%s].pallet_qty: racked material needs its quantity per pallet." % code
 		if item.type == "FERT" and not item.has("box_kg"):
 			return "products.json [%s]: finished material needs a product specification." % code
 		if item.has("planning"):
@@ -589,6 +612,35 @@ func edit_material(code: String, name: String, minimum: float, lead: float, acti
 	item.lead = lead
 	item.active = active
 	return ""
+
+
+## Base-unit quantity on one raw-warehouse pallet, or 0 when the material is not stored on racks.
+func pallet_qty(code: String) -> float:
+	var item: Dictionary = materials.get(code, {})
+	return float(item.get("pallet_qty", 0.0)) if item.get("storage", "") == "rack" else 0.0
+
+
+## Whole pallet positions a quantity occupies. A part-full pallet still takes a position.
+func positions(code: String, quantity: float) -> int:
+	var per_pallet := pallet_qty(code)
+	return ceili(quantity / per_pallet - 0.000001) if per_pallet > 0.0 and quantity > 0.000001 else 0
+
+
+func raw_capacity() -> int:
+	return int(storage_capacity.get("RM-WH", {}).get("positions", 0))
+
+
+## Add storage settings that a save made before warehouse capacity existed does not carry.
+func backfill_storage(fresh: Dictionary, fresh_capacity: Dictionary) -> void:
+	for code in materials:
+		var source: Dictionary = fresh.get(code, {})
+		for key in ["storage", "pallet_qty"]:
+			if not materials[code].has(key) and source.has(key):
+				materials[code][key] = source[key]
+		if materials[code].get("procurement") == "External" and not materials[code].has("storage"):
+			materials[code].storage = "shelf"
+	if storage_capacity.is_empty():
+		storage_capacity = fresh_capacity.duplicate(true)
 
 
 ## MRP settings for a material, with defaults for anything not set.

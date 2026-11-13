@@ -13,7 +13,7 @@ const RESCHEDULE_TOLERANCE := 1800.0
 const RECEIPT_KINDS := ["Open PO", "Scheduled order", "Production proposal", "Purchase proposal",
 	"Firmed planned order", "Firmed requisition"]
 const SEVERITY := {"start_in_past": 3, "reschedule_in": 3, "supply_late": 3, "no_source": 3,
-	"safety_stock": 2, "cancel": 2, "reschedule_out": 1, "excess": 1}
+	"safety_stock": 2, "storage_full": 2, "at_dock": 3, "cancel": 2, "reschedule_out": 1, "excess": 1}
 
 var book
 var report
@@ -118,6 +118,7 @@ func run(target, ledger, finished: Dictionary) -> void:
 			below[row.code] = true
 			_exception("safety_stock", row.code, row.doc, row.date,
 				"Projected stock %s falls below safety stock %s" % [_q(row.projected), _q(minimum)])
+	_storage_exceptions()
 	_decorate_rows()
 	_coverage()
 
@@ -426,6 +427,57 @@ func _receipt_exceptions(code: String, receipts: Array) -> void:
 		if is_finite(receipt.first_use) and receipt.first_use > receipt.date + RESCHEDULE_TOLERANCE:
 			_exception("reschedule_out", code, receipt.id, receipt.date,
 				"Postpone by %s to %s" % [_span(receipt.first_use - receipt.date), _clock(receipt.first_use)])
+
+
+## Follow raw-warehouse pallet positions through the dated rows and flag receipts that will not fit.
+func _storage_exceptions() -> void:
+	var catalog = book.catalog
+	var capacity: int = catalog.raw_capacity()
+	for po in book.purchases.values():
+		if po.status != "Received" and float(po.get("at_dock", 0.0)) > EPS:
+			_exception("at_dock", po.code, po.id, po.due, "Waiting at the dock: the raw material warehouse is full")
+	if capacity <= 0:
+		return
+	var held := {}
+	var used := 0
+	for code in catalog.materials:
+		if catalog.pallet_qty(code) <= 0.0:
+			continue
+		var in_house: float = book.stock(code, "RM-WH")
+		# Reserved stock leaves the warehouse with its released order; stock already staged covers it first.
+		var staged: float = book.total_stock(code) - in_house
+		held[code] = maxf(0.0, in_house - maxf(0.0, float(book.reservations.get(code, 0.0)) - staged))
+		used += catalog.positions(code, held[code])
+	var flagged := {}
+	for row in report.rows:
+		if not held.has(row.code):
+			continue
+		var delta := 0.0
+		if row.kind == "Requirement":
+			delta = -row["out"]
+		elif row.kind in RECEIPT_KINDS:
+			delta = row["in"]
+		else:
+			continue
+		var before: float = held[row.code]
+		var after := maxf(0.0, before + delta)
+		used += catalog.positions(row.code, after) - catalog.positions(row.code, before)
+		held[row.code] = after
+		if delta <= 0.0 or used <= capacity:
+			continue
+		var element: String = row.doc
+		var proposal: Dictionary = report.proposals.get(row.proposal, {})
+		if not proposal.is_empty():
+			element = proposal.number
+		if flagged.has(element):
+			continue
+		flagged[element] = true
+		var message := "Needs %d of %d raw-warehouse pallet positions on arrival at %s" % [used, capacity, _clock(row.date)]
+		_exception("storage_full", row.code, element, row.date, message)
+		if not proposal.is_empty():
+			proposal.exceptions.append(message)
+			if book.planned_orders.has(element):
+				book.planned_orders[element].exceptions.append(message)
 
 
 func _peg_exceptions() -> void:

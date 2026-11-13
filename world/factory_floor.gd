@@ -71,6 +71,11 @@ var _enrobers := {}
 var _hall: Hall
 var _route_overlay: Node3D
 var _raw_groups: Array[Node3D] = []
+## High-bay raw warehouse: one slot per pallet position, drawn with three multimeshes.
+var _raw_slots: Array[Transform3D] = []
+var _raw_decks: MultiMesh
+var _raw_cases: MultiMesh
+var _raw_sacks: MultiMesh
 var _pallet_picks: Array[Equipment] = []
 var _raw_revision := -1
 var _coating_colors := {}
@@ -84,6 +89,8 @@ var _cream_supplies: Array[Node3D] = []
 func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	_erp_enabled = erp_enabled
 	_raw_groups.clear()
+	_raw_slots.clear()
+	_raw_decks = null
 	_pallet_picks.clear()
 	_raw_revision = -1
 	_coating_colors.clear()
@@ -537,6 +544,8 @@ func _build_raw_warehouse() -> void:
 	_warehouse_views.append(WarehouseView.new(node, _draw, room, TEAL, _industrial))
 	node.offset_readout(Vector3(0, room.height - spec.height, -spec.size.y * 0.25))
 	_draw.box(node, Vector3(0, 0.045, 0), Vector3(spec.size.x - 0.2, 0.09, spec.size.y - 0.2), Color("#687f8b"))
+	if high_bay:
+		_build_raw_slots(node, room)
 	for index in room.racks.size():
 		var area := room.racks[index]
 		var center := area.get_center()
@@ -550,6 +559,9 @@ func _build_raw_warehouse() -> void:
 					Vector3(0.09, 1.76, 0.12), STEEL)
 			for y: float in [0.27, 1.12]:
 				_draw.box(node, Vector3(x, y, z), Vector3(area.size.x, 0.11, area.size.y), TEAL)
+		if high_bay:
+			_floor_text(node.to_global(Vector3(x, 0.13, apron)), "RACK " + "ABCDE"[index % 5], PALE, 0.020)
+			continue
 		var group := Node3D.new()
 		group.position = Vector3(x, 0, z)
 		node.add_child(group)
@@ -763,6 +775,107 @@ func _animate_cells(line: Line, delta: float) -> void:
 			marks[index].position.x = lerpf(-half, half, progress)
 
 
+## Two pallets per bay on the three storage levels of every rack: one slot per RM-WH pallet position.
+func _build_raw_slots(node: Node3D, room: Layout.WarehouseRoom) -> void:
+	for area in room.racks:
+		for level in room.rack_levels.slice(0, 3):
+			for bay in room.rack_bays:
+				var width := area.size.x / room.rack_bays
+				for side in 2:
+					var x := area.position.x + width * (bay + 0.25 + side * 0.5)
+					_raw_slots.append(Transform3D(Basis.IDENTITY, Vector3(x, level + 0.10, area.get_center().y)))
+	var deck := BoxMesh.new()
+	deck.size = Vector3.ONE
+	deck.material = _stock.wood(Color("#a8865c"))
+	var case := BoxMesh.new()
+	case.size = Vector3.ONE
+	case.material = _stock.instanced_board()
+	var sack: Array = _stock.instanced_sack()
+	_raw_decks = _rack_layer(node, deck, false)
+	_raw_cases = _rack_layer(node, case, true)
+	_raw_sacks = _rack_layer(node, sack[0], true, sack[1])
+
+
+func _rack_layer(node: Node3D, mesh: Mesh, colored: bool, surface: Material = null) -> MultiMesh:
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.use_colors = colored
+	multi.mesh = mesh
+	multi.instance_count = _raw_slots.size() * (10 if surface != null else 1)
+	multi.visible_instance_count = 0
+	var view := MultiMeshInstance3D.new()
+	view.multimesh = multi
+	view.material_override = surface
+	view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(view)
+	return multi
+
+
+## Load look per material: powders in woven sacks, the rest as wrapped cases, drums or totes.
+static func _raw_load(code: String) -> Array:
+	if code in ["RM-FLOUR", "RM-SUGAR", "RM-MILK", "RM-COCOA", "RM-GUMBASE", "RM-MALTITOL", "RM-XYLITOL", "RM-SORBITOL"]:
+		var tint: Color = {"RM-SUGAR": Color("#f4f1ea"), "RM-MILK": Color("#eef0f2"), "RM-COCOA": Color("#b08a6e"),
+			"RM-GUMBASE": Color("#d7d2c2")}.get(code, Color("#e6dcc8"))
+		return ["sack", tint, 1.0]
+	if code.begins_with("RM-SYRUP-") or code in ["RM-OIL", "RM-GLUCOSE", "RM-GLYCERIN"]:
+		return ["case", Color("#dfe7ea"), 1.15]
+	if code.begins_with("RM-AROMA-") or code.begins_with("RM-COLOR-"):
+		return ["case", Color("#3f74a8"), 0.85]
+	if code.begins_with("RM-COAT-"):
+		return ["case", Color("#8a5c40"), 0.95]
+	if code.begins_with("PK-WRAP") or code in ["PK-WALLET", "PK-POUCH-KIDS"]:
+		return ["case", Color("#d4dadd"), 1.0]
+	if code == "PK-BOTTLE":
+		return ["case", Color("#bcd6e6"), 1.3]
+	return ["case", Color("#c79b67"), 1.1]
+
+
+## Fill rack slots from the ledger: each racked material takes its whole pallets in code order,
+## and its last pallet stands as high as it is full.
+func _refresh_raw_slots(book) -> void:
+	var catalog = book.catalog
+	var codes: Array = book.balances["RM-WH"].keys()
+	codes.sort()
+	var slot := 0
+	var cases := 0
+	var sacks := 0
+	for code: String in codes:
+		var per_pallet: float = catalog.pallet_qty(code)
+		var qty: float = book.stock(code, "RM-WH")
+		if per_pallet <= 0.0 or qty <= Line.EPSILON:
+			continue
+		var look := _raw_load(code)
+		var pallets: int = catalog.positions(code, qty)
+		for index in pallets:
+			if slot >= _raw_slots.size():
+				break
+			var fill := clampf(qty / per_pallet - index, 0.0, 1.0)
+			var base := _raw_slots[slot]
+			slot += 1
+			_raw_decks.set_instance_transform(slot - 1, base.scaled_local(Vector3(1.32, 0.14, 1.05)).translated_local(Vector3(0, 0.5, 0)))
+			if look[0] == "sack":
+				var layers := maxi(1, ceili(fill * 5.0 - 0.01))
+				for layer in layers:
+					# Interlocked layers: lengthwise along the rack depth, then across it.
+					var across := layer % 2 == 1
+					for side in 2:
+						var offset := Vector3(0, 0, (side - 0.5) * 0.62) if across else Vector3((side - 0.5) * 0.62, 0, 0)
+						var at := base.origin + offset + Vector3(0, 0.28 + layer * 0.25, 0)
+						var turn := Basis.IDENTITY if across else Basis(Vector3.UP, PI * 0.5)
+						_raw_sacks.set_instance_transform(sacks, Transform3D(turn.scaled(Vector3(1.0, 0.85, 1.0)), at))
+						_raw_sacks.set_instance_color(sacks, look[1])
+						sacks += 1
+			else:
+				var height: float = 1.15 * look[2] * maxf(0.2, fill)
+				_raw_cases.set_instance_transform(cases, Transform3D(Basis.IDENTITY.scaled(Vector3(1.22, height, 0.98)),
+					base.origin + Vector3(0, 0.14 + height * 0.5, 0)))
+				_raw_cases.set_instance_color(cases, look[1])
+				cases += 1
+	_raw_decks.visible_instance_count = slot
+	_raw_cases.visible_instance_count = cases
+	_raw_sacks.visible_instance_count = sacks
+
+
 func _refresh_erp(line: Line) -> void:
 	var book := line.erp
 	if _raw_revision != book.warehouse_revision:
@@ -781,7 +894,12 @@ func _refresh_erp(line: Line) -> void:
 			qty[index] += book.stock(code, "RM-WH")
 		for index in _raw_groups.size():
 			_raw_groups[index].visible = qty[index] > Line.EPSILON
-		_equipment[&"RawWarehouse"].update_machine("RM  Raw materials", "ChocoERP stock", Palette.SFG)
+		if _raw_decks != null:
+			_refresh_raw_slots(book)
+		var room: Dictionary = book.raw_warehouse()
+		var blocked: bool = room.free == 0 or not room.waiting.is_empty()
+		_equipment[&"RawWarehouse"].update_machine("RM  Raw materials", "%d / %d pallet positions%s" % [room.used, room.capacity,
+			" · %d at dock" % room.waiting.size() if not room.waiting.is_empty() else ""], Palette.BLOCKED if blocked else Palette.SFG)
 	var sfg := _equipment[&"SFGWarehouse"]
 	var kg := 0.0
 	for quantity in book.balances["SFG-WH"].values():

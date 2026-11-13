@@ -72,6 +72,22 @@ func cardboard(color: Color) -> StandardMaterial3D:
 	return _board[color]
 
 
+## Board surface for instanced rack loads: each instance colour tints the flutes.
+func instanced_board() -> StandardMaterial3D:
+	var surface := _textured(Color.WHITE, _flutes, 0.9, 3.0)
+	surface.vertex_color_use_as_albedo = true
+	return surface
+
+
+## The shared sack mesh and a tintable copy of its woven surface, for instanced stacks.
+func instanced_sack() -> Array:
+	if _sack_mesh == null:
+		_build_sack()
+	var surface: StandardMaterial3D = _sack_surface.duplicate()
+	surface.vertex_color_use_as_albedo = true
+	return [_sack_mesh, surface]
+
+
 func _wafer_sheet(color: Color) -> StandardMaterial3D:
 	if not _wafer.has(color):
 		_wafer[color] = _textured(color, _waffle, 0.8, 9.0)

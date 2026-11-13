@@ -1,0 +1,7 @@
+{
+  "RM-WH": {
+    "positions": 90,
+    "unit": "pallet positions",
+    "note": "5 high-bay racks x 3 bays x 3 storage levels x 2 pallets. Sized so that roughly one day of full-rate, three-shift consumption of every racked material fits (about 82 positions), which leaves little slack. Each material uses whole positions: a part-full pallet still blocks one."
+  }
+}

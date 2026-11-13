@@ -22,6 +22,14 @@ Exceptions are computed during netting. Movable receipts are created orders, rel
 
 MRP still assumes unlimited capacity. Conversion schedules each order in the first free finite slot, which can be later than the backward-scheduled date. The resulting gaps show as exceptions on the next run.
 
+## Raw-material warehouse capacity
+
+RM-WH capacity is counted in pallet positions (`storage_capacity.json`, 90 by default). `catalog.positions(code, qty)` rounds each racked material up to whole pallets using its `pallet_qty`; tank, pallet-store and shelf materials need none. `operations.raw_room(code)` is the quantity that still fits, counting the material's own part-full pallet. Only PO receipts and returns from the mezzanine are limited. Stock adjustments record what is physically there and may exceed capacity.
+
+A due PO puts away what fits once per simulated second. The remainder stays on the PO as `at_dock`, `dock_seconds` counts the wait, and the PO stays `Partial` until the rest fits. MRP walks the dated rows of racked materials from current RM-WH stock, minus reservations not yet covered by staged stock, and raises `storage_full` on the first receipt that would exceed capacity. It also raises `at_dock` for waiting deliveries.
+
+The capacity comes from a full-rate day. Equal boxes per SKU within each family run at the family's pooled bottleneck: the cooling tunnel for wafers, about 2,670 boxes a day, and gum conditioning, about 4,040 boxes a day. Exploded to purchased materials and rounded to whole pallets per material, that needs about 82 positions. Opening stock uses 69.
+
 ## Persistence
 
 Native save version 6 stores the planning catalog, planned orders and their numbering, schedule, BOM and routing snapshots, open reservations, movement IDs, pegging, progress, and the active stock dock assignment, standards, cleaning rules, operating factors, and in-flight cell state. Loading restores them without replaying events. Earlier active combined orders can drain their WIP. Their waiting combined orders retain their original snapshots and reservations until cancellation. The legacy execution mode remains available to the regression fixtures.

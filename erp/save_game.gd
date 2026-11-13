@@ -13,7 +13,7 @@ const ACTOR_FIELDS := ["id", "title", "position", "previous_position", "heading"
 	"destination", "remaining", "cargo_kg", "reserved_kg", "_route"]
 const CART_FIELDS := ["id", "raw", "coated", "site", "home", "position", "previous_position", "heading", "owner", "order_id", "material"]
 const PALLET_FIELDS := ["target_boxes", "boxes", "mass", "id", "sku", "order_id", "tint", "sealed"]
-const CATALOG_FIELDS := ["materials", "boms", "suppliers", "routings", "work_centers", "production_versions", "locations", "scheduling", "standards", "changeovers", "planning_examples"]
+const CATALOG_FIELDS := ["materials", "boms", "suppliers", "routings", "work_centers", "production_versions", "locations", "scheduling", "standards", "changeovers", "planning_examples", "storage_capacity"]
 const OVEN_FIELDS := ["state", "remaining", "batches", "owner"]
 const MACHINE_FIELDS := ["configured_rate", "actual_rate", "state", "total_output"]
 const STOCK_FIELDS := ["capacity", "quantity"]
@@ -226,6 +226,7 @@ static func restore(data: Dictionary) -> Dictionary:
 		_migrate_expansion(line.erp, expansion)
 	elif not old:
 		_add_new_master_data(line.erp, expansion)
+	line.erp.catalog.backfill_storage(expansion.materials, expansion.storage_capacity)
 	if data.version < 7 and line.settings[&"floor_count"] == 2 and line.floor_crew.size() == 2:
 		line._add_floor_crew(default_floor_count)
 		line.settings[&"floor_count"] = float(line.floor_crew.size())

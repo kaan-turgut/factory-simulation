@@ -38,6 +38,11 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - Saves gain new master data and equipment on load (`save_game._add_new_master_data`, `Layout.fit_appended`). The owner's own save has a rearranged floor; its gum block lands behind the cream line.
 - Run `tests/gum_line_test.gd` after touching gum master data, cells, shared supplies or save migration.
 
+## Raw-material warehouse capacity (Nov 2026)
+- RM-WH holds 90 pallet positions (`master_data/storage_capacity.json`), sized to about one full-rate 24 h day (about 82 positions). Purchased materials carry `storage` (`rack`/`tank`/`pallet_store`/`shelf`) and racked ones `pallet_qty`. Helpers: `catalog.positions`, `catalog.pallet_qty`, `catalog.raw_capacity`, `operations.raw_room`, `operations.raw_warehouse`.
+- Receipts put away only what fits; the rest waits as `po.at_dock`. MRP raises `storage_full` and `at_dock`. The rack view (`factory_floor._refresh_raw_slots`) draws one instanced pallet per occupied position.
+- Opening stock must fit (catalog validation). Run `tests/raw_warehouse_test.gd` after touching storage, receipts or pallet sizes.
+
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.
 - The simulation is fully deterministic: no breakdowns, random cycle times or supplier variability yet. The owner plans to use it for experiments, so any randomness should be seeded and optional.
