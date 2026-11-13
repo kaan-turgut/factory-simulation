@@ -13,29 +13,29 @@ const COOKED := Color("#dfa862")
 const CHOCOLATE := Color("#783c30")
 
 class PalletView:
+	## Cartons are one MultiMesh: one draw call per pallet, the shown count is the
+	## visible instance count and the product's printed board is the material.
 	var root := Node3D.new()
-	var boxes: Array[MeshInstance3D] = []
-	var draw: Primitives
+	var cartons := MultiMeshInstance3D.new()
 	var stock
 	var shown := -1
-	var color_code := ""
+	var product := "?"
 
 	func refresh(pallet: Pallet, show_empty: bool = false) -> void:
 		root.visible = show_empty or pallet != null
 		var count := 0
 		if pallet != null:
-			var displayed := mini(pallet.target_boxes, boxes.size())
+			var displayed := mini(pallet.target_boxes, cartons.multimesh.instance_count)
 			count = ceili(float(pallet.boxes) * displayed / pallet.target_boxes)
-		var tint := pallet.tint if pallet != null and not pallet.tint.is_empty() else ""
-		if color_code != tint:
-			color_code = tint
-			var surface: Material = stock.cardboard(Color(tint) if not tint.is_empty() else CARTON)
-			for box in boxes:
-				box.material_override = surface
+		var key := "" if pallet == null else "%s|%s" % [pallet.sku, pallet.tint]
+		if product != key:
+			product = key
+			cartons.material_override = stock.printed_board(pallet.sku if pallet != null else "",
+				pallet.tint if pallet != null else "")
 		if shown != count:
 			shown = count
-			for index in boxes.size():
-				boxes[index].visible = index < count
+			cartons.multimesh.visible_instance_count = count
+			cartons.visible = count > 0
 
 
 var _draw: Primitives
@@ -48,6 +48,8 @@ var _sack_mesh: ArrayMesh
 var _sack_surface: StandardMaterial3D
 var _waffle: ImageTexture
 var _tape: StandardMaterial3D
+var _printed: Dictionary[String, StandardMaterial3D] = {}
+var _carton_mesh: ArrayMesh
 
 
 func _init(draw: Primitives) -> void:
@@ -297,18 +299,93 @@ func pallet_deck(parent: Node3D, at: Vector3, size: Vector2, height: float = 0.1
 		_draw.box(parent, Vector3(x, at.y + height - board * 0.5, at.z), Vector3(0.11, board, size.y), WOOD).material_override = light
 
 
+const CARTON_SIZE := Vector3(0.74, 0.34, 0.55)
+const CARTON_ART := "res://assets/cartons/%s.png"
+## Atlas regions in assets/cartons/*.png (1024 x 768), kept in step with
+## tools/cartons/build_cartons.py: long sides, short ends, top flaps, underside.
+const ART_FRONT := Rect2(0.0 / 1024, 0.0 / 768, 1024.0 / 1024, 472.0 / 768)
+const ART_END := Rect2(0.0 / 1024, 476.0 / 768, 472.0 / 1024, 292.0 / 768)
+const ART_TOP := Rect2(480.0 / 1024, 476.0 / 768, 392.0 / 1024, 292.0 / 768)
+const ART_BASE := Rect2(884.0 / 1024, 480.0 / 768, 136.0 / 1024, 284.0 / 768)
+
+
 func pallet(parent: Node3D, at: Vector3) -> PalletView:
 	var view := PalletView.new()
-	view.draw = _draw
 	view.stock = self
 	view.root.position = at
 	parent.add_child(view.root)
 	pallet_deck(view.root, Vector3.ZERO, Vector2(1.69, 1.36), 0.23)
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = carton_mesh()
+	multi.instance_count = 12
+	var index := 0
 	for level in 3:
 		for z in 2:
 			for x in 2:
-				view.boxes.append(carton(view.root, Vector3(-0.385 + x * 0.77, 0.40 + level * 0.36,
-					-0.30 + z * 0.60), Vector3(0.74, 0.34, 0.55)))
-	_draw.batch_static(view.root, view.boxes)
+				multi.set_instance_transform(index, Transform3D(Basis.IDENTITY,
+					Vector3(-0.385 + x * 0.77, 0.40 + level * 0.36, -0.30 + z * 0.60)))
+				index += 1
+	view.cartons.multimesh = multi
+	view.cartons.name = "Cartons"
+	view.root.add_child(view.cartons)
+	_draw.batch_static(view.root)
 	view.refresh(null)
 	return view
+
+
+## Shipping carton with its print mapped from the product atlas: both long sides show
+## the brand panel, both ends the flavour panel, the top the taped flaps.
+func carton_mesh() -> ArrayMesh:
+	if _carton_mesh != null:
+		return _carton_mesh
+	var h := CARTON_SIZE * 0.5
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Each face: centre normal, right and up axes (as seen from outside), half extents, atlas rect.
+	var faces := [
+		[Vector3.BACK, Vector3.RIGHT, Vector3.UP, Vector2(h.x, h.y), ART_FRONT],
+		[Vector3.FORWARD, Vector3.LEFT, Vector3.UP, Vector2(h.x, h.y), ART_FRONT],
+		[Vector3.RIGHT, Vector3.FORWARD, Vector3.UP, Vector2(h.z, h.y), ART_END],
+		[Vector3.LEFT, Vector3.BACK, Vector3.UP, Vector2(h.z, h.y), ART_END],
+		[Vector3.UP, Vector3.RIGHT, Vector3.FORWARD, Vector2(h.x, h.z), ART_TOP],
+		[Vector3.DOWN, Vector3.RIGHT, Vector3.BACK, Vector2(h.x, h.z), ART_BASE],
+	]
+	for face in faces:
+		var normal: Vector3 = face[0]
+		var right: Vector3 = face[1]
+		var up: Vector3 = face[2]
+		var half: Vector2 = face[3]
+		var art: Rect2 = face[4]
+		var center := normal * h
+		var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+		var points: Array[Vector3] = []
+		var uvs: Array[Vector2] = []
+		for corner: Vector2 in corners:
+			points.append(center + right * corner.x * half.x + up * corner.y * half.y)
+			uvs.append(art.position + art.size * Vector2((corner.x + 1.0) * 0.5, (1.0 - corner.y) * 0.5))
+		for i in [0, 2, 1, 0, 3, 2]:
+			tool.set_normal(normal)
+			tool.set_uv(uvs[i])
+			tool.add_vertex(points[i])
+	tool.generate_tangents()
+	_carton_mesh = tool.commit()
+	return _carton_mesh
+
+
+## Printed board for a product's cartons, shared by every pallet of it. Products without
+## artwork (and sandbox pallets) get plain kraft board with a label, tinted by package colour.
+func printed_board(sku: String, tint: String) -> StandardMaterial3D:
+	var key := "%s|%s" % [sku, tint]
+	if _printed.has(key):
+		return _printed[key]
+	var path := CARTON_ART % sku
+	var art := not sku.is_empty() and ResourceLoader.exists(path)
+	var surface := StandardMaterial3D.new()
+	surface.albedo_texture = load(path if art else CARTON_ART % "generic")
+	if not art and not tint.is_empty():
+		surface.albedo_color = Color(tint).lightened(0.35)
+	surface.roughness = 0.88
+	surface.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	_printed[key] = surface
+	return surface
