@@ -183,7 +183,8 @@ func _parallel() -> void:
 
 
 func _coated_transport() -> void:
-	var line := Line.new()
+	# A run on the original floor plan, which the old-save fixtures below are cut from.
+	var line := Line.new(Line.Layout.new(Vector2i.ZERO, "", {}, true))
 	line.enable_erp(false)
 	line.set_setting(&"pack_wip_capacity", 8.0)
 	line.set_setting(&"coated_cart_capacity", 17.0)

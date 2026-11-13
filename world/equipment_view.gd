@@ -25,7 +25,7 @@ func configure(
 		add_hitbox(size, pick_offset)
 
 	_readout = primitives.sign(self, Vector3(0, size.y + 0.68, 0), title, Color.WHITE)
-	_readout.pixel_size = 0.021
+	_readout.pixel_size = 0.016
 	_readout.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_readout.no_depth_test = true
 	_readout.modulate = accent.lightened(0.56)

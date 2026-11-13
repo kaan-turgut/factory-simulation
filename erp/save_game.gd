@@ -110,7 +110,8 @@ static func restore(data: Dictionary) -> Dictionary:
 	var plan: Line.Layout
 	var stockrooms_refitted := false
 	if refit:
-		plan = Line.Layout.new()
+		# Saves this old have no layout of their own: they refit into the original floor plan.
+		plan = Line.Layout.new(Vector2i.ZERO, "", {}, true)
 		plan.error = plan.validate()
 	else:
 		var dimensions: Vector2i = Line.Layout.DEFAULT_SIZE if data.size == Line.Layout.PREVIOUS_SIZE else data.size

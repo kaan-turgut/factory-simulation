@@ -29,7 +29,7 @@ func _run() -> void:
 	_click_button("Grid")
 	_check(_factory.grid_view.is_grid_visible(), "Grid toolbar button shows the overlay")
 	var grid := line.layout.grid
-	_check(grid.size == Vector2i(120, 100)
+	_check(grid.size == Vector2i(120, 75)
 		and camera.is_position_in_frustum(grid.to_world(Vector2(grid.size)))
 		and camera.is_position_in_frustum(grid.origin), "Home camera frames the resized factory")
 	_hover_world(grid.cell_center(Vector2i(22, 5)))
@@ -46,7 +46,7 @@ func _run() -> void:
 	await _pick_world(grid.cell_center(line.layout.objects[&"Coater"].cell))
 	_check(_factory._placing and line.layout.objects[&"Oven"].cell == old_cell,
 		"Clicking an invalid placement keeps the original station")
-	var new_cell := Vector2i(16, 16)
+	var new_cell := Vector2i(21, 20)
 	await _pick_world(grid.cell_center(new_cell))
 	var oven := line.layout.objects[&"Oven"]
 	var oven_view := _factory.floor_view.view_of(&"Oven")

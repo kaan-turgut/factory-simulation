@@ -201,7 +201,7 @@ func _competing_demand() -> void:
 
 func _planning_and_manufacturing() -> void:
 	var layout := Line.Layout.new()
-	_check(layout.move(&"Oven", Vector2i(16, 16), 1).is_empty(), "ERP uses placed factory layout")
+	_check(layout.move(&"Oven", Vector2i(21, 20), 1).is_empty(), "ERP uses placed factory layout")
 	var line := Line.new(layout)
 	line.enable_erp(false)
 	var b := line.erp

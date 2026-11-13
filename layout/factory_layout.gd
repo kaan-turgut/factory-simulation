@@ -183,7 +183,7 @@ func _read_lanes(data: Dictionary, legacy_plan: bool) -> String:
 	walk_lane = float(lanes.walk)
 	cart_lane = float(lanes.cart)
 	rear_lane = float(lanes.rear)
-	for key in ["aisle_end", "lift_home_x"]:
+	for key in ["aisle_end", "lift_home_x", "crew_home_x"]:
 		if lanes.has(key):
 			if not Master.number(lanes[key], 1.0, 1000.0):
 				return "factory_layout.json lanes.%s: expected a position in metres." % key
@@ -236,6 +236,9 @@ func _numbers(values: Variant, count: int, whole: bool, low: float = 0.0) -> boo
 
 func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 	if location == "RM-STAGE":
+		# Newer plans give the mezzanine a "stage" dock; the original plan used a fixed point.
+		if plan[&"Platform"].ports.has(&"stage"):
+			return port(&"Platform", &"stage", plan)
 		return grid.to_world(Vector2(1.0, 10.0))
 	if SUPPLY_STATIONS.has(location):
 		return port(SUPPLY_STATIONS[location], &"supply", plan)
@@ -275,7 +278,9 @@ func platform_drop(index: int) -> Vector3:
 
 
 func crew_home(index: int) -> Vector3:
-	return grid.to_world(Vector2(7.0 + index * 1.3, 8.05))
+	if not _lane_extras.has("crew_home_x"):
+		return grid.to_world(Vector2(7.0 + index * 1.3, 8.05))
+	return grid.to_world(Vector2(float(_lane_extras.crew_home_x) + index * 1.3, walk_lane - 1.4))
 
 
 func cart_home(index: int, raw: bool) -> Vector3:

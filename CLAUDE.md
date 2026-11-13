@@ -50,6 +50,12 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - The Reset button was removed. Crew/cart counts apply through `Line.sync_fleet()` once no order runs. `line.reset()` remains for the sandbox mode and tests.
 - Tests must set `Instances.directory` to their own folder (see `tests/instances_test.gd`) so they never touch the player's instances. Run that suite after touching instances, the opening page or save/close handling.
 
+## Floor plan (Nov 2026)
+- The default plan (`master_data/factory_layout.json`, 120 × 75 m, plan `aisle-v1`) is a double-loaded production aisle: north row turns 0, south row turns 2 with input/output dock x offsets swapped. Lanes are layout data (`layout.cart_lane`, `walk_lane`, `supply_lane`, `lift_lane`); never use the `Layout.*_LANE` constants outside legacy defaults.
+- Saves without `lanes` are the original plan: `Layout.new(size, "", snapshot)` flags them `legacy` and reads `factory_layout_legacy.json`. `Layout.new(Vector2i.ZERO, "", {}, true)` builds the original plan. Fixtures cut from old saves must use it. Layout files carry `plan` and are refused across plans.
+- Tune the plan with the validator: `Layout.validate()` names the first failing dock, route or belt. Port offsets (supply stops, dock x swaps for turned machines) are data in the JSON.
+- Run `tests/floor_plan_test.gd` and `tests/layout_editor_test.gd` after touching layouts or lanes.
+
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.
 - The simulation is fully deterministic: no breakdowns, random cycle times or supplier variability yet. The owner plans to use it for experiments, so any randomness should be seeded and optional.

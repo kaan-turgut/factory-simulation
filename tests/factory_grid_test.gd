@@ -96,14 +96,14 @@ func _factory_constraints() -> void:
 	_check("overlaps" in plan.validate_move(&"Oven", plan.objects[&"Coater"].cell, 0),
 		"A move cannot claim another machine's cells")
 	# Routes search around equipment, so a dock is only unreachable when it is boxed in:
-	# here the oven's raw dock sits against the rear of Coater 01.
-	_check("route" in plan.validate_move(&"Oven", Vector2i(36, 21), 0),
+	# here the oven sits in the gap between Coater 02 and the cooling tunnel.
+	_check("route" in plan.validate_move(&"Oven", Vector2i(56, 25), 0),
 		"A footprint can fit while its cart dock is boxed in behind another machine")
-	_check(plan.validate_move(&"Oven", Vector2i(18, 16), 1).is_empty(),
+	_check(plan.validate_move(&"Oven", Vector2i(21, 20), 1).is_empty(),
 		"A rotated oven is reachable when carts can drive around it")
-	_check("belt" in plan.validate_move(&"Packer", Vector2i(59, 17), 0),
+	_check("belt" in plan.validate_move(&"Palletizer", Vector2i(79, 21), 0),
 		"Packaging stays connected to the outbound carton conveyor")
-	_check(not plan.move(&"Oven", Vector2i(-1, 16), 0).is_empty() and plan.objects[&"Oven"] == oven,
+	_check(not plan.move(&"Oven", Vector2i(-1, 20), 0).is_empty() and plan.objects[&"Oven"] == oven,
 		"Failed placement leaves the original plan intact")
 	_check(plan.definition(&"CoatedBelt") == null and plan.definition(&"CartonBelt").kind == &"conveyor",
 		"Only the outbound carton conveyor remains")
@@ -116,7 +116,7 @@ func _factory_constraints() -> void:
 func _relocated_production() -> void:
 	var plan := Layout.new()
 	var old_dock := plan.port(&"Oven", &"raw_dock")
-	_check(plan.move(&"Oven", Vector2i(16, 16), 1).is_empty(), "Valid rotated oven can be placed")
+	_check(plan.move(&"Oven", Vector2i(21, 20), 1).is_empty(), "Valid rotated oven can be placed")
 	_check(plan.port(&"Oven", &"raw_dock") != old_dock and plan.validate().is_empty(),
 		"Both geometry and loading destinations use the updated plan")
 	var line := Line.new(plan)

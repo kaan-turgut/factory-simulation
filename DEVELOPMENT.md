@@ -30,6 +30,14 @@ A due PO puts away what fits once per simulated second. The remainder stays on t
 
 The capacity comes from a full-rate day. Equal boxes per SKU within each family run at the family's pooled bottleneck: the cooling tunnel for wafers, about 2,670 boxes a day, and gum conditioning, about 4,040 boxes a day. Exploded to purchased materials and rounded to whole pallets per material, that needs about 82 positions. Opening stock uses 69.
 
+## Floor plan and lanes
+
+A layout file defines `size`, `plan` (the plan family), `lanes` and `objects`. The five routing lanes are grid Z values: `cart` and `walk` for the floor crew, `supply` for the material handler, `lift` for the forklift and `rear` for the legacy rear approach. Optional `aisle_end`, `lift_home_x`, `crew_home_x` and `reserved` rectangles place the forklift home, crew home and the cells the editor keeps clear. The Layout class exposes them as `cart_lane`, `walk_lane`, `supply_lane`, `lift_lane` and `rear_lane`. The old constants remain only as defaults for the original plan.
+
+The aisle plan is double-loaded: machines on both sides of one six-metre aisle, north-row machines facing south and south-row machines turned 180° with their input and output docks swapped, so material still flows west to east. Docks and supply stops sit inside the aisle. Each lane runs in the clear strip between the two rows' cart bodies, so cart and walk lanes are one to two metres wide and the supply and forklift lanes use the full aisle. The forklift drives the aisle to the east side, north along the east wall and into the shipping door. The packing block keeps its belt geometry: the palletizer's front edge lines up with the row, with the packer set back four metres. `Platform` carries a `stage` dock for the ingredient stop, where the original plan used a fixed point.
+
+Saves record the plan. A snapshot without `lanes` loads as the original plan (`legacy`), with `factory_layout_legacy.json` as its defaults for appended equipment and the Default button. Saves older than layouts refit into that plan. Layout files made in Build Mode carry a `plan` and only apply to the same plan.
+
 ## Persistence
 
 Native save version 6 stores the planning catalog, planned orders and their numbering, schedule, BOM and routing snapshots, open reservations, movement IDs, pegging, progress, and the active stock dock assignment, standards, cleaning rules, operating factors, and in-flight cell state. Loading restores them without replaying events. Earlier active combined orders can drain their WIP. Their waiting combined orders retain their original snapshots and reservations until cancellation. The legacy execution mode remains available to the regression fixtures.

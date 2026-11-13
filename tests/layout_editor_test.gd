@@ -42,10 +42,10 @@ func _transactions_and_production() -> void:
 	var overlap := editor.preview(id, line.layout.objects[&"Coater"].cell, 0)
 	_check("overlaps" in overlap.reason and not overlap.conflicts.is_empty(), "Overlapping cells are marked")
 	_check("wall" in editor.preview(id, Vector2i(-2, 15), 0).reason, "Reject an outside footprint")
-	_check("obstructed" in editor.preview(&"Oven", Vector2i(36, 21), 0).reason, "Reject an inaccessible dock")
+	_check("obstructed" in editor.preview(&"Oven", Vector2i(56, 25), 0).reason, "Reject an inaccessible dock")
 	_check(not editor.apply(overlap.changes).is_empty() and line.layout.objects[id] == old, "Invalid changes are atomic")
 
-	var rotated := editor.preview(&"Oven", Vector2i(16, 16), 1)
+	var rotated := editor.preview(&"Oven", Vector2i(21, 20), 1)
 	_check(rotated.reason.is_empty(), "Quarter turn with accessible docks validates")
 	_check(editor.apply(rotated.changes).is_empty() and line.layout.objects[&"Oven"].footprint().size == Vector2i(4, 5),
 		"Quarter turn swaps rectangular footprint dimensions")
@@ -53,7 +53,7 @@ func _transactions_and_production() -> void:
 	_check(editor.redo().is_empty() and line.layout.objects[&"Oven"].turns == 1, "Redo restores quarter turn")
 	_check(editor.undo().is_empty(), "Restore original Oven 01 before alternate-route test")
 
-	var moved := editor.preview(id, Vector2i(26, 16), 0)
+	var moved := editor.preview(id, Vector2i(31, 20), 0)
 	_check(moved.reason.is_empty() and editor.apply(moved.changes).is_empty(), "Move Oven 02 by a cell")
 	_check(line.layout.port(id, &"raw_dock") != dock and line.layout.objects.size() == original_nodes,
 		"Dock follows the move without duplicating equipment")
@@ -66,18 +66,18 @@ func _transactions_and_production() -> void:
 	_check(editor.save(path).is_empty() and not editor.dirty(), "Save independent placement file")
 	var payload: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 	var saved_pose: Array = payload.placements["Oven02"]
-	_check(saved_pose[0] == 26 and saved_pose[1] == 16 and saved_pose[2] == 0 and not payload.has("materials"),
+	_check(saved_pose[0] == 31 and saved_pose[1] == 20 and saved_pose[2] == 0 and not payload.has("materials"),
 		"Layout file contains stable IDs and poses")
 	var resumed := Line.new()
 	resumed.enable_erp(false)
 	var new_editor := Editor.new(resumed)
 	_check(new_editor.load_layout(path).is_empty(), "Load the saved layout into a fresh simulation")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	_check(resumed.layout.objects[id].cell == Vector2i(26, 16), "Oven 02 persisted at the new cell")
+	_check(resumed.layout.objects[id].cell == Vector2i(31, 20), "Oven 02 persisted at the new cell")
 	_check(new_editor.reset_default().is_empty() and resumed.layout.objects[id].cell == old.cell, "Restore defaults")
-	_check(new_editor.undo().is_empty() and resumed.layout.objects[id].cell == Vector2i(26, 16), "Undo default reset")
+	_check(new_editor.undo().is_empty() and resumed.layout.objects[id].cell == Vector2i(31, 20), "Undo default reset")
 	var saved_shift := Save.restore(Save.snapshot(resumed))
-	_check(saved_shift.error.is_empty() and saved_shift.line.layout.objects[id].cell == Vector2i(26, 16),
+	_check(saved_shift.error.is_empty() and saved_shift.line.layout.objects[id].cell == Vector2i(31, 20),
 		"Operational snapshots also retain confirmed placements")
 
 	var order := resumed.erp.create_order("FG-1001", 8, 0, 1, "PV-1001-02")
@@ -107,14 +107,14 @@ func _transactions_and_production() -> void:
 
 	var coupled := Editor.new(line)
 	var hopper_before := line.layout.center(&"Hopper")
-	var linked := coupled.preview(&"Extruder", Vector2i(5, 16), 0)
+	var linked := coupled.preview(&"Extruder", Vector2i(7, 20), 0)
 	_check(linked.reason.is_empty() and coupled.apply(linked.changes).is_empty(), "Move the extruder and hopper together")
 	_check(line.layout.center(&"Hopper") != hopper_before
 		and line.layout.port(&"Extruder", &"feed").is_equal_approx(line.layout.port(&"Hopper", &"outlet")),
 		"Linked ingredient assembly keeps its ports aligned")
-	var packing := coupled.preview(&"Packer", Vector2i(60, 16), 0)
+	var packing := coupled.preview(&"Packer", Vector2i(72, 24), 0)
 	_check(packing.reason.is_empty() and coupled.apply(packing.changes).is_empty()
-		and line.layout.objects[&"PackagingWIP"].cell.x == 58 and line.layout.objects[&"Palletizer"].cell.x == 66,
+		and line.layout.objects[&"PackagingWIP"].cell.x == 71 and line.layout.objects[&"Palletizer"].cell.x == 80,
 		"Packaging group moves with WIP and palletizing")
 
 
@@ -124,10 +124,10 @@ func _stacked_coaters() -> void:
 	var editor := Editor.new(line)
 	var layout := line.layout
 	var front: Line.Layout.Placement = layout.objects[&"Coater"]
-	var rear := Vector2i(front.cell.x, front.cell.y + 8)
+	var rear := Vector2i(58, front.cell.y + 7)
 	var placement := editor.preview(&"Coater02", rear, 0)
 	_check(placement.reason.is_empty() and editor.apply(placement.changes).is_empty(),
-		"Coater 02 can sit behind Coater 01 at the same X coordinate")
+		"Coater 02 can sit behind the cooling tunnel, off the cart aisle")
 	if layout.objects[&"Coater02"].cell != rear:
 		return
 	var start := layout.port(&"Oven02", &"cooked_dock")
@@ -135,7 +135,7 @@ func _stacked_coaters() -> void:
 	var route := layout.route(start, target, layout.cart_lane)
 	var obstacles := layout._obstacles(layout.objects)
 	obstacles.merge(layout._dock_areas(layout._dock_points(layout.objects)))
-	_check(route.size() > 3 and route.back() == target
+	_check(route.size() >= 3 and route.back() == target
 		and layout._path_clear(start, route, 0.34, obstacles, [start, target]),
 		"Rear coater has a safe cart detour around the front station's bays")
 	_check(editor.undo().is_empty() and editor.redo().is_empty()
@@ -162,7 +162,9 @@ func _stacked_coaters() -> void:
 
 
 func _resize_saved_shift() -> void:
-	var former := Line.Layout.new().snapshot()
+	# The former hall is a save of the original floor plan: legacy lanes and defaults.
+	var legacy_defaults := Line.Layout.new(Vector2i.ZERO, "", {}, true)
+	var former := legacy_defaults.snapshot()
 	former.size = [128, 40]
 	# Saves from the 128 × 40 hall predate the gum line; the loader adds it on its own.
 	former.objects = former.objects.filter(func(row: Dictionary) -> bool:
@@ -187,7 +189,7 @@ func _resize_saved_shift() -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(JSON.stringify({"version": 1, "size": [128, 40], "placements": {"Warehouse": [117, 14, 0]}}))
 	file.close()
-	var fresh := Line.new()
+	var fresh := Line.new(Line.Layout.new(Vector2i.ZERO, "", {}, true))
 	var default_cell := fresh.layout.objects[&"Warehouse"].cell
 	_check(Editor.new(fresh).load_layout(path).is_empty() and fresh.layout.objects[&"Warehouse"].cell == default_cell,
 		"The prior layout file keeps the expanded warehouse at its new location")
@@ -274,7 +276,7 @@ func _mouse_workflow() -> void:
 	_check(_factory._selected == id and _factory._drag_armed, "Mouse selects Oven 02 and arms drag")
 	if _factory._selected != id:
 		return
-	var anchor := Vector2i(26, 16)
+	var anchor := Vector2i(31, 20)
 	var center := Vector2(anchor) + Vector2(place.footprint().size) * 0.5
 	var target := _factory.camera.unproject_position(grid.to_world(center + _factory._grab_offset))
 	_motion(target, start)

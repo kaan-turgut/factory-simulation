@@ -19,7 +19,7 @@ A playable 3D chocolate wafer factory built with **Godot 4.7.2** and GDScript. R
 
 The game defaults to a 30 FPS rendering cap and redraws the view as needed. The simulation runs on fixed quarter-second ticks.
 
-Zoom in on the cream spreader, wafer cutter, cooling tunnel, and packaging lines to see their rollers, cutting head, fans, and sealing equipment move during production. The raw-material room is in the rear-left corner and measures 31 × 35 m. The finished-goods room is in the rear-right corner and measures 32 × 35 m. Both have 6 m racks and a front shutter that opens for approaching traffic. A dedicated material handler uses a manual pallet jack to bring supplies from the raw-material room to the stations. Ingredient sacks and packaging cartons appear on the jack while their shipment is in transit. The forklift follows the marked right-hand lane to one of 24 ground-level pallet positions. Capacity is fixed by the rack layout, and the upper tiers are visual.
+Zoom in on the cream spreader, wafer cutter, cooling tunnel, and packaging lines to see their rollers, cutting head, fans, and sealing equipment move during production. The raw-material room is in the rear-left corner and measures 31 × 35 m. The finished-goods room is in the rear-right corner and measures 32 × 35 m. Both have 6 m racks and a front shutter that opens for approaching traffic. A dedicated material handler uses a manual pallet jack to bring supplies from the raw-material room to the stations. Ingredient sacks and packaging cartons appear on the jack while their shipment is in transit. The forklift carries pallets from the palletizer along the production aisle and the east side to one of 24 ground-level pallet positions. Capacity is fixed by the rack layout, and the upper tiers are visual.
 
 ## Controls
 
@@ -58,13 +58,13 @@ Hover over the floor or mezzanine to read the cell's X and Z coordinates and ele
 
 The editor waits for active production and transport jobs to finish. An occupied finished-goods warehouse can move after dispatch. The extruder moves with the elevated hopper under the fixed mezzanine. Packaging, Packaging WIP, and palletizing move together to retain their connections. The raw and wafer stock warehouses, mezzanine structure, and parking bays are fixed.
 
-Equipment can move along both floor axes. Workers, tray carts, and the material handler can take short detours from their main aisles to reach docks. On the default floor plan, move **Coater 02** to **X 35, Z 24** to place it directly behind **Coater 01**.
+Equipment can move along both floor axes. Workers, tray carts, and the material handler can take short detours from their main aisles to reach docks. On the default floor plan, move **Coater 02** to **X 58, Z 27** to place it behind the cooling tunnel, off the cart aisle.
 
 **Save Layout** writes only IDs, grid cells, and orientations to `user://factory_layout.json`. On macOS this is `~/Library/Application Support/Godot/app_userdata/Chocolate Works/factory_layout.json`. A new simulation instance uses the saved layout if it validates. A saved instance keeps its own placements unless there is a newer saved layout and the instance is safe to edit. Otherwise **Load Layout** can apply it once production is idle. The ERP **Save** button also includes the current placements in the operational save.
 
 ### Defining a floor plan
 
-The origin is the building's front-left interior corner. Grid X increases to the right, grid Z increases toward the rear, and Y is elevation. Each cell is 1 × 1 m. The default factory is 120 m wide by 100 m deep. Both ovens and both coaters sit on the production side of the cart aisle. Change `size` in the layout file or set the **Building Cells** override on the **Factory** scene root. Leave the override at zero to use the file. The warehouse anchors follow the rear wall when a building size override is used, and the layout validator checks the resulting transport routes.
+The origin is the building's front-left interior corner. Grid X increases to the right, grid Z increases toward the rear, and Y is elevation. Each cell is 1 × 1 m. The default factory is 120 m wide by 75 m deep. The cart, walk, supply and forklift lanes are the `lanes` entry of the layout file, as grid Z values. `reserved` lists cells that stay clear for aisles and the forklift run. Both ovens and both coaters sit on the production side of the cart aisle. Change `size` in the layout file or set the **Building Cells** override on the **Factory** scene root. Leave the override at zero to use the file. The warehouse anchors follow the rear wall when a building size override is used, and the layout validator checks the resulting transport routes.
 
 Older saves load into the rear-warehouse plan when the rooms and routes fit alongside their saved equipment. Existing pallets keep their slot numbers and the material handler and forklift resume their tasks against the new docks. A customized layout that conflicts with the new rooms keeps its previous layout.
 
@@ -193,16 +193,18 @@ This skips the opening page, starts from the current JSON, and saves nothing on 
 
 ## Factory layout
 
-The standard layout groups the hall into departments that face the cart aisle, with the product flow running left to right:
+The standard layout is a 120 × 75 m hall with one production aisle through the middle. Material flows from left to right: raw material comes in through the receiving door at the left and pallets leave by the shipping door at the right.
 
-- **Front row:** ingredient deck and extruder, the two ovens, the two coaters, then Packaging Line 01 with its carton conveyor and palletizing bays.
-- **Second row:** the filled-wafer cells (cream mixer, spreader, cutter, cooling tunnel) end at the semi-finished stock hub. Packaging Line 02, the wallet packer and the bottle filler follow, then the gum line (mixer, sheeter, fruit former, conditioning).
-- **Third row:** the three coating pans sit behind the gum line, centred on the gaps between its machines.
-- **Behind the rows:** a raw-material kitting area, the production office and QC lab, the canteen with changing room and hand-wash point, and outbound marshalling lanes in front of the finished-goods store. The maintenance workshop (a walled room with a roller door) and the empty-pallet store with forklift charging stand against the rear wall.
+- **North row (docks face south onto the aisle):** the ingredient deck and extruder, the two ovens, the two coaters and the cooling tunnel. The packing hall follows: Packaging Line 01 with its carton conveyor and palletizing bays, Packaging Line 02, the wallet packer and the bottle filler, all in front of the shipping door.
+- **South row (docks face north):** the cream mixer, spreader and cutter stand across the aisle from the ovens. The semi-finished stock hub follows, then the gum line (mixer, sheeter, fruit former, conditioning) and the three coating pans, which end across the aisle from the two gum packers.
+- **Cart parking** stands behind the north row, beside the machines it serves.
+- **Trunk aisle:** a wide aisle in front of both warehouse doors carries deliveries, the supply shuttle and forklifts. The forklift takes pallets from the palletizer along the production aisle, up the east side and into the shipping door.
+- **Front strip:** the 6–9 m along the front wall holds the floor markings and is free for offices, canteen, workshop and utilities.
+- **Between the warehouses:** a raw-material kitting area, the production office and QC lab, the canteen with changing room and hand-wash point, and outbound marshalling lanes in front of the finished-goods store. The maintenance workshop (a walled room with a roller door) and the empty-pallet store with forklift charging stand against the rear wall.
 
 Green walkways link the areas. Yellow lines mark each machine's operating clearance, and boards above the rows name each department. Compressed air, cooling water and insulated hot-water pipes run on wall brackets with branch drops to valve stations. Loose cartons, opened, torn, crushed or broken down, lie around the packing and storage areas. Workers and vehicles keep their own routes; the markings and furniture are visual only and are left out wherever they would sit on a route or a machine.
 
-A saved simulation instance keeps its own floor plan. To switch it to the standard layout, finish or pause production so no order is running, open **Build Mode** and choose **Default**. The move is validated first and can be undone.
+A saved simulation instance keeps its own floor plan. Instances made before the aisle plan keep the original 120 × 100 m plan with its front-wall lanes (the file `master_data/factory_layout_legacy.json`), and **Default** restores that plan's positions for them. A saved layout file only applies to the plan it was made for. Start a new simulation instance to use the aisle plan.
 
 ## How the factory works
 
@@ -307,6 +309,7 @@ godot --headless --path . --script res://tests/mrp_planning_test.gd
 godot --headless --path . --script res://tests/gum_line_test.gd
 godot --headless --path . --script res://tests/raw_warehouse_test.gd
 godot --headless --path . --script res://tests/instances_test.gd
+godot --headless --path . --script res://tests/floor_plan_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.
