@@ -132,14 +132,14 @@ func _stacked_coaters() -> void:
 		return
 	var start := layout.port(&"Oven02", &"cooked_dock")
 	var target := layout.port(&"Coater02", &"cooked_dock")
-	var route := layout.route(start, target, Line.Layout.CART_LANE)
+	var route := layout.route(start, target, layout.cart_lane)
 	var obstacles := layout._obstacles(layout.objects)
 	obstacles.merge(layout._dock_areas(layout._dock_points(layout.objects)))
 	_check(route.size() > 3 and route.back() == target
 		and layout._path_clear(start, route, 0.34, obstacles, [start, target]),
 		"Rear coater has a safe cart detour around the front station's bays")
 	_check(editor.undo().is_empty() and editor.redo().is_empty()
-		and layout.route(start, target, Line.Layout.CART_LANE) == route,
+		and layout.route(start, target, layout.cart_lane) == route,
 		"Undo and redo rebuild the dock paths")
 	var first := line.erp.create_order("FG-1001", 8, 0, 1, "PV-1001-01")
 	var second := line.erp.create_order("FG-1001", 8, 0, 2, "PV-1001-02")

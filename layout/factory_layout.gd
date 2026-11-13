@@ -12,6 +12,8 @@ const MIN_SIZE := Vector2i(120, 32)
 const PREVIOUS_SIZE := Vector2i(128, 40)
 const ORIGIN := Vector3(-32, 0, 13)
 const PLATFORM_HEIGHT := 3.5
+## Routing lanes of the original floor plan (grid y). A layout file may define its own `lanes`;
+## saves from before lanes were data use these values.
 const CART_LANE := 11.2
 const WALK_LANE := 9.45
 const SUPPLY_LANE := 2.15
@@ -41,6 +43,16 @@ static func supplies(location: String, station: StringName) -> bool:
 	return SUPPLY_STATIONS.get(location) == station or station in SHARED_SUPPLY.get(location, [])
 
 var error := ""
+## Identifies the floor plan family. Saved layouts only apply to the plan they were made for.
+var plan_id := "legacy"
+## True for saves made before lanes were layout data: they keep the original lanes and defaults.
+var legacy := false
+var supply_lane := SUPPLY_LANE
+var lift_lane := LIFT_LANE
+var walk_lane := WALK_LANE
+var cart_lane := CART_LANE
+var rear_lane := REAR_LANE
+var _lane_extras := {}
 var grid: Grid
 var objects: Dictionary[StringName, Placement] = {}
 ## Equipment that joined the master data after a saved layout was written.
@@ -51,8 +63,8 @@ var _cart_blockers := {}
 var _approaches := {}
 
 
-func _init(dimensions: Vector2i = Vector2i.ZERO, directory: String = "", snapshot: Dictionary = {}) -> void:
-	error = _load(dimensions, directory, snapshot)
+func _init(dimensions: Vector2i = Vector2i.ZERO, directory: String = "", snapshot: Dictionary = {}, legacy_plan: bool = false) -> void:
+	error = _load(dimensions, directory, snapshot, legacy_plan)
 
 
 static func warehouse_cell_after_resize(cell: Vector2i, turns: int, previous: Vector2i, current: Vector2i) -> Vector2i:
@@ -63,13 +75,18 @@ static func warehouse_cell_after_resize(cell: Vector2i, turns: int, previous: Ve
 	return cell + Vector2i(current.x - previous.x, 0)
 
 
-func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> String:
-	var result := Master.read("factory_layout", directory) if snapshot.is_empty() else {"error": "", "data": snapshot}
+func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary, legacy_plan: bool = false) -> String:
+	var file := "factory_layout_legacy" if legacy_plan else "factory_layout"
+	var result := Master.read(file, directory) if snapshot.is_empty() else {"error": "", "data": snapshot}
 	if not result.error.is_empty():
 		return result.error
 	if not result.data is Dictionary or not _numbers(result.data.get("size"), 2, true, 1) or not result.data.get("objects") is Array:
-		return "factory_layout.json: expected size and equipment definitions."
+		return "%s.json: expected size and equipment definitions." % file
 	var data: Dictionary = result.data
+	legacy = legacy_plan or (not snapshot.is_empty() and not data.has("lanes"))
+	var problem := _read_lanes(data, legacy)
+	if not problem.is_empty():
+		return problem
 	var configured := Vector2i(int(data.size[0]), int(data.size[1]))
 	if snapshot.is_empty() and configured != configured.max(MIN_SIZE):
 		return "factory_layout.json size: too small for factory aisles."
@@ -77,7 +94,7 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 	var width := grid.size.x
 	var definitions: Array = data.objects.duplicate(true)
 	if not snapshot.is_empty():
-		var defaults := Master.read("factory_layout", directory)
+		var defaults := Master.read("factory_layout_legacy" if legacy else "factory_layout", directory)
 		if not defaults.error.is_empty():
 			return defaults.error
 		var missing := false
@@ -132,11 +149,62 @@ func _load(dimensions: Vector2i, directory: String, snapshot: Dictionary) -> Str
 		for port_id in required.get(key, []):
 			if not objects[key].ports.has(port_id):
 				return "factory_layout.json [%s].ports.%s: required dock." % [key, port_id]
+	if _lane_extras.has("reserved"):
+		reserved = []
+		for row: Array in _lane_extras.reserved:
+			reserved.append(Rect2i(int(row[0]), int(row[1]), int(row[2]), int(row[3])))
+		return ""
 	var cart_end := cart_aisle_end()
 	var lift_start := cart_end - 2
 	reserved = [Rect2i(0, 0, width, 2), Rect2i(0, 8, cart_end, 2),
 		Rect2i(0, 10, cart_end, 2), Rect2i(lift_start, 4, width - lift_start, 3)]
 	return ""
+
+
+## Lanes are grid y values. `legacy` plans always use the constants above.
+func _read_lanes(data: Dictionary, legacy_plan: bool) -> String:
+	supply_lane = SUPPLY_LANE
+	lift_lane = LIFT_LANE
+	walk_lane = WALK_LANE
+	cart_lane = CART_LANE
+	rear_lane = REAR_LANE
+	_lane_extras = {}
+	plan_id = "legacy"
+	if legacy_plan or not data.has("lanes"):
+		return ""
+	var lanes: Variant = data.lanes
+	if not lanes is Dictionary:
+		return "factory_layout.json lanes: expected a lane definition."
+	for key in ["supply", "lift", "walk", "cart", "rear"]:
+		if not Master.number(lanes.get(key), 0.5, 1000.0):
+			return "factory_layout.json lanes.%s: expected a position in metres." % key
+	supply_lane = float(lanes.supply)
+	lift_lane = float(lanes.lift)
+	walk_lane = float(lanes.walk)
+	cart_lane = float(lanes.cart)
+	rear_lane = float(lanes.rear)
+	for key in ["aisle_end", "lift_home_x"]:
+		if lanes.has(key):
+			if not Master.number(lanes[key], 1.0, 1000.0):
+				return "factory_layout.json lanes.%s: expected a position in metres." % key
+			_lane_extras[key] = float(lanes[key])
+	if lanes.has("reserved"):
+		if not lanes.reserved is Array:
+			return "factory_layout.json lanes.reserved: expected rectangles."
+		for row in lanes.reserved:
+			if not _numbers(row, 4, true):
+				return "factory_layout.json lanes.reserved: expected [x, y, width, height] cells."
+		_lane_extras["reserved"] = lanes.reserved.duplicate(true)
+	plan_id = String(data.get("plan", "aisle"))
+	return ""
+
+
+func lanes_snapshot() -> Dictionary:
+	if legacy:
+		return {}
+	var lanes := {"supply": supply_lane, "lift": lift_lane, "walk": walk_lane, "cart": cart_lane, "rear": rear_lane}
+	lanes.merge(_lane_extras)
+	return lanes
 
 
 func snapshot() -> Dictionary:
@@ -150,7 +218,11 @@ func snapshot() -> Dictionary:
 			"size": [item.size.x, item.size.y], "height": item.height, "elevation": item.elevation,
 			"turns": item.turns, "clearance": [item.clearance.x, item.clearance.y, item.clearance.z, item.clearance.w],
 			"ports": ports, "movable": item.movable})
-	return {"size": [grid.size.x, grid.size.y], "objects": rows, "placement_revision": 1}
+	var data := {"size": [grid.size.x, grid.size.y], "objects": rows, "placement_revision": 1}
+	if not legacy:
+		data["lanes"] = lanes_snapshot()
+		data["plan"] = plan_id
+	return data
 
 
 func _numbers(values: Variant, count: int, whole: bool, low: float = 0.0) -> bool:
@@ -170,11 +242,11 @@ func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 	if location == "RM-WH":
 		var room: Placement = plan[&"RawWarehouse"]
 		return _room_point(room, WarehouseRoom.raw_dock(room.size))
-	return grid.to_world(Vector2(10.0, SUPPLY_LANE))
+	return grid.to_world(Vector2(10.0, supply_lane))
 
 
 func supply_route(from: Vector3, target: Vector3) -> Array[Vector3]:
-	return _floor_route(from, target, SUPPLY_LANE, 0.75)
+	return _floor_route(from, target, supply_lane, 0.75)
 
 
 func _define(item: Placement) -> void:
@@ -218,7 +290,7 @@ func coated_cart_home(index: int) -> Vector3:
 
 
 func cart_heading(point: Vector3) -> float:
-	return 0.0 if point.z > lane_z(CART_LANE) else PI
+	return 0.0 if point.z > lane_z(cart_lane) else PI
 
 
 func cart_body_center(point: Vector3) -> Vector3:
@@ -254,7 +326,7 @@ func warehouse_approach(index: int, plan: Dictionary = objects) -> Vector3:
 func warehouse_entry_path(plan: Dictionary = objects) -> Array[Vector3]:
 	var room: Placement = plan[&"Warehouse"]
 	var apron := _room_point(room, Vector2(0, room.size.y * 0.5 + 3.25))
-	return [Vector3(lift_side_x(), 0, lane_z(LIFT_LANE)), Vector3(lift_side_x(), 0, apron.z), apron]
+	return [Vector3(lift_side_x(), 0, lane_z(lift_lane)), Vector3(lift_side_x(), 0, apron.z), apron]
 
 
 func _room_point(room: Placement, local: Vector2) -> Vector3:
@@ -262,11 +334,11 @@ func _room_point(room: Placement, local: Vector2) -> Vector3:
 
 
 func cart_aisle_end() -> int:
-	return grid.size.x - 23
+	return int(_lane_extras.get("aisle_end", grid.size.x - 23))
 
 
 func lift_home() -> Vector3:
-	return grid.to_world(Vector2(cart_aisle_end() + 8.6, LIFT_LANE))
+	return grid.to_world(Vector2(_lane_extras.get("lift_home_x", cart_aisle_end() + 8.6), lift_lane))
 
 
 func lift_side_x() -> float:
@@ -274,8 +346,8 @@ func lift_side_x() -> float:
 
 
 func route(from: Vector3, to: Vector3, lane: float) -> Array[Vector3]:
-	if lane == CART_LANE or lane == WALK_LANE:
-		return _floor_route(from, to, lane, 0.34 if lane == CART_LANE else 0.22)
+	if lane == cart_lane or lane == walk_lane:
+		return _floor_route(from, to, lane, 0.34 if lane == cart_lane else 0.22)
 	if from.is_equal_approx(to):
 		return []
 	if is_equal_approx(from.x, to.x):
@@ -289,7 +361,7 @@ func lift_to_slot(from: Vector3, index: int, plan: Dictionary = objects) -> Arra
 	var room: Placement = plan[&"Warehouse"]
 	if WarehouseRoom.high_bay(room.size):
 		var path := warehouse_entry_path(plan)
-		path.push_front(Vector3(from.x, 0, lane_z(LIFT_LANE)))
+		path.push_front(Vector3(from.x, 0, lane_z(lift_lane)))
 		var row := WarehouseRoom.finished_slot(room.size, index)
 		var aisle := row.y + WarehouseRoom.FG_APPROACH + WarehouseRoom.FG_TURN_AHEAD
 		path.append(_room_point(room, Vector2(0, aisle)))
@@ -297,9 +369,9 @@ func lift_to_slot(from: Vector3, index: int, plan: Dictionary = objects) -> Arra
 		path.append(target)
 		return path
 	if index < 4:
-		return route(from, target, LIFT_LANE)
-	var rear := lane_z(REAR_LANE)
-	return [Vector3(from.x, 0, lane_z(LIFT_LANE)), Vector3(lift_side_x(), 0, lane_z(LIFT_LANE)),
+		return route(from, target, lift_lane)
+	var rear := lane_z(rear_lane)
+	return [Vector3(from.x, 0, lane_z(lift_lane)), Vector3(lift_side_x(), 0, lane_z(lift_lane)),
 		Vector3(lift_side_x(), 0, rear), Vector3(target.x, 0, rear), target]
 
 
@@ -311,10 +383,10 @@ func lift_from_slot(index: int, plan: Dictionary = objects) -> Array[Vector3]:
 		path.reverse()
 		return path
 	if index < 4:
-		return route(from, lift_home(), LIFT_LANE)
-	var rear := lane_z(REAR_LANE)
+		return route(from, lift_home(), lift_lane)
+	var rear := lane_z(rear_lane)
 	return [Vector3(from.x, 0, rear), Vector3(lift_side_x(), 0, rear),
-		Vector3(lift_side_x(), 0, lane_z(LIFT_LANE)), lift_home()]
+		Vector3(lift_side_x(), 0, lane_z(lift_lane)), lift_home()]
 
 
 func belt(id: StringName, plan: Dictionary = objects) -> Array[Vector3]:
@@ -493,13 +565,13 @@ func _validate_connections(plan: Dictionary) -> String:
 	var destinations := docks.duplicate()
 	for index in MAX_CREW:
 		destinations.append(crew_home(index))
-	if not _lane_clear(docks, CART_LANE, 0.34, blockers):
+	if not _lane_clear(docks, cart_lane, 0.34, blockers):
 		return "A cart dock or cart route would be obstructed."
-	if not _lane_clear(destinations, WALK_LANE, 0.22, blockers):
+	if not _lane_clear(destinations, walk_lane, 0.22, blockers):
 		return "A worker would lose access to a cart or dock."
 	for index in PALLET_BAYS:
 		var approach := pallet_approach(index, plan)
-		if not _path_clear(lift_home(), route(lift_home(), approach, LIFT_LANE), 0.88, obstacles):
+		if not _path_clear(lift_home(), route(lift_home(), approach, lift_lane), 0.88, obstacles):
 			return "A forklift pickup route would be obstructed."
 		for slot in warehouse_slot_count(plan):
 			if not _path_clear(approach, lift_to_slot(approach, slot, plan), 0.88, obstacles):
@@ -510,7 +582,7 @@ func _validate_connections(plan: Dictionary) -> String:
 	var supply_stops: Array[Vector3] = [supply_point("RM-WH", plan), supply_point("RM-STAGE", plan)]
 	for location in SUPPLY_STATIONS:
 		supply_stops.append(supply_point(location, plan))
-	if not _lane_clear(supply_stops, SUPPLY_LANE, 0.75, obstacles):
+	if not _lane_clear(supply_stops, supply_lane, 0.75, obstacles):
 		return "A material handler route would be obstructed."
 	for key: StringName in LINKS:
 		var endpoints := belt(key, plan)
@@ -681,8 +753,8 @@ func _floor_route(from: Vector3, to: Vector3, lane: float, radius: float) -> Arr
 		_route_obstacles = _obstacles(objects)
 		_cart_blockers = _route_obstacles.duplicate()
 		_cart_blockers.merge(_dock_areas(_dock_points(objects)))
-	var blockers := _route_obstacles if lane == SUPPLY_LANE else _cart_blockers
-	if from.x == to.x and (lane != CART_LANE or ((from.z > to.z) == (to.z < lane_z(lane)))) 			and _path_clear(from, [to], radius, blockers, [from, to]):
+	var blockers := _route_obstacles if lane == supply_lane else _cart_blockers
+	if from.x == to.x and (lane != cart_lane or ((from.z > to.z) == (to.z < lane_z(lane)))) 			and _path_clear(from, [to], radius, blockers, [from, to]):
 		return [to]
 	var departure := _cached_approach(from, lane, radius, blockers)
 	var arrival := _cached_approach(to, lane, radius, blockers)

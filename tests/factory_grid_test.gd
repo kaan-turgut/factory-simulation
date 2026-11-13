@@ -108,7 +108,7 @@ func _factory_constraints() -> void:
 	_check(plan.definition(&"CoatedBelt") == null and plan.definition(&"CartonBelt").kind == &"conveyor",
 		"Only the outbound carton conveyor remains")
 	for id: StringName in [&"Oven", &"Oven02", &"Coater", &"Coater02"]:
-		_check(plan.objects[id].cell.y > Layout.CART_LANE, "%s is on the production side of the cart aisle" % id)
+		_check(plan.objects[id].cell.y > plan.cart_lane, "%s is on the production side of the cart aisle" % id)
 	_check(plan.objects[&"PackagingWIP"].footprint().end.y < plan.objects[&"Packer"].cell.y,
 		"Packaging WIP sits in front of the packer")
 

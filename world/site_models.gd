@@ -86,18 +86,18 @@ func _collect_obstacles() -> void:
 	var blockers: Dictionary = obstacles.duplicate()
 	blockers.merge(_layout._dock_areas(docks))
 	for dock in docks:
-		_route(dock, _layout._aisle_approach(dock, Layout.CART_LANE, 0.34, blockers), 1.0)
-		_route(dock, _layout._aisle_approach(dock, Layout.WALK_LANE, 0.22, blockers), 0.7)
+		_route(dock, _layout._aisle_approach(dock, _layout.cart_lane, 0.34, blockers), 1.0)
+		_route(dock, _layout._aisle_approach(dock, _layout.walk_lane, 0.22, blockers), 0.7)
 	var stops: Array[Vector3] = [_layout.supply_point("RM-WH", plan), _layout.supply_point("RM-STAGE", plan)]
 	for location in Layout.SUPPLY_STATIONS:
 		if plan.has(Layout.SUPPLY_STATIONS[location]):
 			stops.append(_layout.supply_point(location, plan))
 	for stop in stops:
-		_route(stop, _layout._aisle_approach(stop, Layout.SUPPLY_LANE, 0.75, obstacles), 1.4)
+		_route(stop, _layout._aisle_approach(stop, _layout.supply_lane, 0.75, obstacles), 1.4)
 	var home := _layout.lift_home()
 	for index in Layout.PALLET_BAYS:
 		var approach := _layout.pallet_approach(index, plan)
-		_route(home, _layout.route(home, approach, Layout.LIFT_LANE), 1.6)
+		_route(home, _layout.route(home, approach, _layout.lift_lane), 1.6)
 		for slot in _layout.warehouse_slot_count(plan):
 			_route(approach, _layout.lift_to_slot(approach, slot, plan), 1.6)
 	for slot in _layout.warehouse_slot_count(plan):

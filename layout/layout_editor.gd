@@ -89,7 +89,7 @@ func dirty() -> bool:
 
 
 func reset_default() -> String:
-	var defaults := Layout.new(line.layout.grid.size)
+	var defaults := Layout.new(line.layout.grid.size, "", {}, line.layout.legacy)
 	if not defaults.error.is_empty():
 		return defaults.error
 	var changes := {}
@@ -109,7 +109,7 @@ func save(path: String = PATH) -> String:
 	if file == null:
 		return "Cannot write the layout file."
 	file.store_string(JSON.stringify({"version": FILE_VERSION, "saved_at": stamp,
-		"size": [size.x, size.y], "placements": positions}, "	") + "
+		"size": [size.x, size.y], "plan": line.layout.plan_id, "placements": positions}, "	") + "
 ")
 	file.flush()
 	var result := file.get_error()
@@ -130,6 +130,8 @@ func load_layout(path: String = PATH, newer_only: bool = false) -> String:
 	if parser.parse(file.get_as_text()) != OK or not parser.data is Dictionary:
 		return "Invalid layout JSON at line %d." % parser.get_error_line()
 	var data: Dictionary = parser.data
+	if String(data.get("plan", "legacy")) != line.layout.plan_id:
+		return "The saved layout belongs to a different floor plan and was not applied."
 	var size := line.layout.grid.size
 	var dimensions: Variant = data.get("size")
 	var version: Variant = data.get("version")

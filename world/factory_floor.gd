@@ -325,9 +325,9 @@ func _build_hall() -> void:
 			_draw.box(self, grid.to_world(Vector2(x, z), 0.7), Vector3(0.44, 1.56, 0.36), INK)
 	_hall.build(self, grid, layout)
 	var aisle_end := layout.cart_aisle_end()
-	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end - 1.0, layout.lane_z(Layout.WALK_LANE),
+	_strip(grid.origin.x + 1.5, grid.origin.x + aisle_end - 1.0, layout.lane_z(layout.walk_lane),
 		0.87, Color("#a6acaa"))
-	var lift_z := layout.lane_z(Layout.LIFT_LANE)
+	var lift_z := layout.lane_z(layout.lift_lane)
 	var side := layout.lift_side_x()
 	_strip(grid.origin.x + aisle_end - 1.8, side + 0.62, lift_z, 2.64, Color("#706e5d"))
 	var outbound := layout.center(&"Warehouse") + Vector3(0.5, 0.04, -5.1)
@@ -338,14 +338,14 @@ func _build_hall() -> void:
 		_drive_lane(entry.back(), entry.back().move_toward(layout.center(&"Warehouse"), 4.0), 2.4, 0.019)
 		outbound = entry.back() + Vector3(0, 0.04, 1.15)
 	else:
-		var rear_z := layout.lane_z(Layout.REAR_LANE)
+		var rear_z := layout.lane_z(layout.rear_lane)
 		_strip(layout.center(&"Warehouse").x - 5.8, side + 0.62, rear_z, 1.8, Color("#706e5d"))
 		_drive_lane(Vector3(side, 0, lift_z), Vector3(side, 0, rear_z), 1.32, 0.013)
 	for x in range(aisle_end - 1, width - 1):
-		_draw.box(self, grid.to_world(Vector2(x, Layout.LIFT_LANE), 0.029),
+		_draw.box(self, grid.to_world(Vector2(x, layout.lift_lane), 0.029),
 			Vector3(0.43, 0.014, 0.057), SAFETY)
 	for x in range(2, aisle_end - 1, 2):
-		_draw.box(self, grid.to_world(Vector2(x, Layout.WALK_LANE), 0.032),
+		_draw.box(self, grid.to_world(Vector2(x, layout.walk_lane), 0.032),
 			Vector3(0.64, 0.014, 0.045), PALE)
 	_floor_text(grid.to_world(Vector2(30.5, 2.7), 0.04), "CHOCOLATE WORKS   /   02", PALE, 0.031)
 	_floor_text(grid.to_world(Vector2(width - 12.0, 2.9), 0.04), "FORKLIFT ONLY  ›", SAFETY, 0.025)

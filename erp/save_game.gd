@@ -250,7 +250,7 @@ static func _restore_layout(data: Dictionary, dimensions: Vector2i, move_stockro
 			cell = Line.Layout.warehouse_cell_after_resize(cell, turns, data.size, plan.grid.size)
 		plan.objects[id] = plan.objects[id].at(cell, turns)
 	if move_stockrooms:
-		var defaults := Line.Layout.new(plan.grid.size)
+		var defaults := Line.Layout.new(plan.grid.size, "", {}, plan.legacy)
 		if not defaults.error.is_empty():
 			plan.error = defaults.error
 			return plan
@@ -571,7 +571,7 @@ static func _refit_transport(line: Line) -> void:
 				task.point = _legacy_cart_point(line, task.cart, task.site, line.runs.get(task.run, {}))
 			else:
 				task.point = task.cart.position
-			worker.travel(layout.route(worker.position, task.cart.position, Line.Layout.WALK_LANE),
+			worker.travel(layout.route(worker.position, task.cart.position, layout.walk_lane),
 				Line.Operator.State.WALKING, task.title, Line.Cart.SITE_NAMES[task.cart.site])
 		else:
 			_place_actor(worker, task.cart.position)
@@ -609,7 +609,7 @@ static func _refit_forklift(line: Line) -> void:
 	_place_actor(vehicle, layout.lift_home())
 	match line._lift_phase:
 		Line.LiftPhase.TO_PALLET:
-			vehicle.travel(layout.route(vehicle.position, layout.pallet_approach(line._lift_pickup_slot), Line.Layout.LIFT_LANE),
+			vehicle.travel(layout.route(vehicle.position, layout.pallet_approach(line._lift_pickup_slot), layout.lift_lane),
 				Line.Operator.State.DRIVING, vehicle.task, vehicle.destination)
 		Line.LiftPhase.PICK_UP:
 			_place_actor(vehicle, layout.pallet_approach(line._lift_pickup_slot))

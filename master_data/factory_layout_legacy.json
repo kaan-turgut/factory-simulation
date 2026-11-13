@@ -1,0 +1,1041 @@
+{
+  "objects": [
+    {
+      "cell": [
+        1,
+        17
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 3.5,
+      "height": 0.24,
+      "id": "Platform",
+      "kind": "platform",
+      "movable": false,
+      "ports": {
+        "pick_0": [
+          -3.90000009536743,
+          0.0,
+          1.10000002384186
+        ],
+        "pick_1": [
+          -2.75,
+          0.0,
+          1.10000002384186
+        ]
+      },
+      "size": [
+        12,
+        8
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        12,
+        14
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 3.5,
+      "id": "Stairs",
+      "kind": "access",
+      "movable": false,
+      "ports": {},
+      "size": [
+        2,
+        6
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        7,
+        17
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 3.5,
+      "height": 2.04,
+      "id": "Hopper",
+      "kind": "machine",
+      "movable": true,
+      "ports": {
+        "drop_0": [
+          -0.779999971389771,
+          0.0,
+          2.3199999332428
+        ],
+        "drop_1": [
+          0.779999971389771,
+          0.0,
+          2.3199999332428
+        ],
+        "outlet": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "size": [
+        3,
+        3
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        6,
+        16
+      ],
+      "clearance": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 3.48,
+      "id": "Extruder",
+      "kind": "machine",
+      "movable": true,
+      "ports": {
+        "feed": [
+          0.0,
+          3.5,
+          0.5
+        ],
+        "raw_dock": [
+          2.96000003814697,
+          0.0,
+          -2.66000008583069
+        ]
+      },
+      "size": [
+        5,
+        4
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        17,
+        16
+      ],
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "elevation": 0.0,
+      "height": 3.65,
+      "id": "Oven",
+      "kind": "machine",
+      "movable": true,
+      "ports": {
+        "cooked_dock": [
+          2.96000003814697,
+          0.0,
+          -4.19999980926514
+        ],
+        "raw_dock": [
+          -2.96000003814697,
+          0.0,
+          -2.79999995231628
+        ]
+      },
+      "size": [
+        5,
+        4
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        35,
+        16
+      ],
+      "clearance": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 3.17,
+      "id": "Coater",
+      "kind": "machine",
+      "movable": true,
+      "ports": {
+        "cooked_dock": [
+          -3.25,
+          0,
+          -2.6
+        ],
+        "supply": [
+          4.9,
+          0,
+          -10.05
+        ],
+        "coated_dock": [
+          3.05,
+          0,
+          -3.0
+        ]
+      },
+      "size": [
+        5,
+        4
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        59,
+        16
+      ],
+      "clearance": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 3.25,
+      "id": "Packer",
+      "kind": "machine",
+      "movable": true,
+      "ports": {
+        "belt_out": [
+          2.09999990463257,
+          0.920000016689301,
+          0.0
+        ],
+        "supply": [
+          -1.7,
+          0,
+          -10.1
+        ]
+      },
+      "size": [
+        5,
+        4
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        65,
+        12
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 1.35,
+      "id": "Palletizer",
+      "kind": "storage",
+      "movable": true,
+      "ports": {
+        "belt_in": [
+          -2.75,
+          0.920000016689301,
+          2.5
+        ],
+        "cart_dock": [
+          5.2,
+          0,
+          -1
+        ]
+      },
+      "size": [
+        8,
+        7
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        87,
+        64
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 6.4,
+      "id": "Warehouse",
+      "kind": "storage",
+      "movable": true,
+      "ports": {},
+      "size": [
+        32,
+        35
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        2,
+        12
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 0.06,
+      "id": "RawParking",
+      "kind": "parking",
+      "movable": false,
+      "ports": {},
+      "size": [
+        7,
+        3
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        20,
+        5
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 0.06,
+      "id": "CookedParking",
+      "kind": "parking",
+      "movable": false,
+      "ports": {},
+      "size": [
+        9,
+        3
+      ],
+      "turns": 0
+    },
+    {
+      "cell": [
+        1,
+        64
+      ],
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "elevation": 0.0,
+      "height": 6.4,
+      "id": "RawWarehouse",
+      "kind": "storage",
+      "movable": false,
+      "ports": {},
+      "size": [
+        31,
+        35
+      ],
+      "turns": 0
+    },
+    {
+      "id": "Oven02",
+      "kind": "machine",
+      "cell": [
+        25,
+        16
+      ],
+      "size": [
+        5,
+        4
+      ],
+      "height": 3.65,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "ports": {
+        "raw_dock": [
+          -2.96,
+          0,
+          -2.8
+        ],
+        "cooked_dock": [
+          2.96,
+          0,
+          -3.0
+        ]
+      },
+      "movable": true
+    },
+    {
+      "id": "Coater02",
+      "kind": "machine",
+      "cell": [
+        45,
+        16
+      ],
+      "size": [
+        5,
+        4
+      ],
+      "height": 3.17,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        0,
+        1,
+        0
+      ],
+      "ports": {
+        "cooked_dock": [
+          -3.25,
+          0,
+          -2.6
+        ],
+        "supply": [
+          4.9,
+          0,
+          -10.05
+        ],
+        "coated_dock": [
+          3.05,
+          0,
+          -3.0
+        ]
+      },
+      "movable": true
+    },
+    {
+      "id": "CoatedParking",
+      "kind": "parking",
+      "cell": [
+        33,
+        5
+      ],
+      "size": [
+        9,
+        3
+      ],
+      "height": 0.06,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "ports": {},
+      "movable": false
+    },
+    {
+      "id": "PackagingWIP",
+      "kind": "storage",
+      "cell": [
+        57,
+        13
+      ],
+      "size": [
+        6,
+        2
+      ],
+      "height": 1.65,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "ports": {
+        "coated_dock": [
+          -2.0,
+          0,
+          -1.5
+        ]
+      },
+      "movable": true
+    },
+    {
+      "id": "SFGWarehouse",
+      "kind": "storage",
+      "cell": [
+        49,
+        26
+      ],
+      "size": [
+        7,
+        3
+      ],
+      "height": 2.0,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "movable": false,
+      "ports": {
+        "stock_dock": [
+          0,
+          0,
+          -2.15
+        ]
+      }
+    },
+    {
+      "id": "CreamMixer",
+      "kind": "machine",
+      "cell": [
+        16,
+        32
+      ],
+      "size": [
+        5,
+        5
+      ],
+      "height": 3.3,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.7
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.7
+        ],
+        "supply": [
+          -1.5,
+          0,
+          -7.5
+        ]
+      }
+    },
+    {
+      "id": "Spreader",
+      "kind": "machine",
+      "cell": [
+        23,
+        33
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "Cutter",
+      "kind": "machine",
+      "cell": [
+        31,
+        33
+      ],
+      "size": [
+        5,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "CoolingTunnel",
+      "kind": "machine",
+      "cell": [
+        38,
+        33
+      ],
+      "size": [
+        8,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "Packer02",
+      "kind": "machine",
+      "cell": [
+        58,
+        33
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.4,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "GumMixer",
+      "kind": "machine",
+      "cell": [
+        84,
+        32
+      ],
+      "size": [
+        5,
+        5
+      ],
+      "height": 3.0,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.7
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.7
+        ],
+        "supply": [
+          -1.5,
+          0,
+          -7.5
+        ]
+      }
+    },
+    {
+      "id": "GumSheeter",
+      "kind": "machine",
+      "cell": [
+        91,
+        33
+      ],
+      "size": [
+        7,
+        4
+      ],
+      "height": 2.6,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ]
+      }
+    },
+    {
+      "id": "FruitFormer",
+      "kind": "machine",
+      "cell": [
+        100,
+        33
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.6,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ]
+      }
+    },
+    {
+      "id": "GumConditioner",
+      "kind": "machine",
+      "cell": [
+        108,
+        33
+      ],
+      "size": [
+        8,
+        4
+      ],
+      "height": 2.8,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ]
+      }
+    },
+    {
+      "id": "GumPan01",
+      "kind": "machine",
+      "cell": [
+        88,
+        43
+      ],
+      "size": [
+        4,
+        4
+      ],
+      "height": 3.0,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ]
+      }
+    },
+    {
+      "id": "GumPan02",
+      "kind": "machine",
+      "cell": [
+        97,
+        43
+      ],
+      "size": [
+        4,
+        4
+      ],
+      "height": 3.0,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "GumPan03",
+      "kind": "machine",
+      "cell": [
+        106,
+        43
+      ],
+      "size": [
+        4,
+        4
+      ],
+      "height": 3.0,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ]
+      }
+    },
+    {
+      "id": "WalletPacker",
+      "kind": "machine",
+      "cell": [
+        66,
+        33
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.6,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ],
+        "supply": [
+          0,
+          0,
+          -7.0
+        ]
+      }
+    },
+    {
+      "id": "BottleFiller",
+      "kind": "machine",
+      "cell": [
+        74,
+        33
+      ],
+      "size": [
+        6,
+        4
+      ],
+      "height": 2.6,
+      "elevation": 0,
+      "turns": 0,
+      "clearance": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "movable": true,
+      "ports": {
+        "input_dock": [
+          -1.4,
+          0,
+          -4.2
+        ],
+        "output_dock": [
+          1.4,
+          0,
+          -4.2
+        ]
+      }
+    }
+  ],
+  "size": [
+    120,
+    100
+  ]
+}

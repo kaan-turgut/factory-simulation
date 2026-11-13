@@ -1523,7 +1523,7 @@ func _handling(kind: JobKind, cart: Cart, title: String) -> FloorJob:
 
 
 func _claim_job(worker: Operator, job: FloorJob) -> void:
-	var path := layout.route(worker.position, job.cart.position, Layout.WALK_LANE)
+	var path := layout.route(worker.position, job.cart.position, layout.walk_lane)
 	if path.is_empty() and not worker.position.is_equal_approx(job.cart.position):
 		return
 	floor_assignments[worker.id] = job
@@ -1544,7 +1544,7 @@ func _continue_job(worker: Operator, job: FloorJob) -> void:
 	var cart := job.cart
 	if worker.state == Operator.State.WALKING:
 		if job.kind == JobKind.MOVE_CART:
-			var path := layout.route(worker.position, job.point, Layout.CART_LANE)
+			var path := layout.route(worker.position, job.point, layout.cart_lane)
 			if path.is_empty() and not worker.position.is_equal_approx(job.point):
 				return
 			_set_berth(cart.site, null)
@@ -1721,7 +1721,7 @@ func _request_forklift_job() -> void:
 		warehouse_reserved_slot = slot
 		_lift_pickup_slot = index
 		_lift_phase = LiftPhase.TO_PALLET
-		forklift.travel(layout.route(forklift.position, layout.pallet_approach(index), Layout.LIFT_LANE),
+		forklift.travel(layout.route(forklift.position, layout.pallet_approach(index), layout.lift_lane),
 			Operator.State.DRIVING, "Collect full pallet", "Palletizing bay %02d" % (index + 1))
 		return
 	forklift.idle()
