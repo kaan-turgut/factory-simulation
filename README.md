@@ -2,6 +2,11 @@
 
 A playable 3D chocolate wafer factory built with **Godot 4.7.2** and GDScript. Run a shift, follow carts and workers around the hall, and change settings to see where the line backs up.
 
+**This project is a work in progress.**
+
+1. **Test a game-like digital twin.** Explore whether it can help factory teams compare production strategies, measure performance, and spot bottlenecks.
+2. **Evaluate AI as a production planner.** Give an AI agent control of the simulated ERP to see how well it builds efficient production plans and adapts as conditions change. Observe its decisions to identify strategies people could test and apply in real factories.
+
 ## Open and play
 
 1. Install and open the standard edition of [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/).
