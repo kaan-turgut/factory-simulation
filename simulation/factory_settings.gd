@@ -18,7 +18,7 @@ const SPECS := {
 	&"pickup_time": ["Sack pickup (sim s)", 0.25, 30.0, 0.25],
 	&"unload_time": ["Sack unloading (sim s)", 0.25, 30.0, 0.25],
 	&"floor_speed": ["Floor crew speed (m/s)", 0.25, 5.0, 0.05],
-	&"floor_count": ["Floor crew (applies when idle)", 1.0, 4.0, 1.0],
+	&"floor_count": ["Floor crew (applies when idle)", 1.0, 9.0, 1.0],
 	&"extruder_rate": ["Extrusion rate (kg/h)", 0.0, 36000.0, 1.0],
 	&"raw_capacity": ["Raw cart capacity (kg)", 1.0, 300.0, 0.5],
 	&"raw_count": ["Raw carts (applies when idle)", 1.0, 4.0, 1.0],

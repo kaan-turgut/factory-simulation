@@ -335,9 +335,9 @@ func _floor_crew_migration() -> void:
 		return
 	var restored: Line = result.line
 	var migrated := Save.snapshot(restored)
-	_check(restored.floor_crew.size() == 4 and restored.settings[&"floor_count"] == 4
+	_check(restored.floor_crew.size() == 9 and restored.settings[&"floor_count"] == 9
 		and restored.find_operator(&"Worker3") != null and restored.find_operator(&"Worker4") != null,
-		"Old shift gains two new floor workers")
+		"Old saves gain the default floor workers")
 	_check(migrated.floor.slice(0, 2) == previous.floor and migrated.jobs == previous.jobs
 		and restored.erp.orders == book.orders and restored.erp.balances == book.balances,
 		"Additional crew preserves the original workers, assignments and inventory")
@@ -361,7 +361,7 @@ func _thousand_box_order() -> void:
 		"Full physical warehouse holds a large order")
 	line.set_setting(&"floor_count", 3)
 	line.reset()
-	_check(not line.playing and line.floor_crew.size() == 4 and book.active_id == id,
+	_check(not line.playing and line.floor_crew.size() == 9 and book.active_id == id,
 		"Reset preserves the active order and its assigned fleet")
 	line.set_playing(true)
 	for interval in 320:

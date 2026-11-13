@@ -21,7 +21,7 @@ const LIFT_LANE := 5.8
 const REAR_LANE := 17.4
 const PALLET_BAYS := 3
 const LEGACY_WAREHOUSE_SLOTS := 8
-const MAX_CREW := 4
+const MAX_CREW := 9
 const MAX_CARTS := 4
 const CART_BODY := Vector3(1.22, 1.75, 1.49)
 const CART_OFFSET := Vector3(0, 0, 0.67)
@@ -236,6 +236,9 @@ func _numbers(values: Variant, count: int, whole: bool, low: float = 0.0) -> boo
 
 func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 	if location == "RM-STAGE":
+		if not legacy:
+			# On the deck, at the foot of the freight lift's exit.
+			return plan[&"Platform"].local_point(grid, FREIGHT_LIFT_STAGE)
 		# Newer plans give the mezzanine a "stage" dock; the original plan used a fixed point.
 		if plan[&"Platform"].ports.has(&"stage"):
 			return port(&"Platform", &"stage", plan)
@@ -248,7 +251,60 @@ func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 	return grid.to_world(Vector2(10.0, supply_lane))
 
 
+## The material handler reaches the ingredient deck on a freight lift beside its front edge.
+## Positions are platform-local (x along the deck, z toward the aisle is negative).
+const FREIGHT_LIFT_STAGE := Vector3(-4.5, 0, -2.5)
+const FREIGHT_LIFT_CAGE := Vector3(-4.5, 0, -5.0)
+const FREIGHT_LIFT_SIZE := Vector2(2.2, 2.0)
+
+
+func has_freight_lift(plan: Dictionary = objects) -> bool:
+	return not legacy and plan[&"Platform"].elevation > 0.5
+
+
+func freight_lift_base(plan: Dictionary = objects) -> Vector3:
+	var point: Vector3 = plan[&"Platform"].local_point(grid, FREIGHT_LIFT_CAGE)
+	point.y = 0.0
+	return point
+
+
+func freight_lift_top(plan: Dictionary = objects) -> Vector3:
+	return plan[&"Platform"].local_point(grid, FREIGHT_LIFT_CAGE)
+
+
+## Where a supply stop touches the floor: the lift's ground landing for the mezzanine.
+func supply_ground_point(location: String, plan: Dictionary = objects) -> Vector3:
+	if location == "RM-STAGE" and has_freight_lift(plan):
+		return freight_lift_base(plan)
+	return supply_point(location, plan)
+
+
 func supply_route(from: Vector3, target: Vector3) -> Array[Vector3]:
+	if not has_freight_lift():
+		return _floor_route(from, target, supply_lane, 0.75)
+	var base := freight_lift_base()
+	var top := freight_lift_top()
+	var from_deck := from.y > 1.0
+	var to_deck := target.y > 1.0
+	if from_deck and to_deck:
+		return [target] if not from.is_equal_approx(target) else []
+	if to_deck:
+		var approach := _floor_route(from, base, supply_lane, 0.75)
+		if approach.is_empty() and not from.is_equal_approx(base):
+			return []
+		var result := approach.duplicate()
+		if result.is_empty() or not result.back().is_equal_approx(base):
+			result.append(base)
+		result.append(top)
+		result.append(target)
+		return result
+	if from_deck:
+		var leave := _floor_route(base, target, supply_lane, 0.75)
+		if leave.is_empty() and not base.is_equal_approx(target):
+			return []
+		var result: Array[Vector3] = [top, base]
+		result.append_array(leave)
+		return result
 	return _floor_route(from, target, supply_lane, 0.75)
 
 
@@ -280,18 +336,19 @@ func platform_drop(index: int) -> Vector3:
 func crew_home(index: int) -> Vector3:
 	if not _lane_extras.has("crew_home_x"):
 		return grid.to_world(Vector2(7.0 + index * 1.3, 8.05))
-	return grid.to_world(Vector2(float(_lane_extras.crew_home_x) + index * 1.3, walk_lane - 1.4))
+	return grid.to_world(Vector2(float(_lane_extras.crew_home_x) + index * 1.1, walk_lane - 1.4))
 
 
 func cart_home(index: int, raw: bool) -> Vector3:
-	var offsets := [0.0, 1.55, 3.1, 6.75]
+	var offsets := [0.0, 1.55, 3.1, 6.75, 8.4, 10.05]
 	var parking := objects[&"RawParking" if raw else &"CookedParking"]
-	var x: float = -2.75 + index * 1.62 if raw else -3.5 + offsets[index]
+	var left: float = -parking.size.x * 0.5
+	var x: float = left + 0.75 + index * 1.62 if raw else left + 1.0 + offsets[index]
 	return parking.local_point(grid, Vector3(x, 0, -0.1))
 
 
 func coated_cart_home(index: int) -> Vector3:
-	return objects[&"CoatedParking"].local_point(grid, Vector3(-3.5 + index * 2.0, 0, -0.1))
+	return objects[&"CoatedParking"].local_point(grid, Vector3(-objects[&"CoatedParking"].size.x * 0.5 + 1.0 + index * 2.0, 0, -0.1))
 
 
 func cart_heading(point: Vector3) -> float:
@@ -310,12 +367,29 @@ func pallet_approach(index: int, plan: Dictionary = objects) -> Vector3:
 	return pallet_position(index, plan) + Vector3(0, 0, 1.65).rotated(Vector3.UP, plan[&"Palletizer"].yaw())
 
 
+## Pallet places in the FG warehouse: every ground position times the rack levels.
 func warehouse_slot_count(plan: Dictionary = objects) -> int:
+	return WarehouseRoom.FG_CAPACITY if WarehouseRoom.high_bay(plan[&"Warehouse"].size) else LEGACY_WAREHOUSE_SLOTS
+
+
+## Ground positions a forklift drives to; upper levels share them.
+func warehouse_position_count(plan: Dictionary = objects) -> int:
 	return WarehouseRoom.FG_SLOT_COUNT if WarehouseRoom.high_bay(plan[&"Warehouse"].size) else LEGACY_WAREHOUSE_SLOTS
+
+
+func warehouse_level(index: int, plan: Dictionary = objects) -> int:
+	return index / warehouse_position_count(plan)
+
+
+## Height of the pallet floor above the ground for a slot, in metres.
+func warehouse_height(index: int, plan: Dictionary = objects) -> float:
+	return WarehouseRoom.FG_LEVEL_HEIGHTS[mini(warehouse_level(index, plan), WarehouseRoom.FG_LEVELS - 1)] \
+		if WarehouseRoom.high_bay(plan[&"Warehouse"].size) else 0.0
 
 
 func warehouse_slot(index: int, plan: Dictionary = objects) -> Vector3:
 	var room: Placement = plan[&"Warehouse"]
+	index = index % warehouse_position_count(plan)
 	if WarehouseRoom.high_bay(room.size):
 		return _room_point(room, WarehouseRoom.finished_slot(room.size, index))
 	return room.local_point(grid, Vector3(-3.60 + (index % 4) * 2.2,
@@ -578,13 +652,13 @@ func _validate_connections(plan: Dictionary) -> String:
 		var approach := pallet_approach(index, plan)
 		if not _path_clear(lift_home(), route(lift_home(), approach, lift_lane), 0.88, obstacles):
 			return "A forklift pickup route would be obstructed."
-		for slot in warehouse_slot_count(plan):
+		for slot in warehouse_position_count(plan):
 			if not _path_clear(approach, lift_to_slot(approach, slot, plan), 0.88, obstacles):
 				return "A forklift delivery route would be obstructed."
-	for slot in warehouse_slot_count(plan):
+	for slot in warehouse_position_count(plan):
 		if not _path_clear(warehouse_approach(slot, plan), lift_from_slot(slot, plan), 0.88, obstacles):
 			return "A forklift return route would be obstructed."
-	var supply_stops: Array[Vector3] = [supply_point("RM-WH", plan), supply_point("RM-STAGE", plan)]
+	var supply_stops: Array[Vector3] = [supply_point("RM-WH", plan), supply_ground_point("RM-STAGE", plan)]
 	for location in SUPPLY_STATIONS:
 		supply_stops.append(supply_point(location, plan))
 	if not _lane_clear(supply_stops, supply_lane, 0.75, obstacles):

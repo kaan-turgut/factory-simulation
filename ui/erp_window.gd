@@ -855,7 +855,19 @@ Planned %s → %s · Actual %s → %s
 		", ".join(PackedStringArray(order.pegs)), queue / 60.0, order.logistics_seconds / 60.0,
 		order.oven_wait_seconds / 60.0, order.material_wait_seconds / 60.0,
 		" ".join(PackedStringArray([order.delay, "Missing " + _amounts(gaps) if not gaps.is_empty() else "",
-			auto_problem, Scheduling.dependency_warning(line.erp, order)]))]
+			auto_problem, Scheduling.dependency_warning(line.erp, order), _incoming(order)]))]
+
+
+## Inputs a released stage is still waiting for from upstream orders (stage overlap).
+func _incoming(order: Dictionary) -> String:
+	if order.status not in ["Released", "In Progress"] or not order.has("incoming"):
+		return ""
+	var still := {}
+	for code in order.incoming:
+		var coming: float = maxf(0.0, float(order.remaining.get(code, 0.0)) - line.erp.accessible(order, code))
+		if coming > 0.001:
+			still[code] = coming
+	return "Still to come from upstream: " + _amounts(still) if not still.is_empty() else ""
 
 
 func _select_board_order(id: String) -> void:

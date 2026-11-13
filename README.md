@@ -111,6 +111,16 @@ The MRP page works like SAP's coverage monitor and stock/requirements list.
 
 MRP plans with unlimited capacity, as SAP MRP does. Converting a planned order schedules it on real machine capacity, which can move it later. Run MRP again after converting to see the resulting exceptions.
 
+### Stage overlap
+
+The stages of a product run together like one line. A stage with a start quantity (`start_kg` in `scheduling.json`) can be released once that much of its manufactured input is in stock, if the rest is covered by stock plus the unreceived output of upstream orders that are already released or running. The released order claims its full quantity, draws input from stock as the upstream stage delivers it, and shows "Waiting for input carts" whenever it runs dry. Planned intervals overlap in the same way, and each stage is planned to start early enough to have its first lot when the next one begins and to finish no later than the stage it feeds.
+
+- **Start quantities.** Baking 100 kg, coating 65 kg, cooling 50 kg, packing 25 kg, sandwiching and cutting 50 kg, and gum forming, conditioning and coating 50, 100 and 70 kg. Purchased ingredients always need their full quantity. Extrusion still waits for its whole batter, because the batter prep and the extruder share one crew.
+- **Effect.** About 960 kg of plain wafer takes 3.8 hours from first mix to last pallet instead of 8.5.
+- **Release and cancel.** A second order cannot claim the same output twice. The Release message says whether the first lot or the cover from released orders is missing. An upstream order that others count on cannot be cancelled until they are.
+- **Switch.** `overlap.enabled` in `scheduling.json` turns it off for the whole catalog; scenarios and agents use `stage_overlap` and `set_stage_overlap`. Saved simulations from before this change keep the old rule, because their catalog has no overlap settings.
+- **Details.** The order detail shows the inputs still to come from upstream. MRP and the Gantt flag a first lot that arrives after the consumer starts, or a last lot after it finishes.
+
 ### Detailed Scheduling
 
 - Each row represents a work center from the master data. Swipe with two fingers over the chart to move left or right through time and up or down through work centers. You can also use the scrollbars, **Shift + mouse wheel** for time, or the regular wheel for work centers. Choose a time scale or click **Jump to now** to reorient the timeline.
@@ -284,6 +294,8 @@ Current limits: the agent controls planning, purchasing and release. It cannot e
 | `erp/` | Catalog, validation, reservations, inventory ledger, orders, MRP, and snapshots |
 | `master_data/` | Editable JSON master definitions and initial floor plan |
 | `world/` | Primitive models, motion interpolation, camera, and picking |
+| `assets/characters/` | Worker models and animations (free CC0 assets, see `CREDITS.md`) |
+| `tools/blender/` | Blender scripts that build the worker models from those assets |
 | `ui/` | ChocoERP, overview, transport controls, and context-sensitive inspector |
 | `agent/` | Headless JSON and MCP interface for AI planning agents |
 | `scenarios/` | Planning scenarios for agent runs |
@@ -310,6 +322,7 @@ godot --headless --path . --script res://tests/gum_line_test.gd
 godot --headless --path . --script res://tests/raw_warehouse_test.gd
 godot --headless --path . --script res://tests/instances_test.gd
 godot --headless --path . --script res://tests/floor_plan_test.gd
+godot --headless --path . --script res://tests/stage_overlap_test.gd
 ```
 
 On macOS, if Godot is installed in Applications, replace `godot` with `/Applications/Godot.app/Contents/MacOS/Godot`.

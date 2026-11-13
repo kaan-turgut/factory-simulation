@@ -196,9 +196,9 @@ func _forklift_and_storage() -> void:
 	if not _until(line, func() -> bool: return line.warehouse_reserved_slot >= 0,
 			15.0, "Ready pallet dispatches the forklift"):
 		return
-	_check(line.warehouse_count() == 23 and line.warehouse_reserved_slot == 23
+	_check(line.warehouse_count() == line.warehouse.size() - 1 and line.warehouse_reserved_slot == line.warehouse.size() - 1
 		and line.lift_load == null and line.pallets_ready() > 0,
-		"Dispatch reserves a slot while the pallet still sits at staging")
+		"Dispatch reserves the last, highest rack slot while the pallet still sits at staging")
 	_check(not line.set_setting(&"warehouse_capacity", 0.0), "Warehouse capacity is fixed")
 	line.advance(STEP)
 	_check(line.forklift.position.distance_to(home) > 0.0, "Forklift drives to the pickup")
@@ -206,12 +206,12 @@ func _forklift_and_storage() -> void:
 			"Forklift collects pallet after arrival and handling"):
 		return
 	_near(line.lift_load.mass, 4.0, "Loaded pallet mass is carried in transit")
-	_check(line.warehouse_count() == 23, "Lift load has not arrived at warehouse")
+	_check(line.warehouse_count() == line.warehouse.size() - 1, "Lift load has not arrived at warehouse")
 	_mass_balance(line, "Pallet in transit")
-	_until(line, func() -> bool: return line.warehouse_count() == 24, 60.0,
-		"Driving and unloading fill the 24th rack position")
+	_until(line, func() -> bool: return line.warehouse_count() == line.warehouse.size(), 90.0,
+		"Driving and lifting fill the last rack position")
 	line.advance(60.0)
-	_check(line.warehouse_count() == 24 and line.forklift_deliveries == 1 and line.pallets_ready() == 3,
+	_check(line.warehouse_count() == line.warehouse.size() and line.forklift_deliveries == 1 and line.pallets_ready() == 3,
 		"Full storage stops subsequent deliveries and fills staging")
 	_check(line.forklift.task == "Waiting for warehouse space", "Forklift reports full warehouse")
 	_check(line.dispatch(false) == 1, "Dispatch frees one occupied slot")
@@ -225,14 +225,14 @@ func _upstream_block_and_resume() -> void:
 	_scenarios += 1
 	var line := Line.new()
 	line.set_playing(true)
-	_until(line, func() -> bool: return line.warehouse_count() == 24, 18000.0, "Default shift fills all 24 positions")
+	_until(line, func() -> bool: return line.warehouse_count() == line.warehouse.size(), 200000.0, "Default run fills every rack position")
 	line.advance(1500.0)
-	_check(line.warehouse_count() == 24 and line.pallets_ready() == 3, "Default shift fills all space")
+	_check(line.warehouse_count() == line.warehouse.size() and line.pallets_ready() == 3, "Default run fills all space")
 	_check(line.packer.state == Machine.State.BLOCKED and line.coater.state == Machine.State.BLOCKED
 		and line.extruder.state == Machine.State.BLOCKED, "Blockage reaches the upstream machines")
 	var output := line.extruder.total_output
 	var deliveries := line.forklift_deliveries
-	_check(line.dispatch(true) == 24, "Dispatch all empties stored pallets")
+	_check(line.dispatch(true) == line.warehouse.size(), "Dispatch all empties stored pallets")
 	line.advance(200.0)
 	_check(line.forklift_deliveries > deliveries, "Warehouse accepts new loads after dispatch")
 	_until(line, func() -> bool: return line.extruder.total_output > output, 500.0,
@@ -273,7 +273,7 @@ func _pause_speed_and_reset() -> void:
 	reference.set_setting(&"extruder_rate", 1234.0)
 	_near(reference.extruder.configured_rate, 1234.0, "Live setpoint accepts whole kilograms per hour")
 	reference.set_setting(&"floor_count", 3.0)
-	_check(reference.floor_crew.size() == 4, "Changing crew count keeps live assignments")
+	_check(reference.floor_crew.size() == 9, "Changing crew count keeps live assignments")
 	reference.reset()
 	_check(reference.floor_crew.size() == 3 and reference.elapsed_ticks == 0 and not reference.playing,
 		"Reset applies fleet changes and pauses")

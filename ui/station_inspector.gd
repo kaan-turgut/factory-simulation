@@ -174,6 +174,8 @@ func refresh(line: Line) -> void:
 		_status("Stored pallet" if pallet != null else "Empty slot", Palette.FG)
 		_readout.text = "%s · %s\nOrder %s · %d boxes · %.2f kg" % [
 			pallet.id, pallet.sku, pallet.order_id, pallet.boxes, pallet.mass] if pallet != null else "Pallet dispatched."
+		if pallet != null:
+			_readout.text += "\n" + line.slot_name(String(_selection).trim_prefix("FGSlot").to_int())
 		return
 	match _selection:
 		&"CreamMixer", &"Spreader", &"Cutter", &"CoolingTunnel", &"Packer02", &"GumMixer", &"GumSheeter", &"FruitFormer", \

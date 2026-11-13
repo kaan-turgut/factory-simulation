@@ -17,7 +17,10 @@ const Stock = preload("res://world/stock_models.gd")
 const X := 0
 const Y := 1
 const Z := 2
-const DETAIL_RANGE := 48.0
+## Fine detail is merged per material, so it is cheap; it only stops drawing beyond the whole hall.
+const DETAIL_RANGE := 170.0
+## Small plate text is clutter from afar.
+const PLATE_RANGE := 48.0
 const MILK := Color("#86533f")
 
 
@@ -583,7 +586,7 @@ func plate(parent: Node3D, at: Vector3, text: String, tint: Color, pixel: float)
 	label.modulate = tint
 	label.outline_size = 0
 	label.double_sided = false
-	label.visibility_range_end = DETAIL_RANGE
+	label.visibility_range_end = PLATE_RANGE
 	parent.add_child(label)
 	return label
 

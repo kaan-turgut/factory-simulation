@@ -313,7 +313,7 @@ static func create(book, code: String, quantity: float, start: float, priority: 
 		"consumed": {}, "packed": 0, "received": 0.0, "received_kg": 0.0, "dough_issued": 0.0,
 		"started": -1.0, "completed": -1.0, "warning": "", "pegs": [], "delay": "", "logistics_seconds": 0.0,
 		"material_wait_seconds": 0.0, "oven_wait_seconds": 0.0, "scrapped": 0.0, "released_quantity": 0.0}
-	_set_slot(row, data, scheduled)
+	_set_slot(book, row, data, scheduled)
 	book.orders[id] = row
 	book.schedule_revision += 1
 	book.changed()
@@ -331,17 +331,20 @@ static func reschedule(book, id: String, start: float, version: String = "") -> 
 		return data.error
 	var error := placement_conflict(book, data, start, id)
 	if error.is_empty():
-		_set_slot(order, data, start)
+		_set_slot(book, order, data, start)
 		book.schedule_revision += 1
 		book.changed()
 	return error
 
 
-static func _set_slot(order: Dictionary, data: Dictionary, start: float) -> void:
+static func _set_slot(book, order: Dictionary, data: Dictionary, start: float) -> void:
 	order.merge({"recipe": data.recipe, "stage": data.recipe.stage, "route": data.route,
 		"version": data.route.production_version, "standard": data.route.operations[0].standard.duplicate(true),
 		"center": data.center, "estimate": data.duration,
 		"start": start, "finish": start + data.duration}, true)
+	if data.recipe.stage != "pack":
+		# When the first lot is ready, for stages that start on part of this output.
+		order.first_output = minf(float(data.duration), first_output(book.catalog, order.code, float(data.recipe.target)))
 
 
 static func peg(book, child: String, parent: String) -> String:
@@ -371,7 +374,62 @@ static func _reaches(book, start: String, target: String) -> bool:
 
 static func dependency_warning(book, order: Dictionary) -> String:
 	for upstream in book.orders.values():
-		if order.id in upstream.get("pegs", []) and upstream.status not in ["Completed", "Closed", "Cancelled"] \
-				and upstream.finish > order.start + EPS:
-			return "%s is planned to finish after this order starts." % upstream.id
+		if order.id in upstream.get("pegs", []) and upstream.status not in ["Completed", "Closed", "Cancelled"]:
+			if supply_late(book.catalog, upstream, order) <= EPS:
+				continue
+			if not overlaps(book.catalog, order.get("stage", ""), upstream.code):
+				return "%s is planned to finish after this order starts." % upstream.id
+			if first_lot_at(book.catalog, upstream, order) > float(order.start) + EPS:
+				return "%s is planned to deliver its first lot after this order starts." % upstream.id
+			return "%s is planned to finish after this order finishes." % upstream.id
 	return ""
+
+
+# --- Stage overlap ------------------------------------------------------------------
+# A stage can start on a first lot of its manufactured input while the upstream stage is still
+# running, so the stages of a product flow like one line instead of one batch after another.
+
+static func overlap_enabled(catalog) -> bool:
+	return bool(catalog.scheduling.get("overlap", {}).get("enabled", false))
+
+
+## Kilograms of manufactured input a stage needs in stock before it can start. Zero means the
+## stage waits for its whole input.
+static func start_kg(catalog, stage: String) -> float:
+	return float(catalog.scheduling.stages.get(stage, {}).get("start_kg", 0.0))
+
+
+## Whether a stage may start on part of the output of the upstream material.
+static func overlaps(catalog, parent_stage: String, child_code: String) -> bool:
+	return overlap_enabled(catalog) and start_kg(catalog, parent_stage) > 0.0 \
+		and catalog.materials.get(child_code, {}).get("procurement") == "In-house"
+
+
+## Seconds an upstream stage needs before its first lot (of `lot_kg`) is available downstream.
+static func first_output(catalog, code: String, quantity: float, lot_kg: float = 0.0) -> float:
+	var config: Dictionary = catalog.scheduling.get("overlap", {})
+	var lot := lot_kg if lot_kg > 0.0 else float(config.get("first_lot_kg", 75.0))
+	var sample := minf(quantity, lot)
+	var best := INF
+	for route in alternatives(catalog, code, sample, 0.0):
+		var op: Dictionary = route.operations[0]
+		if not op.available or not op.has("standard"):
+			continue
+		var data := recipe(catalog, code, sample)
+		if data.error.is_empty():
+			best = minf(best, duration(catalog, data, op))
+	return best if is_finite(best) else 0.0
+
+
+## When the first lot a consuming stage needs is ready from an upstream order.
+static func first_lot_at(catalog, upstream: Dictionary, parent: Dictionary) -> float:
+	return float(upstream.start) + first_output(catalog, upstream.code, float(upstream.recipe.target), start_kg(catalog, parent.get("stage", "")))
+
+
+## Seconds by which an upstream order's supply comes too late for the order that consumes it.
+## Without overlap its output must be there when the consumer starts. With overlap the first lot
+## must be there at the start and the last lot by the time the consumer finishes.
+static func supply_late(catalog, upstream: Dictionary, parent: Dictionary) -> float:
+	if not overlaps(catalog, parent.get("stage", ""), upstream.code):
+		return float(upstream.finish) - float(parent.start)
+	return maxf(first_lot_at(catalog, upstream, parent) - float(parent.start), float(upstream.finish) - float(parent.finish))

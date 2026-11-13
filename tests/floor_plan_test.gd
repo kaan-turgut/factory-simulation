@@ -17,6 +17,8 @@ func _initialize() -> void:
 func _run() -> void:
 	_new_plan()
 	_flow_distances()
+	_rack_levels()
+	_freight_lift()
 	_original_plan()
 	_persistence()
 	_layout_files()
@@ -68,7 +70,7 @@ func _flow_distances() -> void:
 	var door := plan.supply_point("RM-WH")
 	var stage := plan.supply_point("RM-STAGE")
 	var route := plan.supply_route(door, stage)
-	_check(not route.is_empty() and _length(route, door) < 45.0,
+	_check(not route.is_empty() and _length(route, door) < 55.0,
 		"The shuttle reaches the ingredient mezzanine in %.0f m (it was about 90)" % _length(route, door))
 	var approach := plan.pallet_approach(0)
 	var slot_path := plan.lift_to_slot(approach, 0)
@@ -77,6 +79,52 @@ func _flow_distances() -> void:
 	var wip := plan.port(&"PackagingWIP", &"coated_dock")
 	var haul := plan.route(cooling, wip, plan.cart_lane)
 	_check(not haul.is_empty() and _length(haul, cooling) < 25.0, "A cart from the cooling tunnel to packaging WIP drives %.0f m" % _length(haul, cooling))
+
+
+func _rack_levels() -> void:
+	var plan := Layout.new()
+	_check(plan.warehouse_slot_count() == 96 and plan.warehouse_position_count() == 24, "The FG warehouse holds 96 pallets on 24 positions, four levels")
+	_check(plan.warehouse_slot(5).is_equal_approx(plan.warehouse_slot(5 + 24 * 3)) and plan.warehouse_approach(5).is_equal_approx(plan.warehouse_approach(53)),
+		"Upper levels share the ground position and the forklift approach")
+	_check(plan.warehouse_height(5) == 0.0 and is_equal_approx(plan.warehouse_height(24), 1.95) and is_equal_approx(plan.warehouse_height(95), 5.82),
+		"Levels sit on the rack beams (0, 1.95, 3.90, 5.82 m)")
+	var room := Layout.WarehouseRoom.new(plan.objects[&"Warehouse"].size, true)
+	_check(room.rack_levels.size() == 3 and is_equal_approx(room.rack_levels[2], plan.warehouse_height(95)), "The drawn rack beams match the storage heights")
+	var line := Line.new()
+	line.enable_erp(false)
+	_check(line.warehouse.size() == 96 and line.warehouse.find(null) == 0, "A new line fills the floor level first")
+	_check(is_equal_approx(line.storage_handling_seconds(0), Line.LIFT_HANDLING_SECONDS)
+		and is_equal_approx(line.storage_handling_seconds(95), Line.LIFT_HANDLING_SECONDS + 3.0 * Line.LIFT_LEVEL_SECONDS), "Each level adds mast time to storing a pallet")
+	var original := Layout.new(Vector2i.ZERO, "", {}, true)
+	_check(original.warehouse_slot_count() == 96 and original.validate().is_empty(), "The original plan has the four-level racks too")
+
+
+func _freight_lift() -> void:
+	var plan := Layout.new()
+	var door := plan.supply_point("RM-WH")
+	var stage := plan.supply_point("RM-STAGE")
+	_check(plan.has_freight_lift() and stage.y > 3.0 and is_equal_approx(plan.freight_lift_base().y, 0.0), "The aisle plan has a freight lift to the mezzanine")
+	for route: Array[Vector3] in [plan.supply_route(door, stage), plan.supply_route(stage, door)]:
+		var previous: Vector3 = door if route.back() == stage else stage
+		var climbs := 0
+		var diagonal := false
+		for point in route:
+			var step := point - previous
+			if absf(step.y) > 0.01:
+				climbs += 1
+				diagonal = diagonal or Vector2(step.x, step.z).length() > 0.01
+			previous = point
+		_check(climbs == 1 and not diagonal, "A trip changes level once, straight up or down the lift shaft")
+	var handler := Line.Operator.new(&"Handler", "Handler", plan.freight_lift_base())
+	handler.travel(plan.supply_route(plan.freight_lift_base(), stage), Line.Operator.State.MOVING_PALLET_JACK, "Lift", "Deck")
+	var seconds := 0.0
+	while not handler.finished() and seconds < 60.0:
+		handler.advance(0.25, 2.4)
+		seconds += 0.25
+	_check(handler.position.is_equal_approx(stage) and seconds > plan.freight_lift_top().y / Line.Operator.LIFT_SPEED - 0.5,
+		"The cage rises at lift speed (%.1f s for %.1f m)" % [seconds, stage.y])
+	var original := Layout.new(Vector2i.ZERO, "", {}, true)
+	_check(not original.has_freight_lift(), "The original plan has no freight lift")
 
 
 func _original_plan() -> void:

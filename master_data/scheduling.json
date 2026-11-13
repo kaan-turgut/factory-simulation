@@ -6,6 +6,10 @@
     ]
   ],
   "work_center_calendars": {},
+  "overlap": {
+    "enabled": true,
+    "first_lot_kg": 75
+  },
   "stages": {
     "mix": {
       "materials": [
@@ -39,7 +43,8 @@
       ],
       "handling_seconds": 55,
       "batch_handling_seconds": 110,
-      "handling": "Raw and baked carts move through the wafer stock dock."
+      "handling": "Raw and baked carts move through the wafer stock dock.",
+      "start_kg": 100
     },
     "coat": {
       "materials": [
@@ -57,7 +62,8 @@
         "WC-COT-02"
       ],
       "handling_seconds": 110,
-      "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating."
+      "handling": "Wafer carts serve intake and outfeed. The shuttle supplies coating.",
+      "start_kg": 65
     },
     "pack": {
       "materials": [
@@ -70,7 +76,8 @@
         "WC-PKG-04"
       ],
       "handling_seconds": 120,
-      "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet."
+      "handling": "Coated carts feed Packaging WIP. The forklift receives the pallet.",
+      "start_kg": 25
     },
     "cream": {
       "materials": [
@@ -94,7 +101,8 @@
         "WC-SPR-01"
       ],
       "handling_seconds": 90,
-      "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      "handling": "Workers deliver reserved components and return completed product to wafer stock.",
+      "start_kg": 50
     },
     "cut": {
       "materials": [
@@ -107,7 +115,8 @@
         "WC-CUT-01"
       ],
       "handling_seconds": 90,
-      "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      "handling": "Workers deliver reserved components and return completed product to wafer stock.",
+      "start_kg": 50
     },
     "cool": {
       "materials": [
@@ -124,7 +133,8 @@
         "WC-CLG-01"
       ],
       "handling_seconds": 210,
-      "handling": "Workers deliver reserved components and return completed product to wafer stock."
+      "handling": "Workers deliver reserved components and return completed product to wafer stock.",
+      "start_kg": 50
     },
     "gum_mix": {
       "materials": [
@@ -158,7 +168,8 @@
         "WC-GFF-01"
       ],
       "handling_seconds": 90,
-      "handling": "Carts bring gum mass from stock and return formed centres."
+      "handling": "Carts bring gum mass from stock and return formed centres.",
+      "start_kg": 50
     },
     "gum_condition": {
       "materials": [
@@ -174,7 +185,8 @@
         "WC-GCD-01"
       ],
       "handling_seconds": 150,
-      "handling": "Carts bring formed centres; conditioned centres return to stock."
+      "handling": "Carts bring formed centres; conditioned centres return to stock.",
+      "start_kg": 100
     },
     "gum_coat": {
       "materials": [
@@ -193,7 +205,8 @@
       ],
       "handling_seconds": 120,
       "batch_handling_seconds": 60,
-      "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station."
+      "handling": "Carts charge the pan with centres; the shuttle stages syrup and wax at the syrup station.",
+      "start_kg": 70
     }
   }
 }

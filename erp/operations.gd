@@ -237,9 +237,10 @@ func _apply_route(order: Dictionary, route: Dictionary) -> void:
 	order.finish = order.start + maxf(float(order.recipe.spec.lead), order.estimate + 120.0)
 
 
-func component_available(order: Dictionary, code: String) -> float:
+## Stock of a material that is physically where a stage can draw it, before reservations.
+func accessible(order: Dictionary, code: String) -> float:
 	if not order.has("stage"):
-		return available(code)
+		return total_stock(code)
 	var locations := ["RM-WH", "RM-STAGE"]
 	match order.stage:
 		"extrude":
@@ -250,16 +251,51 @@ func component_available(order: Dictionary, code: String) -> float:
 			locations = ["SFG-WH"] if code == order.recipe.input else ["RM-WH", order.route.operations[0].supply_location]
 		"pack", "cream", "spread", "cut", "cool", "gum_mix", "gum_form", "gum_condition", "gum_coat":
 			locations = ["SFG-WH"] if code in order.recipe.get("internals", [order.recipe.input]) else ["RM-WH", order.route.operations[0].supply_location]
-	var accessible := 0.0
+	var total := 0.0
 	for location in locations:
-		accessible += stock(code, location)
-	return maxf(0.0, accessible - float(reservations.get(code, 0.0)))
+		total += stock(code, location)
+	return total
 
 
+func component_available(order: Dictionary, code: String) -> float:
+	if not order.has("stage"):
+		return available(code)
+	return maxf(0.0, accessible(order, code) - float(reservations.get(code, 0.0)))
+
+
+## Stage overlap. A stage with a start quantity (scheduling.json) may release once that much of
+## each manufactured input is in stock, if the rest is covered by released upstream orders.
+func start_quantity(order: Dictionary, code: String) -> float:
+	var need := float(order.recipe.needs[code])
+	if not order.has("stage") or not Scheduling.overlaps(catalog, order.stage, code):
+		return need
+	return minf(need, Scheduling.start_kg(catalog, order.stage))
+
+
+## Output still to come from released or running orders of a material.
+func pending_output(code: String, exclude: String = "") -> float:
+	var total := 0.0
+	for row in orders.values():
+		if row.code == code and row.id != exclude and row.has("stage") and row.status in ["Released", "In Progress"]:
+			total += maxf(0.0, float(row.recipe.target) - float(row.received_kg))
+	return total
+
+
+## Stock plus output on its way, minus every claim on the material, for the order's own release.
+func outlook(order: Dictionary, code: String) -> float:
+	return accessible(order, code) - float(reservations.get(code, 0.0)) + pending_output(code, String(order.get("id", "")))
+
+
+## What stops an order from releasing: the start quantity of each input, and for inputs that
+## release early, cover for the full quantity from stock and released upstream orders.
 func shortages(order: Dictionary) -> Dictionary:
 	var missing := {}
 	for code in order.recipe.needs:
-		var gap := float(order.recipe.needs[code]) - component_available(order, code)
+		var need := float(order.recipe.needs[code])
+		var first := start_quantity(order, code)
+		var gap := first - component_available(order, code)
+		if first < need - EPS:
+			gap = maxf(gap, need - outlook(order, code))
 		if gap > EPS:
 			missing[code] = gap
 	return missing
@@ -316,8 +352,14 @@ func _release_stage(order: Dictionary) -> String:
 	if not missing.is_empty():
 		var reasons := PackedStringArray()
 		for code in missing:
-			reasons.append("%s %.3f %s required, %.3f available, %.3f short" % [
-				code, order.recipe.needs[code], catalog.materials[code].unit, component_available(order, code), missing[code]])
+			var need := float(order.recipe.needs[code])
+			var first := start_quantity(order, code)
+			if first < need - EPS:
+				reasons.append("%s needs %.3f %s in stock to start (%.3f available) and %.3f %s from stock plus released orders (%.3f short)" % [
+					code, first, catalog.materials[code].unit, component_available(order, code), need, catalog.materials[code].unit, missing[code]])
+			else:
+				reasons.append("%s %.3f %s required, %.3f available, %.3f short" % [
+					code, need, catalog.materials[code].unit, component_available(order, code), missing[code]])
 		order.warning = ", ".join(reasons)
 		changed()
 		return order.warning
@@ -325,6 +367,12 @@ func _release_stage(order: Dictionary) -> String:
 	order.standard = assignment.route.operations[0].standard.duplicate(true)
 	order.recipe = order.recipe.duplicate(true)
 	order.route = order.route.duplicate(true)
+	# Inputs that are still on their way: claimed now, drawn from stock as the upstream stage delivers.
+	order.incoming = {}
+	for code in order.recipe.needs:
+		var short := float(order.recipe.needs[code]) - component_available(order, code)
+		if short > EPS:
+			order.incoming[code] = short
 	order.remaining = order.recipe.needs.duplicate()
 	for code in order.remaining:
 		reservations[code] = float(reservations.get(code, 0.0)) + float(order.remaining[code])
@@ -372,6 +420,9 @@ func transition(id: String, status: String) -> String:
 	if order.is_empty():
 		return "Order does not exist."
 	if status == "Cancelled" and order.status in ["Created", "Released"]:
+		var depended := _output_relied_on(order)
+		if not depended.is_empty():
+			return depended
 		dispatch_queue.erase(id)
 		_release_remainder(order)
 		var demand: Dictionary = demands.get(order.get("demand", ""), {})
@@ -385,6 +436,21 @@ func transition(id: String, status: String) -> String:
 	order.status = status
 	schedule_revision += 1
 	changed()
+	return ""
+
+
+## An upstream order cannot be cancelled while released orders have claimed more of its material
+## than stock and the other released supply can deliver.
+func _output_relied_on(order: Dictionary) -> String:
+	if order.status != "Released" or not order.has("stage") or catalog.materials[order.code].procurement != "In-house":
+		return ""
+	var held := stock(order.code, "SFG-WH") + stock(order.code, "SFG-DECK")
+	if float(reservations.get(order.code, 0.0)) > held + pending_output(order.code, order.id) + EPS:
+		var claimants := PackedStringArray()
+		for row in orders.values():
+			if row.status in ["Released", "In Progress"] and float(row.get("remaining", {}).get(order.code, 0.0)) > EPS:
+				claimants.append(row.id)
+		return "%s already count on the output of this order. Cancel them first." % ", ".join(claimants)
 	return ""
 
 

@@ -41,27 +41,43 @@ func run(target, ledger, finished: Dictionary) -> void:
 	for po in book.purchases.values():
 		if po.status != "Received":
 			_supply(po.code, po.due, po.qty - po.received, po.id, [], "Open PO", true)
-	for order in book.orders.values():
+	# Released orders may already claim output that is still to come. That part is spoken for.
+	var claimed := {}
+	for code in book.catalog.materials:
+		if book.catalog.materials[code].procurement == "In-house" and book.catalog.materials[code].type != "FERT":
+			claimed[code] = maxf(0.0, float(book.reservations.get(code, 0.0)) - book.stock(code, "SFG-WH") - book.stock(code, "SFG-DECK"))
+	var by_finish: Array = book.orders.values()
+	by_finish.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("finish", 0.0)) < float(b.get("finish", 0.0)))
+	for order in by_finish:
 		if order.status == "Cancelled":
 			continue
 		if order.status in book.OPEN and order.has("stage"):
 			var linked: String = order.get("demand", "")
 			if linked.is_empty():
-				_supply(order.code, maxf(book.now, order.finish), order.recipe.target - order.received_kg,
-					order.id, _parents(order), "Scheduled order", order.status in ["Created", "Released"])
+				var open_qty: float = order.recipe.target - order.received_kg
+				if order.status in ["Released", "In Progress"] and claimed.has(order.code):
+					var spoken := minf(float(claimed[order.code]), open_qty)
+					claimed[order.code] -= spoken
+					open_qty -= spoken
+				var first: float = maxf(book.now, order.start + float(order.get("first_output", 0.0))) if order.status != "In Progress" else book.now
+				_supply(order.code, maxf(book.now, order.finish), open_qty,
+					order.id, _parents(order), "Scheduled order", order.status in ["Created", "Released"], "", first)
 			if order.status == "Created":
-				_components(order.recipe, order.start, order.get("plan_key", order.id), _family(order))
+				_components(order.recipe, order.start, order.get("plan_key", order.id), _family(order), order.finish)
 		if not String(order.get("demand", "")).is_empty():
 			initial[order.code] = maxf(0.0, float(initial[order.code]) - maxf(0.0, order.received_kg - order.get("dispatched_kg", 0.0)))
 	for number in book.planned_orders:
 		var item: Dictionary = book.planned_orders[number]
 		if not item.firmed:
 			continue
-		_supply(item.code, item.due, item.qty, number, [], "Firmed planned order" if item.type == "Make" else "Firmed requisition", true, item.id)
+		var first_date: float = item.due
+		if item.type == "Make" and item.has("start"):
+			first_date = item.start + Scheduling.first_output(book.catalog, item.code, float(item.get("quantity", item.qty)))
+		_supply(item.code, item.due, item.qty, number, [], "Firmed planned order" if item.type == "Make" else "Firmed requisition", true, item.id, first_date)
 		if item.type == "Make":
 			var exploded := Scheduling.assignment(book, item.code, item.quantity, item.start, item.version)
 			if exploded.error.is_empty():
-				_components(exploded.recipe, item.start, item.id, item.family)
+				_components(exploded.recipe, item.start, item.id, item.family, item.get("finish", item.due))
 			else:
 				_exception("no_source", item.code, number, item.start, "Firmed order cannot be exploded: " + exploded.error)
 	for demand in book.demands.values():
@@ -140,26 +156,33 @@ func _family(order: Dictionary) -> String:
 	return order.get("family", order.recipe.spec.get("family", ""))
 
 
-func _need(code: String, date: float, amount: float, doc: String, family: String) -> void:
+func _need(code: String, date: float, amount: float, doc: String, family: String, overlap: Dictionary = {}) -> void:
 	if amount <= EPS:
 		return
 	if not needs.has(code):
 		needs[code] = []
-	needs[code].append({"date": date, "qty": amount, "doc": doc, "family": family})
+	var row := {"date": date, "qty": amount, "doc": doc, "family": family}
+	row.merge(overlap)
+	needs[code].append(row)
 
 
-func _components(recipe: Dictionary, start: float, doc: String, family: String) -> void:
+## Dependent requirements of an order or lot. A stage that can start on part of an upstream input
+## records its start quantity and finish, so supply may overlap it.
+func _components(recipe: Dictionary, start: float, doc: String, family: String, finish: float = -1.0) -> void:
 	for component in recipe.needs:
-		_need(component, start, recipe.needs[component], doc, family)
+		var overlap := {}
+		if finish >= 0.0 and Scheduling.overlaps(book.catalog, recipe.stage, component):
+			overlap = {"overlap": true, "start_kg": Scheduling.start_kg(book.catalog, recipe.stage), "finish": finish}
+		_need(component, start, recipe.needs[component], doc, family, overlap)
 
 
-func _supply(code: String, date: float, qty: float, id: String, parents: Array, kind: String, movable: bool, key: String = "") -> void:
+func _supply(code: String, date: float, qty: float, id: String, parents: Array, kind: String, movable: bool, key: String = "", first: float = -1.0) -> void:
 	if qty <= EPS:
 		return
 	if not supply.has(code):
 		supply[code] = []
 	supply[code].append({"date": date, "qty": qty, "left": qty, "id": id, "parents": parents, "kind": kind,
-		"movable": movable, "first_use": INF, "key": key})
+		"movable": movable, "first_use": INF, "key": key, "first": minf(date, first) if first >= 0.0 else date})
 
 
 func _by_date(a: Dictionary, b: Dictionary) -> bool:
@@ -188,13 +211,13 @@ func _net(code: String) -> void:
 		var outstanding: float = need.qty + minimum
 		# First use an explicitly pegged receipt, then on-hand stock, then other receipts.
 		for receipt in receipts:
-			if need.doc in receipt.parents and receipt.date <= due:
+			if need.doc in receipt.parents and _usable(receipt, need, due):
 				outstanding -= _allocate(receipt, outstanding, due)
 		var allocated := minf(balance, outstanding)
 		balance -= allocated
 		outstanding -= allocated
 		for receipt in receipts:
-			if receipt.date <= due and (receipt.parents.is_empty() or need.doc in receipt.parents):
+			if _usable(receipt, need, due) and (receipt.parents.is_empty() or need.doc in receipt.parents):
 				outstanding -= _allocate(receipt, outstanding, due)
 		var shortage := maxf(0.0, outstanding)
 		var projected := balance - shortage + minimum
@@ -207,7 +230,7 @@ func _net(code: String) -> void:
 		for receipt in receipts:
 			if outstanding <= EPS:
 				break
-			if receipt.date <= due or (not receipt.parents.is_empty() and need.doc not in receipt.parents):
+			if _usable(receipt, need, due) or (not receipt.parents.is_empty() and need.doc not in receipt.parents):
 				continue
 			var late := _allocate(receipt, outstanding, -1.0)
 			outstanding -= late
@@ -231,6 +254,15 @@ func _net(code: String) -> void:
 		report._row(code, receipt.date, receipt.kind, receipt.qty, 0.0,
 			receipt.left, 0.0, receipt.id, "", receipt.key)
 	_receipt_exceptions(code, receipts)
+
+
+## A receipt serves a need when it is there by the need date. A need that can start on a first lot
+## is also served by a receipt whose first lot is there by then and whose last lot is done by the
+## end of the consuming order.
+func _usable(receipt: Dictionary, need: Dictionary, due: float) -> bool:
+	if receipt.date <= due:
+		return true
+	return need.get("overlap", false) and receipt.first <= due and receipt.date <= float(need.finish) + EPS
 
 
 func _allocate(receipt: Dictionary, quantity: float, date: float) -> float:
@@ -294,6 +326,10 @@ func _new_lot(code: String, need: Dictionary, due: float, gap: float, projected:
 	var data := {"id": key, "type": "Make" if make else "Buy", "doc": need.doc, "docs": [need.doc],
 		"code": code, "qty": gap, "family": need.family, "due": due, "need_date": need.date, "firmed": false,
 		"closed": false, "window_end": due + float(settings.period_seconds), "exceptions": []}
+	if make and need.get("overlap", false):
+		data.overlap = true
+		data.start_kg = need.start_kg
+		data.need_finish = need.finish
 	if make:
 		var requested: float = ceilf(gap / item.box_kg - EPS) if item.type == "FERT" else _size(gap, settings, item.unit)
 		var fitted := _make_assignment(code, requested, due)
@@ -388,12 +424,19 @@ func _finish_lot(lot: Dictionary) -> void:
 			return
 		var assignment: Dictionary = fitted.assignment
 		lot.boxes = lot.quantity if item.type == "FERT" else 0
+		lot.duration = assignment.duration
 		lot.start = lot.due - assignment.duration
 		lot.finish = lot.due
-		lot.duration = assignment.duration
+		if lot.get("overlap", false):
+			# The consumer starts on a first lot at `due`, so start early enough to have it by then,
+			# and early enough to be done when the consumer finishes.
+			var first := Scheduling.first_output(book.catalog, lot.code, assignment.recipe.target, float(lot.start_kg))
+			lot.start = minf(lot.due - first, float(lot.need_finish) - assignment.duration)
+			lot.finish = lot.start + assignment.duration
+		lot.first_output = Scheduling.first_output(book.catalog, lot.code, assignment.recipe.target) if lot.code != "" and item.type != "FERT" else 0.0
 		lot.version = assignment.route.production_version
 		lot.center = assignment.center
-		_components(assignment.recipe, lot.start, lot.id, lot.family)
+		_components(assignment.recipe, lot.start, lot.id, lot.family, lot.finish)
 	else:
 		lot.start = lot.due - lot.lead
 		lot.finish = lot.due
@@ -424,9 +467,9 @@ func _receipt_exceptions(code: String, receipts: Array) -> void:
 			continue
 		if receipt.left > maxf(EPS * 1000.0, rounding):
 			_exception("excess", code, receipt.id, receipt.date, "Excess %s %s · reduce the quantity" % [_q(receipt.left), unit])
-		if is_finite(receipt.first_use) and receipt.first_use > receipt.date + RESCHEDULE_TOLERANCE:
+		if is_finite(receipt.first_use) and receipt.first_use > receipt.first + RESCHEDULE_TOLERANCE:
 			_exception("reschedule_out", code, receipt.id, receipt.date,
-				"Postpone by %s to %s" % [_span(receipt.first_use - receipt.date), _clock(receipt.first_use)])
+				"Postpone by %s to %s" % [_span(receipt.first_use - receipt.first), _clock(receipt.first_use)])
 
 
 ## Follow raw-warehouse pallet positions through the dated rows and flag receipts that will not fit.
@@ -486,9 +529,13 @@ func _peg_exceptions() -> void:
 			continue
 		for id in order.get("pegs", []):
 			var parent: Dictionary = book.orders.get(id, {})
-			if parent.get("status", "") in ["Created", "Released"] and order.finish > parent.start + EPS:
+			if parent.get("status", "") not in ["Created", "Released"]:
+				continue
+			var late := Scheduling.supply_late(book.catalog, order, parent)
+			if late > EPS:
+				var overlapped: bool = Scheduling.overlaps(book.catalog, parent.get("stage", ""), order.code)
 				_exception("supply_late", order.code, order.id, order.finish,
-					"Finishes %s after %s (%s) starts" % [_span(order.finish - parent.start), parent.id, parent.code])
+					("First lot is %s late for %s (%s)" if overlapped else "Finishes %s after %s (%s) starts") % [_span(late), parent.id, parent.code])
 
 
 # --- Publishing -----------------------------------------------------------------

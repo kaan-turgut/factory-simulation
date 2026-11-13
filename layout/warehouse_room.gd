@@ -6,7 +6,13 @@ const RACK_HEIGHT := 6.0
 const FG_RACK_BAYS := 4
 const FG_ROWS := 3
 const FG_SLOTS_PER_ROW := FG_RACK_BAYS * 2
+## Ground positions of the finished-goods racks. Each holds one pallet per level.
 const FG_SLOT_COUNT := FG_ROWS * FG_SLOTS_PER_ROW
+## Ground plus three beam levels; slot index = level * FG_SLOT_COUNT + position.
+const FG_LEVELS := 4
+const FG_CAPACITY := FG_SLOT_COUNT * FG_LEVELS
+## Pallet floor height per level (the beam tops of the rack drawn in the room).
+const FG_LEVEL_HEIGHTS: Array[float] = [0.0, 1.95, 3.90, 5.82]
 const FG_RACK_DEPTH := 1.75
 const FG_APPROACH := 1.95
 const FG_TURN_AHEAD := 1.50
@@ -81,7 +87,7 @@ func _build_high_bay(size: Vector2i, finished_goods: bool) -> void:
 	_wall(-edge.y, edge.y, edge.x, true)
 	if finished_goods:
 		rack_bays = FG_RACK_BAYS
-		rack_levels.assign([1.95, 3.90, 5.82])
+		rack_levels.assign(FG_LEVEL_HEIGHTS.slice(1))
 		var spacing := _finished_spacing(size)
 		var span := Vector2(spacing * rack_bays, FG_RACK_DEPTH)
 		for index in range(0, FG_SLOT_COUNT, rack_bays):

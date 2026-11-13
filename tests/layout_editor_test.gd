@@ -229,10 +229,10 @@ func _resize_saved_shift() -> void:
 	eight_slots.settings[&"warehouse_capacity"] = 4.0
 	eight_slots.warehouse.resize(8)
 	var upgraded := Save.restore(eight_slots)
-	_check(upgraded.error.is_empty() and upgraded.line.warehouse.size() == 24
+	_check(upgraded.error.is_empty() and upgraded.line.warehouse.size() == 96
 		and not upgraded.line.settings.has(&"warehouse_capacity")
 		and Save.snapshot(upgraded.line).warehouse.slice(0, 8) == eight_slots.warehouse,
-		"Eight-slot saves keep their pallets and gain sixteen empty positions")
+		"Eight-slot saves keep their pallets and gain empty rack places")
 	var staged := previous.erp.stock("RM-FLOUR", "RM-STAGE")
 	_check(previous.erp.manual_transfer("RM-FLOUR", 2, "RM-WH", "RM-STAGE", "Warehouse migration test").is_empty(),
 		"Queue an ingredient shipment from the former warehouse")

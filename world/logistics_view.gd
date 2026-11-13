@@ -16,19 +16,28 @@ const PALE := Color("#deeceb")
 const TEAL := Color("#59a8a2")
 const AMBER := Color("#e7a23e")
 const JACK_ORANGE := Color("#eb9a2c")
-const SHIRT := Color("#2e3f55")
-const TROUSERS := Color("#2b3a4c")
-const BOOTS := Color("#1b1f22")
-const GLOVES := Color("#3b6fb6")
-const REFLECTIVE := Color("#e9eef0")
-const SKIN_TONES: Array[Color] = [Color("#e0b18e"), Color("#c68a62"), Color("#8d5a3b"), Color("#f1c9a5"), Color("#a86e4b"), Color("#6b4430")]
-const HAIR: Array[Color] = [Color("#2a1f1a"), Color("#5a3a22"), Color("#1a1a1a"), Color("#8a6a45"), Color("#3d2b1f")]
+## Workers are the CC0 Quaternius characters prepared in Blender (see CREDITS.md). The clips come
+## with them: Idle, Walk, Carry, Carry_Idle, Cart_Push, PickUp_Table (and Interact, Push).
+const WORKER_FILES: Array[String] = ["worker_male_dark", "worker_female_light", "worker_male_light", "worker_female_dark"]
+## Ground speed of the walk clip at normal playback, in metres per second.
+const WALK_REFERENCE := 1.22
+const MIN_STRIDE_RATE := 0.6
+const MAX_STRIDE_RATE := 2.2
+## Centre of a carried sack in the worker's frame, and its size. The sack rides on the spine bone.
+const CARRY_ANCHOR := Vector3(0, 1.27, 0.33)
+const CARRIED_SACK_SCALE := 0.55
+## The cart handle sits at the worker's own position, so the model steps back to hold it.
+const CART_STAND_BACK := -0.33
+const JACK_STAND_BACK := -0.61
 
 class CrewModel:
 	var view: Equipment
 	var body: Node3D
-	var limbs: Array[Node3D] = []
+	var player: AnimationPlayer
 	var sack: Node3D
+	var clip := &""
+	var handler := false
+	var settled := 0.0
 
 
 var _draw: Primitives
@@ -37,9 +46,12 @@ var _kit: Industrial
 var _parent: Node3D
 var views: Dictionary[StringName, Equipment] = {}
 var _crew: Dictionary[StringName, CrewModel] = {}
+var _worker_materials: Dictionary[String, StandardMaterial3D] = {}
+var _worker_count := 0
 var _cart_coating := {}
 var _forklift: Equipment
 var _forks: Node3D
+var _mast: Node3D
 var _load: Stock.PalletView
 var _jack_forks: Node3D
 var _jack_handle: Node3D
@@ -76,6 +88,8 @@ func select(id: StringName) -> void:
 func refresh(line: Line) -> void:
 	for id in _crew:
 		views[id].set_active(line.find_operator(id) != null)
+		if not views[id].visible:
+			_crew[id].player.active = false
 	for id in views:
 		if not (String(id).begins_with("Raw") or String(id).begins_with("Cooked") or String(id).begins_with("Coated")):
 			continue
@@ -96,12 +110,19 @@ func refresh(line: Line) -> void:
 			for wafer in views[id].inventory_slots:
 				(wafer.get_child(0) as MeshInstance3D).material_override = tint
 	_load.refresh(line.lift_load)
-	_forks.position.y = 0.07
+	var fork_y := 0.07
 	if line.lift_load != null:
-		var lift_height := 1.0
-		if line.forklift.state == Operator.State.UNLOADING:
-			lift_height = line.forklift.remaining / Line.LIFT_HANDLING_SECONDS
-		_forks.position.y = lerpf(0.07, 0.28, lift_height)
+		fork_y = 0.28
+		if line.forklift.state == Operator.State.UNLOADING and line.warehouse_reserved_slot >= 0:
+			# Raise to the rack level over the first part of the handling time, then drop the forks clear of the beam.
+			var reach := line.layout.warehouse_height(line.warehouse_reserved_slot)
+			var done := 1.0 - line.forklift.remaining / line.storage_handling_seconds(line.warehouse_reserved_slot)
+			if reach > 0.0:
+				fork_y = lerpf(0.28, 0.28 + reach, clampf(done / 0.6, 0.0, 1.0)) - 0.21 * clampf((done - 0.6) / 0.4, 0.0, 1.0)
+			else:
+				fork_y = lerpf(0.28, 0.07, done)
+	_forks.position.y = fork_y
+	_mast.position.y = maxf(0.0, fork_y - 0.28) * 0.5
 	if _jack_load != null and line.erp != null:
 		_refresh_jack_load(line.erp)
 
@@ -123,17 +144,22 @@ func _refresh_jack_load(book: Line.ERP) -> void:
 	_jack_packaging.position.x = 0.21 if ingredients else 0.0
 
 
+var freight_cage: Node3D
+
+
 func animate(line: Line, delta: float) -> void:
 	var alpha := line.interpolation()
 	var t := line.elapsed_seconds() + alpha * Line.STEP_SECONDS
 	var turn := 1.0 if line.elapsed_ticks == 0 else 1.0 - exp(-18.0 * delta) if line.playing else 0.0
 	for operator in line.platform_crew:
-		_pose_worker(operator, alpha, t, turn)
+		_pose_worker(operator, alpha, turn, delta, line)
 	for operator in line.floor_crew:
-		_pose_worker(operator, alpha, t, turn)
+		_pose_worker(operator, alpha, turn, delta, line)
 	if _jack_load != null and line.erp != null:
 		var handler := line.erp.material_handler
-		_pose_worker(handler, alpha, t, 1.0 if delta == 0.0 else turn)
+		_pose_worker(handler, alpha, 1.0 if delta == 0.0 else turn, delta, line)
+		if freight_cage != null:
+			_move_cage(handler, line.layout, alpha)
 		var unloading := handler.state == Operator.State.UNLOADING
 		var lift := clampf(handler.remaining, 0.0, 1.0) if unloading else 1.0
 		_jack_forks.position.y = 0.065 * lift if _jack_load.visible else 0.0
@@ -146,28 +172,53 @@ func animate(line: Line, delta: float) -> void:
 	_forklift.rotation.y = lerp_angle(_forklift.rotation.y, line.forklift.heading, turn)
 
 
-func _pose_worker(worker: Operator, alpha: float, t: float, turn: float) -> void:
+## The cage follows the handler while he stands in it; otherwise it waits where he left it.
+func _move_cage(handler: Operator, layout: Line.Layout, alpha: float) -> void:
+	var at := handler.previous_position.lerp(handler.position, alpha)
+	var base := layout.freight_lift_base()
+	var inside := absf(at.x - base.x) < 1.4 and absf(at.z - base.z) < 1.3
+	var top := layout.freight_lift_top().y
+	var level := at.y if inside else (top if at.y > top * 0.5 else 0.0)
+	freight_cage.position.y = clampf(level, 0.0, top)
+
+
+func _pose_worker(worker: Operator, alpha: float, turn: float, delta: float, line: Line) -> void:
 	var model := _crew[worker.id]
 	model.view.position = worker.previous_position.lerp(worker.position, alpha)
 	model.view.rotation.y = lerp_angle(model.view.rotation.y, worker.heading, turn)
+	var carrying := worker.cargo_kg > 0.0
+	# Ground speed in metres per simulated second, from the last fixed step.
+	var speed := worker.position.distance_to(worker.previous_position) / Line.STEP_SECONDS
+	var moving := speed > 0.15
 	var pushing := worker.state in [Operator.State.PUSHING, Operator.State.MOVING_PALLET_JACK]
-	var walking := pushing or worker.state in [Operator.State.WALKING, Operator.State.CARRYING]
-	var hands_forward := worker.cargo_kg > 0.0 or pushing
-	var stride := sin(t * 10.0 + float(worker.id.hash() % 19)) if walking else 0.0
-	model.limbs[0].rotation.x = stride * 0.55
-	model.limbs[1].rotation.x = -stride * 0.55
 	var handling := worker.state in [Operator.State.LOADING, Operator.State.UNLOADING]
-	if hands_forward:
-		model.limbs[2].rotation.x = -1.25
-		model.limbs[3].rotation.x = -1.25
+	var clip := &"Idle"
+	if pushing:
+		clip = &"Cart_Push" if moving else &"Idle"
 	elif handling:
-		model.limbs[2].rotation.x = -0.9 + sin(t * 7.0) * 0.34
-		model.limbs[3].rotation.x = -0.9 - sin(t * 7.0) * 0.34
-	else:
-		model.limbs[2].rotation.x = -stride * 0.46
-		model.limbs[3].rotation.x = stride * 0.46
-	model.body.position.y = absf(stride) * 0.065
-	model.sack.visible = worker.cargo_kg > 0.0
+		clip = &"Carry_Idle" if carrying else &"PickUp_Table"
+	elif moving:
+		clip = &"Carry" if carrying else &"Walk"
+	elif carrying:
+		clip = &"Carry_Idle"
+	if clip != model.clip:
+		model.clip = clip
+		model.player.play(clip, 0.25)
+	# Feet follow the real speed of the worker on screen, within sensible limits.
+	var rate := 1.0
+	if clip in [&"Walk", &"Carry", &"Cart_Push"]:
+		rate = clampf(speed * float(line.multiplier) / WALK_REFERENCE, MIN_STRIDE_RATE, MAX_STRIDE_RATE)
+	elif clip == &"PickUp_Table":
+		rate = 0.7
+	model.player.speed_scale = rate
+	# A skeleton that is not moving costs nothing, so idle workers freeze once their pose has
+	# blended in, and everyone stops while the simulation is paused.
+	model.settled = model.settled + delta if clip == &"Idle" else 0.0
+	model.player.active = line.playing and model.settled < 0.7
+	var stand_back := JACK_STAND_BACK if model.handler else (CART_STAND_BACK if clip == &"Cart_Push" else 0.0)
+	model.body.position.z = lerpf(model.body.position.z, stand_back, 1.0 - exp(-8.0 * delta)) if line.playing \
+		else stand_back
+	model.sack.visible = carrying
 
 
 func _view(id: StringName, size: Vector3, tint: Color, offset: Vector3 = Vector3.ZERO) -> Equipment:
@@ -185,49 +236,58 @@ func _build_worker(id: StringName, platform: bool, handler: bool = false) -> voi
 	if handler:
 		vest = TEAL
 		hat = PALE
+	model.handler = handler
 	model.view = _view(id, Vector3(1.24, 1.95, 2.70), hat, Vector3(0, 0, 0.13)) if handler \
 		else _view(id, Vector3(0.92, 1.95, 0.85), hat)
-	var look := absi(String(id).hash())
-	var skin := SKIN_TONES[look % SKIN_TONES.size()]
-	var hair := HAIR[(look / 7) % HAIR.size()]
 	model.body = Node3D.new()
-	model.body.position.z = -0.79 if handler else 0.0
+	model.body.position.z = JACK_STAND_BACK if handler else 0.0
 	model.view.add_child(model.body)
-	var body := model.body
-	# Hips, work shirt and a hi-vis vest with reflective bands.
-	_draw.box(body, Vector3(0, 0.96, 0), Vector3(0.32, 0.16, 0.2), TROUSERS)
-	_draw.cylinder(body, Vector3(0, 1.2, 0), 0.15, 0.48, SHIRT, 0.19).scale.z = 0.68
-	_draw.cylinder(body, Vector3(0, 1.2, 0.002), 0.158, 0.4, vest, 0.198).scale.z = 0.7
-	for y: float in [1.07, 1.27]:
-		_draw.cylinder(body, Vector3(0, y, 0.002), 0.168 + (y - 1.07) * 0.18, 0.035, REFLECTIVE).scale.z = 0.71
-	for side: float in [-1.0, 1.0]:
-		_draw.sphere(body, Vector3(side * 0.19, 1.4, 0), Vector3(0.14, 0.12, 0.13), SHIRT)
-	_draw.box(body, Vector3(0.08, 1.33, 0.14), Vector3(0.06, 0.08, 0.012), PALE)
-	# Neck, head, hair and a cap with a brim.
-	_draw.cylinder(body, Vector3(0, 1.49, 0), 0.045, 0.1, skin)
-	_draw.sphere(body, Vector3(0, 1.61, 0.005), Vector3(0.2, 0.24, 0.22), skin)
-	_draw.sphere(body, Vector3(0, 1.635, -0.02), Vector3(0.21, 0.2, 0.2), hair)
-	_draw.box(body, Vector3(0, 1.6, 0.11), Vector3(0.03, 0.05, 0.03), skin.darkened(0.08))
-	_draw.sphere(body, Vector3(0, 1.69, 0.0), Vector3(0.235, 0.17, 0.25), hat)
-	_draw.cylinder(body, Vector3(0, 1.665, 0.06), 0.135, 0.014, hat).scale.z = 1.25
-	for side: float in [-1.0, 1.0]:
-		var leg := _pivot(body, Vector3(side * 0.09, 0.92, 0))
-		_draw.cylinder(leg, Vector3(0, -0.42, 0), 0.058, 0.8, TROUSERS, 0.078)
-		_draw.cylinder(leg, Vector3(0, -0.62, 0), 0.066, 0.035, REFLECTIVE)
-		_draw.box(leg, Vector3(0, -0.865, 0.035), Vector3(0.11, 0.11, 0.25), BOOTS)
-		_draw.batch_static(leg)
-		model.limbs.append(leg)
-	for side: float in [-1.0, 1.0]:
-		var arm := _pivot(body, Vector3(side * 0.225, 1.4, 0.0))
-		_draw.cylinder(arm, Vector3(0, -0.15, 0), 0.048, 0.3, SHIRT, 0.056)
-		_draw.cylinder(arm, Vector3(0, -0.42, 0), 0.04, 0.28, SHIRT, 0.047)
-		_draw.sphere(arm, Vector3(0, -0.6, 0.01), Vector3(0.085, 0.11, 0.085), GLOVES)
-		_draw.batch_static(arm)
-		model.limbs.append(arm)
-	model.sack = _stock.sack(body, Vector3(0, 1.22, 0.55), 0.84)
+	var scene: PackedScene = load("res://assets/characters/%s.glb" % WORKER_FILES[_worker_count % WORKER_FILES.size()])
+	_worker_count += 1
+	var rig := scene.instantiate() as Node3D
+	model.body.add_child(rig)
+	model.player = _find_node(rig, "AnimationPlayer") as AnimationPlayer
+	model.player.get_animation(&"PickUp_Table").loop_mode = Animation.LOOP_LINEAR
+	var skeleton := _find_node(rig, "Skeleton3D") as Skeleton3D
+	for child in skeleton.get_children():
+		if child is MeshInstance3D:
+			_tint_worker(child, vest)
+	# The carried sack rides on the spine, so it sways with the body.
+	var attachment := BoneAttachment3D.new()
+	attachment.bone_name = "spine_03"
+	skeleton.add_child(attachment)
+	var rest := skeleton.get_bone_global_rest(skeleton.find_bone("spine_03"))
+	model.sack = _stock.sack(attachment, Vector3.ZERO)
+	var placement := rest.affine_inverse() * Transform3D(Basis(), CARRY_ANCHOR)
+	model.sack.transform = Transform3D(placement.basis * Basis.from_scale(Vector3.ONE * CARRIED_SACK_SCALE), placement.origin)
 	model.sack.hide()
-	_draw.batch_static(body)
+	model.player.play(&"Idle")
+	model.clip = &"Idle"
 	_crew[id] = model
+
+
+## Gives the vest and cap their role colour without touching the shared model materials.
+func _tint_worker(mesh_instance: MeshInstance3D, color: Color) -> void:
+	for surface in mesh_instance.mesh.get_surface_count():
+		var source := mesh_instance.mesh.surface_get_material(surface) as StandardMaterial3D
+		if source == null or source.resource_name != "Tint":
+			continue
+		var key := color.to_html()
+		if not _worker_materials.has(key):
+			var copy := source.duplicate() as StandardMaterial3D
+			copy.albedo_color = color
+			_worker_materials[key] = copy
+		mesh_instance.set_surface_override_material(surface, _worker_materials[key])
+
+
+func _find_node(node: Node, type: String) -> Node:
+	if node.is_class(type):
+		return node
+	for child in node.get_children():
+		var found := _find_node(child, type)
+		if found != null:
+			return found
+	return null
 
 
 func _build_pallet_jack(parent: Equipment) -> void:
@@ -353,9 +413,10 @@ func _build_forklift() -> void:
 	beacon.emission_energy_multiplier = 1.2
 	k.cylinder(_forklift, Vector3(0.45, 2.3, -0.95), 0.07, 0.12, beacon, Industrial.Y, 14)
 	# Mast: outer and inner channels, cross ties, lift cylinder and chains.
+	_mast = _pivot(_forklift, Vector3.ZERO)
 	for x: float in [-0.44, 0.44]:
 		k.box(_forklift, Vector3(x, 1.25, 0.97), Vector3(0.09, 2.3, 0.15), dark)
-		k.box(_forklift, Vector3(x * 0.82, 1.3, 1.04), Vector3(0.07, 2.2, 0.08), k.stainless_dark)
+		k.box(_mast, Vector3(x * 0.82, 1.3, 1.04), Vector3(0.07, 2.2, 0.08), k.stainless_dark)
 		k.box(_forklift, Vector3(x * 0.5, 1.2, 1.09), Vector3(0.025, 2.0, 0.015), k.seam)
 	for y: float in [0.25, 1.4, 2.36]:
 		k.box(_forklift, Vector3(0, y, 0.97), Vector3(0.96, 0.08, 0.12), dark)
@@ -370,6 +431,7 @@ func _build_forklift() -> void:
 		k.box(_forks, Vector3(x, 0.27, 1.18), Vector3(0.12, 0.5, 0.05), k.stainless_dark)
 		k.box(_forks, Vector3(x, 0.07, 1.78), Vector3(0.12, 0.05, 1.2), k.stainless_dark)
 	_draw.batch_static(_forks)
+	_draw.batch_static(_mast)
 	_load = _stock.pallet(_forks, Vector3(0, 0.11, 1.65))
 	_draw.batch_static(_forklift)
 

@@ -298,6 +298,11 @@ func _validate_scheduling() -> String:
 			if not id is String or listed.has(id) or work_centers.get(id, {}).get("operation") != stage:
 				return "scheduling.json [%s].centers: invalid or repeated work center %s." % [stage, id]
 			listed[id] = true
+		if not Master.number(row.get("start_kg", 0.0)):
+			return "scheduling.json [%s].start_kg: expected a quantity in kg." % stage
+	var overlap: Variant = scheduling.get("overlap", {})
+	if not overlap is Dictionary or not overlap.get("enabled", false) is bool or not Master.number(overlap.get("first_lot_kg", 75.0), 0.001):
+		return "scheduling.json overlap: expected enabled and first_lot_kg."
 	for code in materials:
 		if materials[code].active and materials[code].procurement == "In-house" and not boms.has(code):
 			return "scheduling.json: no manufacturing BOM for " + code

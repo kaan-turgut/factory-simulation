@@ -111,7 +111,7 @@ func _run() -> void:
 	await process_frame
 	_check(inspector.find_child("warehouse_capacity", true, false) == null,
 		"Warehouse has no capacity input")
-	_check(_label_with_text("4 / 24") != null and "4 / 24 pallets" in inspector._readout.text,
+	_check(_label_with_text("4 / 96") != null and "4 / 96 pallets" in inspector._readout.text,
 		"Dashboard and inspector show fixed capacity")
 	_click_button("Dispatch one")
 	_check(line.warehouse_count() == 3 and line.dispatched_pallets == 1, "Dispatch one via inspector")
@@ -127,7 +127,7 @@ func _run() -> void:
 	_check(_find_button("Reset") == null, "No Reset button in the transport bar")
 	line.reset()
 	_check(line.elapsed_ticks == 0 and not line.playing and line.warehouse_count() == 0
-		and line.warehouse.size() == 24, "Sandbox reset clears the run and keeps fixed capacity")
+		and line.warehouse.size() == 96, "Sandbox reset clears the run and keeps fixed capacity")
 	_key(KEY_ESCAPE)
 	_check(not inspector.visible, "Escape closes inspector")
 

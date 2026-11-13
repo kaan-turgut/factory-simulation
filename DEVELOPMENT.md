@@ -30,6 +30,16 @@ A due PO puts away what fits once per simulated second. The remainder stays on t
 
 The capacity comes from a full-rate day. Equal boxes per SKU within each family run at the family's pooled bottleneck: the cooling tunnel for wafers, about 2,670 boxes a day, and gum conditioning, about 4,040 boxes a day. Exploded to purchased materials and rounded to whole pallets per material, that needs about 82 positions. Opening stock uses 69.
 
+## Stage overlap
+
+`scheduling.json` carries `overlap` (`enabled`, `first_lot_kg`) and a `start_kg` on each stage that can start on part of a manufactured input. `Scheduling.overlaps(catalog, stage, input)` is true when overlap is on, the stage has a start quantity and the input is made in house. Purchased inputs and extrusion, which shares its crew with batter prep, keep the full-availability rule.
+
+`ERP.shortages(order)` is the release rule. An overlapping input needs `start_quantity` in stock (`component_available`) and an outlook of at least the full need, where `outlook = accessible stock - all reservations + pending_output`, and `pending_output` is the unreceived target of released and running orders of that material. Release then reserves the full quantity, so reservations may exceed stock until the upstream stage delivers, and records `order.incoming`. Stage execution already read live stock, so a released stage simply waits for input carts. `transition` refuses to cancel a released upstream order while reservations exceed stock plus other pending output.
+
+Planning mirrors it. A lot that feeds an overlapping consumer starts at `min(due - first_output, consumer finish - duration)`, where `first_output` is the duration of the consumer's start quantity. MRP netting lets a scheduled receipt serve such a need if its first lot is there in time and its last lot is done by the consumer's finish. Output that released orders have already claimed is not offered to other requirements. `Scheduling.supply_late` is the shared check for the MRP exception and the order detail warning.
+
+Saves keep their catalog, so a save without `overlap` keeps the old rule.
+
 ## Floor plan and lanes
 
 A layout file defines `size`, `plan` (the plan family), `lanes` and `objects`. The five routing lanes are grid Z values: `cart` and `walk` for the floor crew, `supply` for the material handler, `lift` for the forklift and `rear` for the legacy rear approach. Optional `aisle_end`, `lift_home_x`, `crew_home_x` and `reserved` rectangles place the forklift home, crew home and the cells the editor keeps clear. The Layout class exposes them as `cart_lane`, `walk_lane`, `supply_lane`, `lift_lane` and `rear_lane`. The old constants remain only as defaults for the original plan.

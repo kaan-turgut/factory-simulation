@@ -39,6 +39,10 @@ func work(seconds: float, action: State) -> void:
 	state = action
 
 
+## Speed of a freight lift cage, in metres per second.
+const LIFT_SPEED := 0.7
+
+
 func advance(seconds: float, speed: float) -> void:
 	previous_position = position
 	remaining = maxf(0.0, remaining - seconds)
@@ -46,12 +50,15 @@ func advance(seconds: float, speed: float) -> void:
 	while not _route.is_empty():
 		var offset := _route[0] - position
 		var length := offset.length()
-		if length > 0.00001:
+		var vertical := Vector2(offset.x, offset.z).length() < 0.00001 and absf(offset.y) > 0.00001
+		if not vertical and length > 0.00001:
 			heading = atan2(offset.x, offset.z)
-		if length > distance:
-			position += offset * (distance / length)
+		# A lift rides at its own speed: the same walking budget covers less height.
+		var cost := length * speed / LIFT_SPEED if vertical else length
+		if cost > distance:
+			position += offset * (distance / cost)
 			return
-		distance -= length
+		distance -= cost
 		position = _route.pop_front()
 
 

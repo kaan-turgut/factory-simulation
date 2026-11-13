@@ -82,6 +82,8 @@ var COMMANDS := {
 	"purchase": {"description": "Place a purchase order with a supplier. It is received automatically at its due time.",
 		"args": {"supplier": "string: supplier id", "code": "string: material code", "quantity": "number"}},
 	"create_demand": {"description": "Add a customer demand.", "args": {"code": "string: finished good code", "boxes": "int", "due": "number: seconds"}},
+	"set_stage_overlap": {"description": "Turn stage overlap on or off. On: a stage releases once a first lot of each manufactured input is in stock and released upstream orders cover the rest, so stages run together like a line. Off: it waits for its whole input. Only stages with a start_kg in the scheduling data overlap.",
+		"args": {"enabled": "bool"}},
 	"set_auto_release": {"description": "Release planned orders automatically once their components are in stock.", "args": {"enabled": "bool"}},
 	"advance": {"description": "Run the simulation for a number of seconds. Returns the events that happened.", "args": {"seconds": "number"}},
 	"run_until": {"description": "Run until one of the stop events happens or max_seconds pass.",
@@ -195,6 +197,8 @@ func load_scenario_data(data: Dictionary) -> Dictionary:
 			problems.append("raw_warehouse_positions must be at least 1")
 		else:
 			line.erp.catalog.storage_capacity["RM-WH"].positions = positions
+	if data.has("stage_overlap"):
+		_set_overlap(bool(data.stage_overlap))
 	var planning: Dictionary = data.get("planning", {})
 	for code in planning:
 		var message: String = line.erp.catalog.set_planning(String(code), planning[code])
@@ -238,6 +242,7 @@ func _cmd_status(_args: Dictionary) -> Dictionary:
 	return {"scenario": scenario.get("name", "default"), "horizon_seconds": scenario.get("horizon_seconds", 0),
 		"mode": "live" if live else "headless", "playing": line.playing, "speed": line.multiplier,
 		"orders_by_status": counts, "open_purchase_orders": open_po, "auto_release": line.erp.auto_release,
+		"stage_overlap": Schedule.overlap_enabled(line.erp.catalog),
 		"raw_warehouse": _raw_warehouse(),
 		"active_work_centers": running, "orders_with_delay_or_warning": delayed,
 		"demands": _demand_summary(), "finished_boxes": _finished_boxes()}
@@ -558,6 +563,18 @@ func _cmd_create_demand(args: Dictionary) -> Dictionary:
 	return _acted("create_demand", args, result.error, {"id": result.get("id", "")})
 
 
+func _cmd_set_stage_overlap(args: Dictionary) -> Dictionary:
+	_set_overlap(bool(args.get("enabled", false)))
+	return _acted("set_stage_overlap", args, "", {"stage_overlap": Schedule.overlap_enabled(line.erp.catalog)})
+
+
+func _set_overlap(enabled: bool) -> void:
+	var config: Dictionary = line.erp.catalog.scheduling.get("overlap", {"enabled": false, "first_lot_kg": 75})
+	config.enabled = enabled
+	line.erp.catalog.scheduling.overlap = config
+	line.erp.changed()
+
+
 func _cmd_set_auto_release(args: Dictionary) -> Dictionary:
 	line.erp.auto_release = bool(args.get("enabled", false))
 	return _acted("set_auto_release", args, "", {"auto_release": line.erp.auto_release})
@@ -857,6 +874,14 @@ func _order_row(order: Dictionary) -> Dictionary:
 		var missing: Dictionary = line.erp.shortages(order)
 		if not missing.is_empty():
 			row.shortages = _rounded(missing)
+	if order.status in ["Released", "In Progress"] and order.has("incoming"):
+		var coming := {}
+		for code in order.incoming:
+			var amount: float = maxf(0.0, float(order.remaining.get(code, 0.0)) - line.erp.accessible(order, code))
+			if amount > 0.001:
+				coming[code] = amount
+		if not coming.is_empty():
+			row.awaiting_input = _rounded(coming)
 	if float(order.get("received_kg", 0.0)) > 0.0:
 		row.received_kg = _t(order.received_kg)
 	for key in ["logistics_seconds", "material_wait_seconds", "scrapped"]:

@@ -60,6 +60,7 @@ The goal is to combine realistic industrial production behavior with an accessib
 
 ## Detailed Scheduling
 - Each manufactured stage requires its own scheduled and released order. A demand, proposal, scheduled receipt, or pegging link cannot start equipment or satisfy a physical release check.
+- Stage overlap is the one exception, and only for stages with a `start_kg` in `scheduling.json`: a stage may release once that first lot of each manufactured input is physically in stock and the rest is covered by stock plus the unreceived output of released or running upstream orders, net of every claim. Purchased inputs always need their full quantity in stock. An upstream order that others count on cannot be cancelled.
 - Reserve only immediate BOM components, atomically. Post issues and receipts when simulated work or transport actually occurs.
 - Keep planned intervals separate from actual times. Freeze the executable route, production standard, setup rules, and BOM on release. Check both calendar and finite resource availability for schedule edits.
 - Keep the Gantt a readout and editor of authoritative orders. Run the detailed scheduling test for changes to planning, routing, WIP handoffs, or ERP persistence.

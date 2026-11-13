@@ -77,6 +77,7 @@ var _raw_decks: MultiMesh
 var _raw_cases: MultiMesh
 var _raw_sacks: MultiMesh
 var _pallet_picks: Array[Equipment] = []
+var _freight_cage: Node3D
 var _raw_revision := -1
 var _coating_colors := {}
 var _erp_enabled := false
@@ -138,6 +139,7 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 	for station in _equipment.values():
 		_draw.batch_static(station, [station.beacon])
 	_logistics = Logistics.new(self, _draw, _stock, _erp_enabled, _industrial)
+	_logistics.freight_cage = _freight_cage
 
 
 func update_view(camera: Camera3D) -> void:
@@ -193,7 +195,7 @@ func refresh(line: Line) -> void:
 		var pallet := line.warehouse[index]
 		if pallet != null and _stored[index] == null:
 			var node := _equipment[&"Warehouse"]
-			_stored[index] = _stock.pallet(node, node.to_local(layout.warehouse_slot(index)) + Vector3.UP * 0.049)
+			_stored[index] = _stock.pallet(node, node.to_local(layout.warehouse_slot(index)) + Vector3.UP * (0.049 + layout.warehouse_height(index)))
 		if _stored[index] != null:
 			_stored[index].refresh(pallet)
 		if _erp_enabled:
@@ -206,7 +208,8 @@ func refresh(line: Line) -> void:
 		elif free > 0:
 			marker = Color("#83a2a2")
 			free -= 1
-		_warehouse_markers[index].material_override = _draw.material(marker)
+		if index < _warehouse_markers.size():
+			_warehouse_markers[index].material_override = _draw.material(marker)
 	_logistics.refresh(line)
 	if line.erp != null and _erp_enabled:
 		_refresh_erp(line)
@@ -390,7 +393,13 @@ func _build_platform() -> void:
 	hopper.offset_readout(Vector3(-2.35, 0.35, -2.75))
 	_rail(Vector3(left, y, rear), Vector3(right, y, rear))
 	_rail(Vector3(left, y, rear), Vector3(left, y, front))
-	_rail(Vector3(left, y, front), Vector3(right, y, front))
+	if layout.has_freight_lift():
+		# Leave the front rail open where the lift cage docks with the deck.
+		var gate := deck.position.x + Layout.FREIGHT_LIFT_CAGE.x
+		_rail(Vector3(left, y, front), Vector3(gate - 1.3, y, front))
+		_rail(Vector3(gate + 1.3, y, front), Vector3(right, y, front))
+	else:
+		_rail(Vector3(left, y, front), Vector3(right, y, front))
 	var stairs := _station(&"Stairs", "", SAFETY, false, false)
 	var stair_plan := layout.objects[&"Stairs"]
 	var stair_depth := stair_plan.size.y
@@ -438,6 +447,51 @@ func _build_platform() -> void:
 		var bag := _stock.sack(hopper, Vector3(0, 1.58, 0), 0.55)
 		bag.position = Vector3(-0.52 + (index % 3) * 0.52, 1.58, -0.26 + floori(index / 3.0) * 0.54)
 		hopper.inventory_slots.append(bag)
+	if layout.has_freight_lift():
+		_build_freight_lift()
+
+
+## A caged freight lift on the deck's aisle side: the material handler rides it with the pallet jack.
+func _build_freight_lift() -> void:
+	var k := _industrial
+	var top := layout.objects[&"Platform"].elevation
+	var tower := Node3D.new()
+	tower.name = "FreightLift"
+	tower.position = layout.freight_lift_base()
+	add_child(tower)
+	var half := Layout.FREIGHT_LIFT_SIZE * 0.5 + Vector2(0.12, 0.12)
+	var height := top + 1.45
+	k.box(tower, Vector3(0, 0.02, 0), Vector3(half.x * 2.0 + 0.3, 0.04, half.y * 2.0 + 0.3), k.frame_dark)
+	for side_x: float in [-1.0, 1.0]:
+		for side_z: float in [-1.0, 1.0]:
+			var post := Vector3(side_x * half.x, height * 0.5, side_z * half.y)
+			k.box(tower, post, Vector3(0.12, height, 0.12), k.frame_dark)
+			k.box(tower, post * Vector3(1, 0, 1) + Vector3(0, 0.45, 0), Vector3(0.18, 0.9, 0.18), k.hazard)
+	# The shaft stays open on the aisle side (+Z) and toward the deck (-Z); frames tie the posts above and below.
+	for tie_y: float in [0.05, top * 0.5, height]:
+		for side_z: float in [-1.0, 1.0]:
+			k.box(tower, Vector3(0, tie_y, side_z * half.y), Vector3(half.x * 2.0, 0.1, 0.1), k.frame_dark)
+		for side_x: float in [-1.0, 1.0]:
+			k.box(tower, Vector3(side_x * half.x, tie_y, 0), Vector3(0.1, 0.1, half.y * 2.0), k.frame_dark)
+	# Chain hoist: motor and drive housing on the roof, guide chain down the rear posts.
+	k.box(tower, Vector3(0, height + 0.2, 0), Vector3(1.1, 0.4, 0.8), k.paint(AMBER))
+	for side_x: float in [-0.5, 0.5]:
+		k.pipe(tower, Vector3(side_x, height, -0.5), Vector3(side_x, 0.2, -0.5), 0.015, k.chrome)
+	_draw.batch_static(tower)
+	# The moving cage: grating floor, side guards and a chain across the aisle-side entry.
+	_freight_cage = Node3D.new()
+	_freight_cage.name = "Cage"
+	tower.add_child(_freight_cage)
+	var cage := Layout.FREIGHT_LIFT_SIZE
+	k.box(_freight_cage, Vector3(0, -0.02, 0), Vector3(cage.x, 0.08, cage.y), k.grating)
+	k.box(_freight_cage, Vector3(0, -0.1, 0), Vector3(cage.x, 0.1, cage.y), k.frame_dark)
+	for side_x: float in [-1.0, 1.0]:
+		var wall_x := side_x * (cage.x * 0.5 - 0.04)
+		k.box(_freight_cage, Vector3(wall_x, 1.0, 0), Vector3(0.05, 0.05, cage.y), k.safety)
+		k.box(_freight_cage, Vector3(wall_x, 0.55, 0), Vector3(0.04, 0.04, cage.y), k.safety)
+		k.box(_freight_cage, Vector3(wall_x, 0.5, 0), Vector3(0.04, 1.0, 0.04), k.safety)
+	k.box(_freight_cage, Vector3(0, 0.95, cage.y * 0.5 - 0.04), Vector3(cage.x, 0.04, 0.04), k.hazard)
+	_draw.batch_static(_freight_cage)
 
 
 func _build_extruder() -> void:
@@ -513,16 +567,19 @@ func _build_warehouse() -> void:
 			var left := node.to_local(layout.warehouse_approach(index)) + turn
 			var right := node.to_local(layout.warehouse_approach(index + per_row - 1)) + turn
 			_drive_lane(node.to_global(left), node.to_global(right), 2.0, 0.034)
-	for index in layout.warehouse_slot_count():
+	for index in layout.warehouse_position_count():
 		var at := layout.warehouse_slot(index)
 		var marker := _draw.box(self, at + Vector3(0, 0.033, 0), Vector3(1.93, 0.021, 1.54), METAL)
 		marker.rotation.y = node.rotation.y
 		_warehouse_markers.append(marker)
 		_bay(at + Vector3(0, 0.053, 0), Vector2(2.02, 1.68), PALE, node.rotation.y)
+		_floor_text(at + Vector3(0, 0.053, 1.05).rotated(Vector3.UP, node.rotation.y), "%02d" % (index + 1), PALE, 0.015)
+	# Every pallet place, upper rack levels included, can be selected once a pallet sits in it.
+	for index in layout.warehouse_slot_count():
 		_stored.append(null)
 		if _erp_enabled:
 			var pick := Equipment.new()
-			pick.position = at
+			pick.position = layout.warehouse_slot(index) + Vector3.UP * layout.warehouse_height(index)
 			pick.rotation.y = node.rotation.y
 			add_child(pick)
 			var id := StringName("FGSlot%d" % index)
@@ -530,7 +587,6 @@ func _build_warehouse() -> void:
 			_equipment[id] = pick
 			_pallet_picks.append(pick)
 			pick.set_active(false)
-		_floor_text(at + Vector3(0, 0.053, 1.05).rotated(Vector3.UP, node.rotation.y), "%02d" % (index + 1), PALE, 0.015)
 	_draw.batch_static(node)
 
 

@@ -20,6 +20,8 @@ const STEP_EPSILON := 1e-8
 const CART_HANDLING_SECONDS := 3.0
 const COATER_OUTFEED_KG := 36.0
 const LIFT_HANDLING_SECONDS := 2.0
+## Extra mast time per rack level above the floor when the forklift stores or retrieves a pallet.
+const LIFT_LEVEL_SECONDS := 1.5
 
 enum JobKind { MOVE_CART, LOAD_OVEN, UNLOAD_OVEN, FEED_COATER, LOAD_COATED, UNLOAD_PACK_WIP, SFG_LOAD, SFG_UNLOAD, CELL_INPUT, CELL_OUTPUT, CELL_BATCH, CELL_PALLET }
 enum LiftPhase { WAIT, TO_PALLET, PICK_UP, TO_STORAGE, DROP_OFF, RETURN }
@@ -1688,10 +1690,10 @@ func _advance_forklift() -> void:
 			_lift_pickup_slot = -1
 			_lift_phase = LiftPhase.TO_STORAGE
 			forklift.travel(layout.lift_to_slot(forklift.position, warehouse_reserved_slot),
-				Operator.State.DRIVING, "Deliver finished pallet", "Warehouse slot %02d" % (warehouse_reserved_slot + 1))
+				Operator.State.DRIVING, "Deliver finished pallet", slot_name(warehouse_reserved_slot))
 		LiftPhase.TO_STORAGE:
 			_lift_phase = LiftPhase.DROP_OFF
-			forklift.work(LIFT_HANDLING_SECONDS, Operator.State.UNLOADING)
+			forklift.work(storage_handling_seconds(warehouse_reserved_slot), Operator.State.UNLOADING)
 		LiftPhase.DROP_OFF:
 			var return_path := layout.lift_from_slot(warehouse_reserved_slot)
 			warehouse[warehouse_reserved_slot] = lift_load
@@ -1706,6 +1708,18 @@ func _advance_forklift() -> void:
 		LiftPhase.RETURN:
 			forklift.idle()
 			_lift_phase = LiftPhase.WAIT
+
+
+## Time to lift a pallet into the slot and clear the forks: the floor takes the base time, each rack level adds mast travel.
+func storage_handling_seconds(slot: int) -> float:
+	return LIFT_HANDLING_SECONDS + LIFT_LEVEL_SECONDS * layout.warehouse_level(slot)
+
+
+func slot_name(slot: int) -> String:
+	var level := layout.warehouse_level(slot)
+	var position := slot % layout.warehouse_position_count()
+	return "Warehouse slot %02d" % (position + 1) if layout.warehouse_slot_count() == layout.warehouse_position_count() \
+		else "Warehouse bay %02d · %s" % [position + 1, "floor" if level == 0 else "level %d" % level]
 
 
 func _request_forklift_job() -> void:

@@ -88,7 +88,7 @@ func _collect_obstacles() -> void:
 	for dock in docks:
 		_route(dock, _layout._aisle_approach(dock, _layout.cart_lane, 0.34, blockers), 1.0)
 		_route(dock, _layout._aisle_approach(dock, _layout.walk_lane, 0.22, blockers), 0.7)
-	var stops: Array[Vector3] = [_layout.supply_point("RM-WH", plan), _layout.supply_point("RM-STAGE", plan)]
+	var stops: Array[Vector3] = [_layout.supply_point("RM-WH", plan), _layout.supply_ground_point("RM-STAGE", plan)]
 	for location in Layout.SUPPLY_STATIONS:
 		if plan.has(Layout.SUPPLY_STATIONS[location]):
 			stops.append(_layout.supply_point(location, plan))
@@ -98,9 +98,9 @@ func _collect_obstacles() -> void:
 	for index in Layout.PALLET_BAYS:
 		var approach := _layout.pallet_approach(index, plan)
 		_route(home, _layout.route(home, approach, _layout.lift_lane), 1.6)
-		for slot in _layout.warehouse_slot_count(plan):
+		for slot in _layout.warehouse_position_count(plan):
 			_route(approach, _layout.lift_to_slot(approach, slot, plan), 1.6)
-	for slot in _layout.warehouse_slot_count(plan):
+	for slot in _layout.warehouse_position_count(plan):
 		_route(_layout.warehouse_approach(slot, plan), _layout.lift_from_slot(slot, plan), 1.6)
 	var entry := _layout.warehouse_entry_path(plan)
 	_route(entry[0], entry.slice(1), 1.8)
