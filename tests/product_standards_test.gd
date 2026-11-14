@@ -350,7 +350,11 @@ func _shutter_traffic(floor_view, line: Line) -> void:
 	_check(line.erp.manual_transfer("RM-FLOUR", 25.0, "RM-WH", "RM-STAGE", "Material handler test").is_empty(),
 		"Queue a real raw-material pickup")
 	line.set_playing(true)
-	line.advance(1.0)
+	# He walks from his desk to the parked pallet jack and the raw dock before the pickup.
+	for tick in 600:
+		line.advance(Line.STEP_SECONDS)
+		if line.erp.stock("RM-FLOUR", "TRANSIT") > 0.0:
+			break
 	floor_view.refresh(line)
 	var logistics = floor_view._logistics
 	_check(logistics._jack_load.visible and logistics._jack_ingredients.visible and not logistics._jack_packaging.visible,

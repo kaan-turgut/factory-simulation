@@ -53,6 +53,9 @@ var _forklift: Equipment
 var _forks: Node3D
 var _mast: Node3D
 var _load: Stock.PalletView
+var _jack_root: Node3D
+var _jack_following := true
+var _jack_unplaced := true
 var _jack_forks: Node3D
 var _jack_handle: Node3D
 var _jack_load: Node3D
@@ -157,6 +160,7 @@ func animate(line: Line, delta: float) -> void:
 		_pose_worker(operator, alpha, turn, delta, line)
 	if _jack_load != null and line.erp != null:
 		var handler := line.erp.material_handler
+		_follow_or_park_jack(handler, line.layout)
 		_pose_worker(handler, alpha, 1.0 if delta == 0.0 else turn, delta, line)
 		if freight_cage != null:
 			_move_cage(handler, line.layout, alpha)
@@ -170,6 +174,19 @@ func animate(line: Line, delta: float) -> void:
 		view.rotation.y = lerp_angle(view.rotation.y, cart.heading, turn)
 	_forklift.position = line.forklift.previous_position.lerp(line.forklift.position, alpha)
 	_forklift.rotation.y = lerp_angle(_forklift.rotation.y, line.forklift.heading, turn)
+
+
+## The pallet jack goes with the handler while he works with it. With a desk in the raw warehouse
+## he leaves it parked beside the desk and the jack stays where he put it.
+func _follow_or_park_jack(handler: Operator, layout: Line.Layout) -> void:
+	_jack_following = not layout.has_handler_desk() or handler.state in [
+		Operator.State.MOVING_PALLET_JACK, Operator.State.LOADING, Operator.State.UNLOADING]
+	if _jack_following:
+		_jack_root.global_transform = views[Line.ERP.MATERIAL_HANDLER_ID].global_transform
+		_jack_unplaced = false
+	elif _jack_unplaced:
+		_jack_root.global_transform = Transform3D(Basis(Vector3.UP, PI * 0.5), layout.handler_jack_spot())
+		_jack_unplaced = false
 
 
 ## The cage follows the handler while he stands in it; otherwise it waits where he left it.
@@ -203,7 +220,12 @@ func _pose_worker(worker: Operator, alpha: float, turn: float, delta: float, lin
 		clip = &"Carry_Idle"
 	if clip != model.clip:
 		model.clip = clip
-		model.player.play(clip, 0.25)
+		if line.playing:
+			model.player.play(clip, 0.25)
+		else:
+			# Paused: the player is switched off below, so apply the new pose now.
+			model.player.play(clip, 0.0)
+			_apply_pose(model.player)
 	# Feet follow the real speed of the worker on screen, within sensible limits.
 	var rate := 1.0
 	if clip in [&"Walk", &"Carry", &"Cart_Push"]:
@@ -215,7 +237,7 @@ func _pose_worker(worker: Operator, alpha: float, turn: float, delta: float, lin
 	# blended in, and everyone stops while the simulation is paused.
 	model.settled = model.settled + delta if clip == &"Idle" else 0.0
 	model.player.active = line.playing and model.settled < 0.7
-	var stand_back := JACK_STAND_BACK if model.handler else (CART_STAND_BACK if clip == &"Cart_Push" else 0.0)
+	var stand_back := (JACK_STAND_BACK if _jack_following else 0.0) if model.handler else (CART_STAND_BACK if clip == &"Cart_Push" else 0.0)
 	model.body.position.z = lerpf(model.body.position.z, stand_back, 1.0 - exp(-8.0 * delta)) if line.playing \
 		else stand_back
 	model.sack.visible = carrying
@@ -262,8 +284,18 @@ func _build_worker(id: StringName, platform: bool, handler: bool = false) -> voi
 	model.sack.transform = Transform3D(placement.basis * Basis.from_scale(Vector3.ONE * CARRIED_SACK_SCALE), placement.origin)
 	model.sack.hide()
 	model.player.play(&"Idle")
+	# Pose the skeleton at once: instances load paused, and a paused player never runs a frame,
+	# which would leave the worker in the model's T-shaped rest pose.
+	_apply_pose(model.player)
 	model.clip = &"Idle"
 	_crew[id] = model
+
+
+func _apply_pose(player: AnimationPlayer) -> void:
+	var was_active := player.active
+	player.active = true
+	player.advance(0.0)
+	player.active = was_active
 
 
 ## Gives the vest and cap their role colour without touching the shared model materials.
@@ -293,6 +325,8 @@ func _find_node(node: Node, type: String) -> Node:
 func _build_pallet_jack(parent: Equipment) -> void:
 	var jack := _pivot(parent, Vector3.ZERO)
 	jack.name = "ManualPalletJack"
+	jack.top_level = true  # it can be left standing while the handler is at his desk
+	_jack_root = jack
 	for x: float in [-0.18, 0.18]:
 		_wheel(jack, Vector3(x, 0.12, 0.12), 0.12, 0.105)
 	_draw.box(jack, Vector3(0, 0.18, 0.14), Vector3(0.44, 0.19, 0.32), STEEL)

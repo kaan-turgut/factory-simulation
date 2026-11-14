@@ -251,6 +251,34 @@ func supply_point(location: String, plan: Dictionary = objects) -> Vector3:
 	return grid.to_world(Vector2(10.0, supply_lane))
 
 
+## The material handler's desk stands against the raw warehouse's west wall, in the strip between
+## the front racks and the wall; he waits there and parks the pallet jack beside it. Only plans with
+## a high-bay raw warehouse have one (the others keep him at the dock).
+func has_handler_desk(plan: Dictionary = objects) -> bool:
+	if legacy or not plan.has(&"RawWarehouse"):
+		return false
+	var size: Vector2i = plan[&"RawWarehouse"].size
+	return WarehouseRoom.high_bay(size) and size.x >= 26 and size.y >= 30
+
+
+## Where he stands at the desk, facing the wall.
+func handler_desk(plan: Dictionary = objects) -> Vector3:
+	var room: Placement = plan[&"RawWarehouse"]
+	return _room_point(room, Vector2(-room.size.x * 0.5 + 1.6, room.size.y * 0.5 - 4.0))
+
+
+## Where the pallet jack is parked while he is at the desk.
+func handler_jack_spot(plan: Dictionary = objects) -> Vector3:
+	var room: Placement = plan[&"RawWarehouse"]
+	return _room_point(room, Vector2(-room.size.x * 0.5 + 3.5, room.size.y * 0.5 - 4.9))
+
+
+## The desk itself, against the wall behind the handler.
+func handler_desk_furniture(plan: Dictionary = objects) -> Vector3:
+	var room: Placement = plan[&"RawWarehouse"]
+	return _room_point(room, Vector2(-room.size.x * 0.5 + 0.55, room.size.y * 0.5 - 4.0))
+
+
 ## The material handler reaches the ingredient deck on a freight lift beside its front edge.
 ## Positions are platform-local (x along the deck, z toward the aisle is negative).
 const FREIGHT_LIFT_STAGE := Vector3(-4.5, 0, -2.5)
@@ -280,6 +308,29 @@ func supply_ground_point(location: String, plan: Dictionary = objects) -> Vector
 
 
 func supply_route(from: Vector3, target: Vector3) -> Array[Vector3]:
+	if has_handler_desk():
+		# The desk pocket connects to the rest of the plan through the raw dock.
+		var dock := supply_point("RM-WH")
+		var desk := handler_desk()
+		var jack := handler_jack_spot()
+		if target.is_equal_approx(desk) or target.is_equal_approx(jack):
+			var there := supply_route(from, dock)
+			if there.is_empty() and not from.is_equal_approx(dock):
+				return []
+			there.append(jack)
+			if target.is_equal_approx(desk):
+				there.append(desk)
+			return there
+		if from.is_equal_approx(desk) or from.is_equal_approx(jack):
+			var rest := supply_route(dock, target)
+			if rest.is_empty() and not dock.is_equal_approx(target):
+				return []
+			var out: Array[Vector3] = []
+			if from.is_equal_approx(desk):
+				out.append(jack)
+			out.append(dock)
+			out.append_array(rest)
+			return out
 	if not has_freight_lift():
 		return _floor_route(from, target, supply_lane, 0.75)
 	var base := freight_lift_base()

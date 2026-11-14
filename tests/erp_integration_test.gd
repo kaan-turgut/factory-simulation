@@ -111,7 +111,11 @@ func _purchase_and_transfer() -> void:
 		"Queue transfer to mezzanine")
 	_near(b.stock("RM-FLOUR", "RM-STAGE"), 0.0, "Transfer does not teleport")
 	line.set_playing(true)
-	line.advance(1.0)
+	# The handler first walks from his desk to the parked pallet jack and the pickup point.
+	for second in 60:
+		line.advance(1.0)
+		if b.stock("RM-FLOUR", "TRANSIT") > 0.0:
+			break
 	_near(b.stock("RM-FLOUR", "TRANSIT"), 25.0, "Material travels on the pallet jack")
 	_near(b.stock("RM-FLOUR", "RM-WH"), opening - 25.0, "Pickup decrements warehouse once")
 	var snapshot := Save.snapshot(line)
@@ -127,7 +131,7 @@ func _purchase_and_transfer() -> void:
 	line = saved.line
 	b = line.erp
 	line.set_playing(true)
-	line.advance(75.0)
+	line.advance(150.0)
 	_near(b.stock("RM-FLOUR", "RM-STAGE"), 25.0, "Travel and handling complete transfer")
 	_near(b.stock("RM-FLOUR", "TRANSIT"), 0.0, "Transit cleared after drop")
 	_near(b.reservations["RM-FLOUR"], 0.0, "Transfer reservation released")

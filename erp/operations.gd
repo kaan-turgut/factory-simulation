@@ -714,7 +714,11 @@ func _release_remainder(order: Dictionary) -> void:
 
 
 func initialize_supply(layout) -> void:
-	material_handler = Operator.new(MATERIAL_HANDLER_ID, MATERIAL_HANDLER_TITLE, layout.supply_point("RM-WH"))
+	if layout.has_handler_desk():
+		material_handler = Operator.new(MATERIAL_HANDLER_ID, MATERIAL_HANDLER_TITLE, layout.handler_desk())
+		material_handler.heading = -PI * 0.5  # facing the desk
+	else:
+		material_handler = Operator.new(MATERIAL_HANDLER_ID, MATERIAL_HANDLER_TITLE, layout.supply_point("RM-WH"))
 
 
 func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
@@ -736,9 +740,14 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 				if not shipment.is_empty():
 					break
 		if shipment.is_empty():
+			_handler_home(layout)
 			return
 		shipment.phase = -1
 	if shipment.phase == -1:
+		if layout.has_handler_desk() and material_handler.position.is_equal_approx(layout.handler_desk()):
+			var fetch: Array[Vector3] = [layout.handler_jack_spot()]
+			material_handler.travel(fetch, Operator.State.WALKING, "Fetch pallet jack", "Raw material warehouse")
+			return
 		var pickup: Vector3 = layout.supply_point(shipment.source)
 		var path: Array[Vector3] = layout.supply_route(material_handler.position, pickup)
 		if path.is_empty() and not material_handler.position.is_equal_approx(pickup):
@@ -776,6 +785,24 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 			_release_manual_shipment()
 		shipment.clear()
 		material_handler.idle()
+
+
+## With nothing to move, the handler parks the pallet jack and goes back to his desk.
+func _handler_home(layout) -> void:
+	if not layout.has_handler_desk():
+		return
+	var desk: Vector3 = layout.handler_desk()
+	var jack: Vector3 = layout.handler_jack_spot()
+	var handler := material_handler
+	if handler.position.is_equal_approx(desk):
+		handler.idle()
+	elif handler.position.is_equal_approx(jack):
+		var walk: Array[Vector3] = [desk]
+		handler.travel(walk, Operator.State.WALKING, "Back to desk", "Raw material warehouse")
+	else:
+		var path: Array[Vector3] = layout.supply_route(handler.position, jack)
+		if not path.is_empty():
+			handler.travel(path, Operator.State.MOVING_PALLET_JACK, "Park pallet jack", "Raw material warehouse")
 
 
 ## Mass on the pallet jack: the kilogram items of the current shipment.
