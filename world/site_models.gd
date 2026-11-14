@@ -62,16 +62,47 @@ func build(parent: Node3D, layout: Layout, kit: Industrial, draw: Primitives, st
 	_safety_zones()
 	_walkways()
 	_department_signs()
-	_office_and_lab(Rect2(34, 55, 18, 10.5))
-	_canteen(Rect2(56, 55, 20, 10.5))
-	_workshop(Rect2(34, 88, 20, 11.6))
-	_pallet_store(Rect2(58, 88, 26, 11.6))
+	_staff_rooms()
+	_handler_desk()
 	_kitting(Rect2(19.5, 41.5, 11, 9.5))
 	_marshalling(Rect2(89, 54.6, 26, 3.6))
 	_safety_points()
 	_cartons()
 	_draw.batch_static(_root)
 	return _root
+
+
+# --- Staff rooms ------------------------------------------------------------------
+
+func _staff_rooms() -> void:
+	# Lab, office and maintenance workshop form one block along the rear hall wall, sharing walls
+	# (the workshop is the wide room on the right). The canteen and the changing room share a wall
+	# against the finished goods warehouse's west wall. Doors face the open bay.
+	var placed := {
+		"lab": _lab(Rect2(33, 64.2, 9, 10.5), Vector2(37.5, 64.2), [1]),
+		"office": _office(Rect2(42, 64.2, 11, 10.5), Vector2(47.5, 64.2), [1, 2]),
+		"workshop": _workshop(Rect2(53, 64.2, 18, 10.5)),
+		"changing": _changing_room(Rect2(75.6, 40.6, 11, 10), Vector2(75.6, 45.6), [3]),
+		"canteen": _canteen(Rect2(75.6, 50.6, 11, 10), Vector2(75.6, 55.6), [3, 0])}
+	for room in placed:
+		if not placed[room]:
+			push_warning("Site: no room for the " + room)
+
+
+func _handler_desk() -> void:
+	# The material handler's computer desk against the raw warehouse's west wall, facing east.
+	if not _layout.has_handler_desk():
+		return
+	var at := _layout.grid.coordinates(_layout.handler_desk_furniture())
+	var prop := _prop(at, PI * 0.5)
+	_desk(prop, false)
+	_kit.box(prop, Vector3(0.62, 0.45, -0.15), Vector3(0.22, 0.9, 0.5), _kit.paint(Color("#3a4248")))
+	var shelf := _prop(at + Vector2(-0.1, 1.3), PI * 0.5)
+	_kit.box(shelf, Vector3(0, 0.45, 0), Vector3(0.7, 0.9, 0.5), _kit.paint(Color("#9aa4a8")))
+	for y: float in [0.3, 0.6]:
+		_kit.box(shelf, Vector3(0, y, 0.255), Vector3(0.5, 0.02, 0.006), _kit.seam)
+	_commit(prop)
+	_commit(shelf)
 
 
 # --- Where things may go -------------------------------------------------------
@@ -161,9 +192,7 @@ func _walkways() -> void:
 	# Green pedestrian walkways linking the departments, the offices and the workshop. They run
 	# straight through cart docks and routes; only tiles on equipment and its clearance are left out.
 	var walks: Array[Rect2] = [
-		Rect2(14, 38.4, 67.4, 1.5), Rect2(81.4, 38.4, 1.5, 11.7), Rect2(81.4, 48.6, 35.6, 1.5),
-		Rect2(52.6, 39.9, 1.5, 12.6), Rect2(31.6, 52.5, 54.4, 1.5), Rect2(52.6, 54, 1.5, 31.4),
-		Rect2(31.6, 39.9, 1.5, 12.6), Rect2(86, 52.5, 31, 1.5), Rect2(33, 85.4, 53, 1.5)]
+		Rect2(14, 38.4, 67.4, 1.5)]
 	var green := _kit.make_surface(WALKWAY, 0.7, 0.0)
 	var edge := _kit.paint(WALK_EDGE)
 	var hall := Rect2(Vector2.ZERO, Vector2(_layout.grid.size)).grow(-0.3)
@@ -263,18 +292,21 @@ func _place(cell: Vector2, footprint: Vector2, yaw: float, builder: Callable) ->
 	return true
 
 
-func _room_walls(area: Rect2, door: Vector2, title: String, against_wall: bool = false) -> void:
+## `skip` lists sides left open because a hall wall or a neighbouring room's wall stands there:
+## 0 = near (-y) side, 1 = far (+y) side, 2 = west side, 3 = east side. The door may be on any of the other sides.
+func _room_walls(area: Rect2, door: Vector2, title: String, skip: Array = []) -> void:
 	# Roofless modular room: solid lower panels, a glazed band and a door gap on the front.
 	var k := _kit
 	var height := 2.6
 	var sides := [
 		[Vector2(area.position.x, area.position.y), Vector2(area.end.x, area.position.y)],
-		[Vector2(area.position.x, area.end.y), Vector2(area.end.x, area.end.y)] if not against_wall else [],
+		[Vector2(area.position.x, area.end.y), Vector2(area.end.x, area.end.y)],
 		[Vector2(area.position.x, area.position.y), Vector2(area.position.x, area.end.y)],
 		[Vector2(area.end.x, area.position.y), Vector2(area.end.x, area.end.y)]]
-	for side: Array in sides:
-		if side.is_empty():
+	for side_index in sides.size():
+		if side_index in skip:
 			continue
+		var side: Array = sides[side_index]
 		var a: Vector2 = side[0]
 		var b: Vector2 = side[1]
 		var horizontal := is_equal_approx(a.y, b.y)
@@ -302,13 +334,18 @@ func _room_walls(area: Rect2, door: Vector2, title: String, against_wall: bool =
 	_kit.box(_root, _layout.grid.to_world(door, FLOOR_Y + height + 0.25), Vector3(2.2, 0.36, 0.06), _kit.paint(Color("#22313b")))
 
 
-func _office_and_lab(area: Rect2) -> void:
-	if not _area_free(area.grow(0.5)):
-		return
-	var office := Rect2(area.position, Vector2(area.size.x * 0.55, area.size.y))
-	var lab := Rect2(Vector2(office.end.x, area.position.y), Vector2(area.size.x - office.size.x, area.size.y))
-	_room_walls(office, Vector2(office.get_center().x, office.position.y), "PRODUCTION OFFICE")
-	_room_walls(lab, Vector2(lab.get_center().x, lab.position.y), "QC LAB")
+func _room_clear(area: Rect2, skip: Array) -> bool:
+	# Clearance of half a metre around a room, except on the side that stands against a wall.
+	var margin := [0.5, 0.5, 0.5, 0.5]  # left, top, right, bottom
+	for side: int in skip:
+		margin[[1, 3, 0, 2][side]] = 0.0
+	return _area_free(area.grow_individual(margin[0], margin[1], margin[2], margin[3]))
+
+
+func _office(office: Rect2, door: Vector2, skip: Array) -> bool:
+	if not _room_clear(office, skip):
+		return false
+	_room_walls(office, door, "PRODUCTION OFFICE", skip)
 	# Office: desks with screens and chairs, a meeting table, filing cabinets, plants.
 	for row in 2:
 		for column in 3:
@@ -334,6 +371,13 @@ func _office_and_lab(area: Rect2) -> void:
 		var plant := _prop(corner)
 		_plant(plant)
 		_commit(plant)
+	return true
+
+
+func _lab(lab: Rect2, door: Vector2, skip: Array) -> bool:
+	if not _room_clear(lab, skip):
+		return false
+	_room_walls(lab, door, "QC LAB", skip)
 	# QC lab: wall benches with sinks and instruments, a fume hood, a fridge and a central island.
 	var bench := _kit.paint(Color("#e4e7e5"))
 	for index in 3:
@@ -361,15 +405,13 @@ func _office_and_lab(area: Rect2) -> void:
 	for x: float in [-0.7, 0.0, 0.7]:
 		_kit.box(island, Vector3(x, 1.0, 0), Vector3(0.24, 0.12, 0.18), _kit.paint(Color("#e8475a").lerp(Color.WHITE, 0.4)))
 	_commit(island)
+	return true
 
 
-func _canteen(area: Rect2) -> void:
-	if not _area_free(area.grow(0.5)):
-		return
-	var canteen := Rect2(area.position, Vector2(area.size.x * 0.62, area.size.y))
-	var lockers := Rect2(Vector2(canteen.end.x, area.position.y), Vector2(area.size.x - canteen.size.x, area.size.y))
-	_room_walls(canteen, Vector2(canteen.get_center().x, canteen.position.y), "CANTEEN")
-	_room_walls(lockers, Vector2(lockers.get_center().x, lockers.position.y), "CHANGING & HYGIENE")
+func _canteen(canteen: Rect2, door: Vector2, skip: Array) -> bool:
+	if not _room_clear(canteen, skip):
+		return false
+	_room_walls(canteen, door, "CANTEEN", skip)
 	for row in 2:
 		for column in 3:
 			var table := _prop(canteen.position + Vector2(2.2 + column * 3.6, 3.4 + row * 4.0))
@@ -390,6 +432,13 @@ func _canteen(area: Rect2) -> void:
 	var cooler := _prop(Vector2(canteen.end.x - 0.4, canteen.end.y - 1.0), -PI * 0.5)
 	_water_cooler(cooler)
 	_commit(cooler)
+	return true
+
+
+func _changing_room(lockers: Rect2, door: Vector2, skip: Array) -> bool:
+	if not _room_clear(lockers, skip):
+		return false
+	_room_walls(lockers, door, "CHANGING & HYGIENE", skip)
 	# Changing room: locker banks, a bench, white coats and a hand-wash trough at the exit.
 	for bank in 2:
 		var at := lockers.position + Vector2(0.4 + bank * (lockers.size.x - 0.8), lockers.size.y * 0.5)
@@ -409,17 +458,18 @@ func _canteen(area: Rect2) -> void:
 	var wash := _prop(Vector2(lockers.get_center().x, lockers.position.y + 0.8))
 	_hand_wash(wash)
 	_commit(wash)
+	return true
 
 
-func _workshop(area: Rect2) -> void:
+func _workshop(area: Rect2) -> bool:
 	# Maintenance workshop built against the rear hall wall: a walled room with a roller
 	# door, benches and tool boards on the hall wall, tool chests, a drill press, spares
 	# racking, a parts washer and a chained gas cylinder rack.
-	if not _area_free(area.grow_individual(0.3, 0.3, 0.3, 0.0)):
-		return
+	if not _area_free(area.grow_individual(0.0, 0.3, 0.3, 0.0)):
+		return false
 	var k := _kit
 	var door := Vector2(area.get_center().x, area.position.y)
-	_room_walls(area, door, "MAINTENANCE", true)
+	_room_walls(area, door, "MAINTENANCE", [1, 2])
 	var housing := _layout.grid.to_world(door, FLOOR_Y + 2.25)
 	k.box(_root, housing, Vector3(2.0, 0.34, 0.4), k.frame_dark)
 	k.box(_root, housing + Vector3(0, -0.28, 0), Vector3(1.9, 0.22, 0.06), k.ribbed(Color("#aebdbf")))
@@ -480,6 +530,7 @@ func _workshop(area: Rect2) -> void:
 		k.cylinder(cylinders, Vector3(-0.5 + index * 0.33, 1.6, 0), 0.045, 0.12, k.polished, Industrial.Y, 10)
 	k.box(cylinders, Vector3(0, 1.1, 0.16), Vector3(1.4, 0.03, 0.02), k.safety)
 	_commit(cylinders)
+	return true
 
 
 func _pallet_store(area: Rect2) -> void:
@@ -619,7 +670,7 @@ func _safety_points() -> void:
 
 # --- Props ----------------------------------------------------------------------
 
-func _desk(prop: Node3D) -> void:
+func _desk(prop: Node3D, with_chair: bool = true) -> void:
 	var k := _kit
 	k.box(prop, Vector3(0, 0.74, 0), Vector3(1.6, 0.04, 0.8), _wood)
 	for x: float in [-0.75, 0.75]:
@@ -628,7 +679,8 @@ func _desk(prop: Node3D) -> void:
 	k.box(prop, Vector3(0, 1.0, -0.233), Vector3(0.56, 0.32, 0.004), k.screen)
 	k.box(prop, Vector3(0, 0.8, -0.25), Vector3(0.05, 0.12, 0.05), k.frame_dark)
 	k.box(prop, Vector3(0, 0.77, 0.08), Vector3(0.45, 0.02, 0.15), k.seam)
-	_chair(prop, Vector3(0, 0, 0.75), PI)
+	if with_chair:
+		_chair(prop, Vector3(0, 0, 0.75), PI)
 
 
 func _chair(prop: Node3D, at: Vector3, yaw: float) -> void:
