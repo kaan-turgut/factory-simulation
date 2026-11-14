@@ -37,6 +37,7 @@ var _locker: StandardMaterial3D
 var _red: StandardMaterial3D
 var _green_sign: StandardMaterial3D
 var _glazing: StandardMaterial3D
+var _glass_door: StandardMaterial3D
 var _models: Dictionary[String, Array] = {}
 
 
@@ -54,6 +55,7 @@ func build(parent: Node3D, layout: Layout, kit: Industrial, draw: Primitives, st
 	_locker = kit.paint(Color("#5d7c99"))
 	_red = kit.paint(Color("#c8302a"))
 	_glazing = kit.make_surface(Color("#a9c3cf"), 0.08, 0.2)
+	_glass_door = kit.make_surface(Color("#8fb3c4"), 0.04, 0.35)
 	_green_sign = kit.make_surface(Color("#1e7a3c"), 0.4, 0.0)
 	_green_sign.emission_enabled = true
 	_green_sign.emission = Color("#2fbf5d")
@@ -296,8 +298,10 @@ func _place(cell: Vector2, footprint: Vector2, yaw: float, builder: Callable) ->
 
 ## `skip` lists sides left open because a hall wall or a neighbouring room's wall stands there:
 ## 0 = near (-y) side, 1 = far (+y) side, 2 = west side, 3 = east side. The door may be on any of the other sides.
-func _room_walls(area: Rect2, door: Vector2, title: String, skip: Array = []) -> void:
-	# Roofless modular room: solid lower panels, a glazed band and a door gap on the front.
+func _room_walls(area: Rect2, door: Vector2, title: String, skip: Array = [], door_width: float = 1.0, glass_door: bool = true) -> void:
+	# Roofless modular room: solid lower panels, a glazed band and a top rail. The side holding
+	# `door` gets an opening of `door_width`: a framed glass door, or left open for a roller door.
+	# The room name is on a plate on the outside wall, at the upper right of the door.
 	var k := _kit
 	var height := 2.6
 	var sides := [
@@ -311,29 +315,95 @@ func _room_walls(area: Rect2, door: Vector2, title: String, skip: Array = []) ->
 		var side: Array = sides[side_index]
 		var a: Vector2 = side[0]
 		var b: Vector2 = side[1]
-		var horizontal := is_equal_approx(a.y, b.y)
 		var length := a.distance_to(b)
-		var steps := ceili(length / 1.2)
-		for index in steps:
-			var t0 := float(index) / steps
-			var t1 := float(index + 1) / steps
-			var middle := a.lerp(b, (t0 + t1) * 0.5)
-			if middle.distance_to(door) < 0.8:
-				continue
-			var span := length / steps
-			var size := Vector3(span, 0, 0.1) if horizontal else Vector3(0.1, 0, span)
-			var base := _layout.grid.to_world(middle, FLOOR_Y)
-			k.box(_root, base + Vector3.UP * 0.55, Vector3(size.x, 1.1, size.z), _office_wall)
-			k.box(_root, base + Vector3.UP * 1.75, Vector3(size.x if horizontal else 0.05, 1.3, 0.05 if horizontal else size.z), _glazing)
-			k.box(_root, base + Vector3.UP * (height - 0.1), Vector3(size.x, 0.2, size.z), _office_wall)
-			k.box(_root, base + Vector3.UP * 1.12, Vector3(maxf(size.x, 0.14), 0.04, maxf(size.z, 0.14)), k.polished)
+		var along := (b - a) / length
+		var at := (door - a).dot(along)
+		var on_side := absf((door - a).cross(along)) < 0.05 and at > 0.0 and at < length
+		if on_side:
+			var half := door_width * 0.5
+			_wall_run(a, a + along * (at - half), height)
+			_wall_run(a + along * (at + half), b, height)
+			var inward := area.get_center() - door
+			_door(door, along, inward, door_width, height, title, glass_door)
+		else:
+			_wall_run(a, b, height)
 		for corner in [a, b]:
 			k.box(_root, _layout.grid.to_world(corner, FLOOR_Y + height * 0.5), Vector3(0.14, height, 0.14), k.frame_dark)
-	var sign := _draw.sign(_root, _layout.grid.to_world(door, FLOOR_Y + height + 0.25), title, Color("#22313b"))
-	sign.pixel_size = 0.01
-	sign.outline_size = 0
-	sign.modulate = Color("#f2f4f2")
-	_kit.box(_root, _layout.grid.to_world(door, FLOOR_Y + height + 0.25), Vector3(2.2, 0.36, 0.06), _kit.paint(Color("#22313b")))
+
+
+func _wall_run(a: Vector2, b: Vector2, height: float) -> void:
+	# Straight wall from a to b (grid coordinates), in panels of about 1.2 m.
+	var length := a.distance_to(b)
+	if length < 0.05:
+		return
+	var k := _kit
+	var horizontal := is_equal_approx(a.y, b.y)
+	var steps := maxi(1, ceili(length / 1.2))
+	var span := length / steps
+	for index in steps:
+		var middle := a.lerp(b, (index + 0.5) / steps)
+		var size := Vector3(span, 0, 0.1) if horizontal else Vector3(0.1, 0, span)
+		var base := _layout.grid.to_world(middle, FLOOR_Y)
+		k.box(_root, base + Vector3.UP * 0.55, Vector3(size.x, 1.1, size.z), _office_wall)
+		k.box(_root, base + Vector3.UP * 1.75, Vector3(size.x if horizontal else 0.05, 1.3, 0.05 if horizontal else size.z), _glazing)
+		k.box(_root, base + Vector3.UP * (height - 0.1), Vector3(size.x, 0.2, size.z), _office_wall)
+		k.box(_root, base + Vector3.UP * 1.12, Vector3(maxf(size.x, 0.14), 0.04, maxf(size.z, 0.14)), k.polished)
+
+
+func _door(door: Vector2, along: Vector2, inward: Vector2, width: float, height: float, title: String, glass: bool) -> void:
+	# Built in a frame where x runs along the wall (to the right seen from outside) and +z
+	# points out of the room, so the plate lands at the visitor's upper right.
+	var k := _kit
+	var grid := _layout.grid
+	var origin := grid.to_world(door, FLOOR_Y)
+	var outward := origin - grid.to_world(door + inward.normalized(), FLOOR_Y)
+	outward = Vector3(outward.x, 0, outward.z).normalized()
+	var right := (-outward).cross(Vector3.UP)
+	var frame := Node3D.new()
+	frame.transform = Transform3D(Basis(right, Vector3.UP, outward), origin)
+	_root.add_child(frame)
+	var aluminium := k.make_surface(Color("#5f6a72"), 0.35, 0.6) if glass else k.frame_dark
+	var leaf := 2.1
+	if glass:
+		# Aluminium frame, a glass leaf with stiles, kick plate and pull handles, and a glass
+		# fanlight up to the top rail.
+		for x: float in [-width * 0.5, width * 0.5]:
+			k.box(frame, Vector3(x, height * 0.5, 0), Vector3(0.06, height, 0.12), aluminium)
+		k.box(frame, Vector3(0, leaf + 0.03, 0), Vector3(width, 0.06, 0.12), aluminium)
+		k.box(frame, Vector3(0, height - 0.1, 0), Vector3(width, 0.2, 0.1), _office_wall)
+		k.box(frame, Vector3(0, (leaf + 0.06 + height - 0.2) * 0.5, 0), Vector3(width - 0.06, height - 0.26 - leaf, 0.03), _glazing)
+		var inner := width - 0.1
+		k.box(frame, Vector3(0, leaf * 0.5, 0), Vector3(inner - 0.1, leaf - 0.1, 0.02), _glass_door)
+		for x: float in [-inner * 0.5 + 0.025, inner * 0.5 - 0.025]:
+			k.box(frame, Vector3(x, leaf * 0.5, 0), Vector3(0.05, leaf, 0.05), aluminium)
+		k.box(frame, Vector3(0, leaf - 0.04, 0), Vector3(inner, 0.07, 0.05), aluminium)
+		k.box(frame, Vector3(0, 0.12, 0), Vector3(inner, 0.24, 0.05), aluminium)
+		for z: float in [-1.0, 1.0]:
+			k.box(frame, Vector3(inner * 0.5 - 0.12, 1.05, z * 0.07), Vector3(0.025, 0.6, 0.025), k.polished)
+			for y: float in [0.82, 1.28]:
+				k.box(frame, Vector3(inner * 0.5 - 0.12, y, z * 0.045), Vector3(0.02, 0.02, 0.05), k.polished)
+		# Frosted manifestation band so the glass reads as a door.
+		for z: float in [-0.012, 0.012]:
+			k.box(frame, Vector3(0, 1.45, z), Vector3(inner - 0.1, 0.1, 0.004), _white)
+	# Name plate on the wall, upper right of the door seen from outside.
+	var plate_at := Vector3(width * 0.5 + 0.62, 2.12, 0.075)
+	k.box(frame, plate_at, Vector3(0.92, 0.26, 0.02), k.paint(Color("#22313b")))
+	k.box(frame, plate_at + Vector3(0, -0.105, 0.011), Vector3(0.86, 0.018, 0.002), k.safety)
+	var label := _draw.sign(frame, plate_at + Vector3(0, 0.012, 0.012), title, Color("#f2f4f2"))
+	label.font_size = 36
+	label.outline_size = 0
+	label.pixel_size = clampf(0.8 / (title.length() * 21.0), 0.0012, 0.0034)
+	label.double_sided = false
+	label.visibility_range_end = 60.0
+	# Flatten the meshes into the room root so they merge; keep the label as it is.
+	for child in frame.get_children():
+		var part := child as Node3D
+		var placed := frame.transform * part.transform
+		frame.remove_child(part)
+		_root.add_child(part)
+		part.transform = placed
+	_root.remove_child(frame)
+	frame.free()
 
 
 func _room_clear(area: Rect2, skip: Array) -> bool:
@@ -471,7 +541,7 @@ func _workshop(area: Rect2) -> bool:
 		return false
 	var k := _kit
 	var door := Vector2(area.get_center().x, area.position.y)
-	_room_walls(area, door, "MAINTENANCE", [1, 2])
+	_room_walls(area, door, "MAINTENANCE", [1, 2], 2.0, false)
 	var housing := _layout.grid.to_world(door, FLOOR_Y + 2.25)
 	k.box(_root, housing, Vector3(2.0, 0.34, 0.4), k.frame_dark)
 	k.box(_root, housing + Vector3(0, -0.28, 0), Vector3(1.9, 0.22, 0.06), k.ribbed(Color("#aebdbf")))
