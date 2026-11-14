@@ -10,6 +10,7 @@ const HOME_YAW := 0.11
 const HOME_PITCH := 0.88
 const INSPECTOR_SHIFT := 148.0
 const ZOOM_STEP := 0.88
+const SITE_MARGIN := Vector2(48.0, 52.0)
 
 var _target_focus := Vector3(0.0, 0.2, 0.0)
 var _home_focus := _target_focus
@@ -88,7 +89,8 @@ func fit_factory(center: Vector3, cells: Vector2i) -> void:
 			var fit := maxf(absf(corner.dot(right)) / horizontal, absf(corner.dot(up)) / vertical)
 			_home_distance = maxf(_home_distance, fit + corner.dot(direction))
 	_max_distance = maxf(MAX_DISTANCE, _home_distance * 1.52)
-	_pan_extent = Vector2(cells) * 0.5 + Vector2(10.0, 11.0)
+	# Reach the grounds around the hall: car park and garden in front, docks at the sides.
+	_pan_extent = Vector2(cells) * 0.5 + SITE_MARGIN
 	far = maxf(180.0, _max_distance * 1.5)
 	home()
 	_focus = _target_focus

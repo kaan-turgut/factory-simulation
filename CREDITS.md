@@ -67,3 +67,34 @@ Downloaded on 2026-11-14 from https://poly.pizza. The CC-BY 3.0 models (https://
 ```sh
 SRC=<folder> /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python tools/blender/build_safety_props.py
 ```
+
+## Factory grounds: vehicles and plants from Poly Pizza (CC0 1.0 and CC-BY 3.0)
+
+Downloaded on 2026-11-14 from https://poly.pizza. The CC-BY 3.0 models need this credit; the CC0 ones are credited as thanks.
+
+| Asset | Author | Source | Licence | Used as |
+| --- | --- | --- | --- | --- |
+| Car (sedan) | Quaternius | https://poly.pizza/m/Cz6yDaUcM9 | CC0 1.0 | `assets/site/car_sedan.glb` |
+| Car (hatchback) | Quaternius | https://poly.pizza/m/unqqkULtRU | CC0 1.0 | `assets/site/car_hatchback.glb` |
+| SUV | Quaternius | https://poly.pizza/m/xsMtZhBkxL | CC0 1.0 | `assets/site/car_suv.glb` |
+| Sports Car | Quaternius | https://poly.pizza/m/1mkmFkAz5v | CC0 1.0 | `assets/site/car_sports.glb` |
+| Pickup Truck | Quaternius | https://poly.pizza/m/qn4grQgHm8 | CC0 1.0 | `assets/site/pickup.glb` |
+| Generic Van | PuKkBuMXDD | https://poly.pizza/m/BbRojf2v3H | CC-BY 3.0 | `assets/site/van.glb` |
+| Cargo Truck | J-Toastie | https://poly.pizza/m/Fy3WI3uXNQ | CC-BY 3.0 | `assets/site/box_truck.glb`, and its cab as `assets/site/tractor_unit.glb` |
+| Trees | Quaternius | https://poly.pizza/m/etFGNvsiFv | CC0 1.0 | `assets/site/tree_oak_a/b/c.glb` |
+| Birch Trees | Quaternius | https://poly.pizza/m/R7qMWzb7nk | CC0 1.0 | `assets/site/tree_birch_a/b.glb` |
+| Pine | Quaternius | https://poly.pizza/m/79gmlLnweB | CC0 1.0 | `assets/site/tree_pine.glb` |
+| Bush | Quaternius | https://poly.pizza/m/ooG6CkLyE8 | CC0 1.0 | `assets/site/bush.glb` |
+| Bush with Flowers | Quaternius | https://poly.pizza/m/U1ymDy8tbY | CC0 1.0 | `assets/site/bush_flowers.glb` |
+| Flowers | Quaternius | https://poly.pizza/m/NBUxHir6FJ | CC0 1.0 | `assets/site/flowers_a/b.glb` |
+| Flower Group | Quaternius | https://poly.pizza/m/hfPzQAedOe | CC0 1.0 | `assets/site/flower_group.glb` |
+| Bench | Quaternius | https://poly.pizza/m/jLxjFxFRpw | CC0 1.0 | `assets/site/bench.glb` |
+| Street Light | Quaternius | https://poly.pizza/m/nFwrlcLvM5 | CC0 1.0 | `assets/site/street_light.glb` |
+
+### What was changed
+
+`tools/blender/build_site_props.py` (Blender 5.3) joins each model into one mesh, scales it to real size, turns vehicles so their headlights face +Z, moves the origin to the base centre and shrinks textures to 512 px. Each vehicle's body paint is renamed `<name>_paint` so the game can recolour it. The tractor unit is the Cargo Truck's cab and chassis without the box. Trees are thinned (bark decimated, a share of leaf cards removed and the rest enlarged) from 4,500–8,500 to about 1,000–1,900 triangles. The semi-trailers, gatehouse, barriers, fence and markings are original and built in code (`world/grounds_models.gd`). To rebuild, download the files above into one folder named by their Poly Pizza id (for example `Cz6yDaUcM9.glb`), then:
+
+```sh
+SRC=<folder> /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python tools/blender/build_site_props.py
+```

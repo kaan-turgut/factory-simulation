@@ -81,14 +81,15 @@ func _init(models: Industrial) -> void:
 func light(parent: Node3D) -> void:
 	var atmosphere := Environment.new()
 	atmosphere.background_mode = Environment.BG_COLOR
-	atmosphere.background_color = Color("#172532")
+	# Hazy sky matching the fog, so the grass fades into the horizon.
+	atmosphere.background_color = Color("#a9b4ba")
 	atmosphere.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	atmosphere.ambient_light_color = Color("#d3dde8")
 	atmosphere.ambient_light_energy = 0.46
 	# Distance haze: close-ups stay crisp, the far end of the hall softens.
 	atmosphere.fog_enabled = true
 	atmosphere.fog_mode = Environment.FOG_MODE_EXPONENTIAL
-	atmosphere.fog_light_color = Color("#a3a9ab")
+	atmosphere.fog_light_color = Color("#a9b4ba")
 	atmosphere.fog_light_energy = 1.0
 	atmosphere.fog_sun_scatter = 0.12
 	atmosphere.fog_density = 0.0032
@@ -129,6 +130,16 @@ func build(parent: Node3D, grid: Grid, layout: Variant) -> void:
 		for index in segments:
 			_bay(parent, grid.to_world(Vector2((index + 0.5) * span, z)), span, rear)
 	_pools(parent)
+
+
+## The node of the hall wall whose outside faces `outward` (a horizontal axis), or null.
+## Parts added to it follow the wall's cutaway (shadows only while the wall is hidden).
+## Its local frame: x along the wall, y up, +z out of the hall, origin at the wall's middle.
+func wall_structure(outward: Vector3) -> Node3D:
+	for wall in _walls:
+		if wall.outward.dot(outward) > 0.9:
+			return wall.solid
+	return null
 
 
 ## Shows or hides walls and roof bays for the camera. Cheap; skips work when it has not moved.

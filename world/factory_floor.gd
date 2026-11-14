@@ -14,6 +14,7 @@ const Hall = preload("res://world/hall_models.gd")
 const LineModels = preload("res://world/line_models.gd")
 const GumModels = preload("res://world/gum_models.gd")
 const Site = preload("res://world/site_models.gd")
+const Grounds = preload("res://world/grounds_models.gd")
 const Palette = preload("res://ui/status_colors.gd")
 
 const INK := Color("#253541")
@@ -135,6 +136,7 @@ func configure(floor_plan: Layout, erp_enabled: bool = false) -> void:
 		for id: StringName in CELL_ART:
 			_build_cell(id)
 	Site.new().build(self, layout, _industrial, _draw, _stock)
+	Grounds.new().build(self, layout, _industrial, _hall)
 	_draw.batch_static(self, _warehouse_markers)
 	for station in _equipment.values():
 		_draw.batch_static(station, [station.beacon])
