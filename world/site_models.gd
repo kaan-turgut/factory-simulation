@@ -17,6 +17,9 @@ const WALKWAY := Color("#4a7a5c")
 const WALK_EDGE := Color("#e8ece6")
 const ZONE := Color("#e9b730")
 const FLOOR_Y := 0.0
+## Downloaded safety props (assets/props, see CREDITS.md), built by tools/blender/build_safety_props.py.
+## Floor items have their origin at the base centre, wall items at the back face; fronts face +Z.
+const PROP_MODELS := "res://assets/props/%s.glb"
 const TILE := 1.0
 
 var _kit: Industrial
@@ -34,6 +37,7 @@ var _locker: StandardMaterial3D
 var _red: StandardMaterial3D
 var _green_sign: StandardMaterial3D
 var _glazing: StandardMaterial3D
+var _models: Dictionary[String, Array] = {}
 
 
 func build(parent: Node3D, layout: Layout, kit: Industrial, draw: Primitives, stock: Stock) -> Node3D:
@@ -384,8 +388,7 @@ func _canteen(area: Rect2) -> void:
 		_kit.box(vending, Vector3(0.36, 1.0, 0.41), Vector3(0.12, 0.3, 0.01), _kit.seam)
 		_commit(vending)
 	var cooler := _prop(Vector2(canteen.end.x - 0.4, canteen.end.y - 1.0), -PI * 0.5)
-	_kit.box(cooler, Vector3(0, 0.5, 0), Vector3(0.35, 1.0, 0.35), _white)
-	_kit.cylinder(cooler, Vector3(0, 1.2, 0), 0.14, 0.4, _kit.make_surface(Color("#9cc9e8"), 0.1, 0.0), Industrial.Y, 14)
+	_water_cooler(cooler)
 	_commit(cooler)
 	# Changing room: locker banks, a bench, white coats and a hand-wash trough at the exit.
 	for bank in 2:
@@ -506,6 +509,10 @@ func _pallet_store(area: Rect2) -> void:
 	k.pipe(charger, Vector3(0.3, 0.3, 0.3), Vector3(0.3, 0.05, 1.4), 0.025, k.rubber)
 	_commit(charger)
 	var bay := Rect2(Vector2(area.end.x - 4.0, area.end.y - 4.0), Vector2(3.0, 3.6))
+	for corner: Vector2 in [bay.position, Vector2(bay.end.x, bay.position.y)]:
+		var cone := _prop(corner + Vector2(0, -0.45))
+		_cone(cone)
+		_commit(cone)
 	for y: float in [bay.position.y, bay.end.y]:
 		_floor(Vector2(bay.get_center().x, y), Vector2(bay.size.x, 0.1), 0.012, 0.022, k.paint(ZONE))
 	for x: float in [bay.position.x, bay.end.x]:
@@ -597,11 +604,17 @@ func _safety_points() -> void:
 			0: _place(spot, Vector2(0.8, 0.6), 0.0, _fire_point)
 			1: _place(spot, Vector2(1.6, 0.7), 0.0, _bins)
 			_: _place(spot, Vector2(1.4, 0.8), 0.0, _hand_wash)
+	# Drinking water on the hall floor: the first free spot beside a walkway corner.
+	for spot: Vector2 in [Vector2(52.4, 40.6), Vector2(82.0, 40.6), Vector2(86.0, 51.0), Vector2(14.8, 40.6),
+			Vector2(57.0, 68.8), Vector2(32.0, 68.8)]:
+		if _place(spot, Vector2(0.7, 0.7), 0.0, _water_cooler):
+			break
 	var size := Vector2(_layout.grid.size)
 	for y in range(20, int(size.y) - 36, 14):
 		_place(Vector2(0.55, y), Vector2(0.5, 0.9), PI * 0.5, _wall_point)
 	for x in range(36, 84, 12):
-		_place(Vector2(x, size.y - 0.55), Vector2(0.9, 0.5), PI, _wall_point)
+		# Grid y runs along world -Z, so yaw 0 puts the board's back to the far wall.
+		_place(Vector2(x, size.y - 0.55), Vector2(0.9, 0.5), 0.0, _wall_point)
 
 
 # --- Props ----------------------------------------------------------------------
@@ -647,14 +660,15 @@ func _hand_wash(prop: Node3D) -> void:
 	k.box(prop, Vector3(0, 1.45, -0.22), Vector3(0.24, 0.3, 0.1), _white)
 	k.box(prop, Vector3(0.5, 1.35, -0.22), Vector3(0.3, 0.4, 0.12), _white)
 	k.box(prop, Vector3(-0.5, 1.45, -0.21), Vector3(0.28, 0.2, 0.08), k.paint(Color("#3a8fd0")))
+	_model(prop, "wet_floor_sign", Vector3(0.48, 0.0, 0.45), -0.4)
 
 
 func _fire_point(prop: Node3D) -> void:
 	var k := _kit
 	k.box(prop, Vector3(0, 1.0, -0.15), Vector3(0.6, 2.0, 0.05), _red)
 	for x: float in [-0.15, 0.15]:
-		k.cylinder(prop, Vector3(x, 0.55, 0.0), 0.08, 0.5, _red, Industrial.Y, 12)
-		k.cylinder(prop, Vector3(x, 0.84, 0.0), 0.03, 0.1, k.frame_dark, Industrial.Y, 8)
+		_model(prop, "fire_extinguisher", Vector3(x, 0.04, -0.02))
+	_model(prop, "fire_alarm", Vector3(0, 1.25, -0.125))
 	k.box(prop, Vector3(0, 1.65, -0.12), Vector3(0.36, 0.36, 0.01), _white)
 	k.box(prop, Vector3(0, 1.65, -0.114), Vector3(0.22, 0.22, 0.006), _red)
 	k.box(prop, Vector3(0, 0.025, 0), Vector3(0.7, 0.02, 0.5), k.paint(Color("#c8302a").lerp(Color.WHITE, 0.15)))
@@ -674,10 +688,61 @@ func _wall_point(prop: Node3D) -> void:
 	# Fire extinguisher on its board with an emergency exit sign above.
 	var k := _kit
 	k.box(prop, Vector3(0, 1.2, -0.2), Vector3(0.7, 1.0, 0.04), _white)
-	k.cylinder(prop, Vector3(0, 1.0, -0.08), 0.08, 0.5, _red, Industrial.Y, 12)
-	k.box(prop, Vector3(0, 1.55, -0.17), Vector3(0.24, 0.2, 0.01), _red)
-	k.box(prop, Vector3(0, 2.6, -0.18), Vector3(0.6, 0.24, 0.06), _green_sign)
+	_model(prop, "fire_extinguisher", Vector3(-0.12, 0.72, -0.1))
+	_model(prop, "fire_alarm", Vector3(0.2, 1.3, -0.18))
+	_model(prop, "first_aid_kit", Vector3(0.16, 0.95, -0.18), 0.0, 0.9)
+	k.box(prop, Vector3(-0.12, 1.55, -0.17), Vector3(0.24, 0.2, 0.01), _red)
+	# Illuminated exit sign: the printed sign in front of a lit backbox.
+	k.box(prop, Vector3(0, 2.6, -0.18), Vector3(0.64, 0.24, 0.04), _green_sign)
+	_model(prop, "exit_sign", Vector3(0, 2.49, -0.158), 0.0, 1.45)
 	k.box(prop, Vector3(0.0, 0.45, -0.19), Vector3(0.4, 0.55, 0.12), k.paint(Color("#9aa4a8")))
+
+
+func _cone(prop: Node3D) -> void:
+	_model(prop, "traffic_cone", Vector3.ZERO, 0.3, 0.9)
+
+
+func _water_cooler(prop: Node3D) -> void:
+	# Bottled water dispenser on a drip mat, with a cup dispenser on its side.
+	_kit.box(prop, Vector3(0, 0.006, 0.05), Vector3(0.55, 0.012, 0.55), _kit.rubber)
+	_model(prop, "water_cooler", Vector3(0, 0.012, 0))
+	_kit.cylinder(prop, Vector3(0.22, 0.95, 0.0), 0.04, 0.32, _white, Industrial.Y, 10)
+
+
+## Adds a downloaded model to a prop. Each material becomes its own single-surface mesh
+## marked mergeable, so the site batching merges every copy of it with the rest.
+func _model(prop: Node3D, name: String, at: Vector3, yaw: float = 0.0, scale_factor: float = 1.0) -> void:
+	if not _models.has(name):
+		var parts: Array = []
+		var scene := load(PROP_MODELS % name) as PackedScene
+		if scene != null:
+			var root := scene.instantiate()
+			for node in root.find_children("*", "MeshInstance3D", true, false):
+				var source := node as MeshInstance3D
+				var placed := _relative(root, source)
+				for surface in source.mesh.get_surface_count():
+					var tool := SurfaceTool.new()
+					tool.append_from(source.mesh, surface, placed)
+					var mesh := tool.commit()
+					mesh.set_meta("mergeable", true)
+					parts.append([mesh, source.get_active_material(surface)])
+			root.free()
+		_models[name] = parts
+	for part: Array in _models[name]:
+		var piece := MeshInstance3D.new()
+		piece.mesh = part[0]
+		piece.material_override = part[1]
+		piece.transform = Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * scale_factor), at)
+		prop.add_child(piece)
+
+
+func _relative(root: Node, node: Node3D) -> Transform3D:
+	var placed := node.transform
+	var parent := node.get_parent()
+	while parent != root and parent is Node3D:
+		placed = (parent as Node3D).transform * placed
+		parent = parent.get_parent()
+	return placed
 
 
 # --- Loose cartons -----------------------------------------------------------------

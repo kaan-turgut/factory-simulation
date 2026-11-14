@@ -45,3 +45,25 @@ The finished-good carton prints (`assets/cartons/*.png`) were drawn by `tools/ca
 | Oswald | Vernon Adams | Flavour names, pack counts, codes |
 
 To rebuild the atlases after changing a design or a product's `package_color`: `python3 tools/cartons/build_cartons.py` (needs Pillow). New products need an entry in its `PRODUCTS` table, or the script stops.
+
+## Safety props and water cooler: Poly Pizza (CC-BY 3.0 and CC0 1.0)
+
+Downloaded on 2026-11-14 from https://poly.pizza. The CC-BY 3.0 models (https://creativecommons.org/licenses/by/3.0/) need this credit; the CC0 ones are credited as thanks.
+
+| Asset | Author | Source | Licence | Used as |
+| --- | --- | --- | --- | --- |
+| Fire Extinguisher | Jarlan Perez | https://poly.pizza/m/71rR7PaeXNN | CC-BY 3.0 | `assets/props/fire_extinguisher.glb`: fire points and wall safety boards |
+| Water Cooler | J-Toastie | https://poly.pizza/m/zWi9p5FSxD | CC-BY 3.0 | `assets/props/water_cooler.glb`: canteen and production hall |
+| Fire Exit Sign | J-Toastie | https://poly.pizza/m/gpft2tHZv4 | CC-BY 3.0 | `assets/props/exit_sign.glb`: lit exit signs on the walls |
+| Wet Floor Sign | J-Toastie | https://poly.pizza/m/it0AE63TMj | CC-BY 3.0 | `assets/props/wet_floor_sign.glb`: beside hand-wash stations |
+| Fire alarm | Poly by Google | https://poly.pizza/m/8C_V3PSD5sw | CC-BY 3.0 | `assets/props/fire_alarm.glb`: manual call points |
+| First Aid Kit | Quaternius | https://poly.pizza/m/Hp80p6148W | CC0 1.0 | `assets/props/first_aid_kit.glb`: wall safety boards |
+| Traffic Cone | Quaternius | https://poly.pizza/m/lAx8JytxGD | CC0 1.0 | `assets/props/traffic_cone.glb`: forklift charging bay |
+
+### What was changed
+
+`tools/blender/build_safety_props.py` (Blender 5.3) joins each model into one mesh, scales it to real size (extinguisher 0.62 m, water cooler 1.32 m, exit sign 0.42 m wide, call point 0.20 m, first-aid case 0.42 m, wet-floor sign 0.62 m, cone 0.5 m), turns its front to +Z, moves the origin to the base (or the back face for wall items) and shrinks textures to 256 px. Geometry and colours are otherwise as published. To rebuild, download the files above into one folder under the names in the script's `PROPS` table, then:
+
+```sh
+SRC=<folder> /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python tools/blender/build_safety_props.py
+```
