@@ -37,6 +37,7 @@ class CrewModel:
 	var sack: Node3D
 	var clip := &""
 	var handler := false
+	var sit_drop := 0.0
 	var settled := 0.0
 
 
@@ -210,7 +211,10 @@ func _pose_worker(worker: Operator, alpha: float, turn: float, delta: float, lin
 	var pushing := worker.state in [Operator.State.PUSHING, Operator.State.MOVING_PALLET_JACK]
 	var handling := worker.state in [Operator.State.LOADING, Operator.State.UNLOADING]
 	var clip := &"Idle"
-	if pushing:
+	var seated := model.handler and _at_desk(worker, line.layout, moving)
+	if seated:
+		clip = &"Sit"
+	elif pushing:
 		clip = &"Cart_Push" if moving else &"Idle"
 	elif handling:
 		clip = &"Carry_Idle" if carrying else &"PickUp_Table"
@@ -235,11 +239,17 @@ func _pose_worker(worker: Operator, alpha: float, turn: float, delta: float, lin
 	model.player.speed_scale = rate
 	# A skeleton that is not moving costs nothing, so idle workers freeze once their pose has
 	# blended in, and everyone stops while the simulation is paused.
-	model.settled = model.settled + delta if clip == &"Idle" else 0.0
+	model.settled = model.settled + delta if clip in [&"Idle", &"Sit"] else 0.0
 	model.player.active = line.playing and model.settled < 0.7
 	var stand_back := (JACK_STAND_BACK if _jack_following else 0.0) if model.handler else (CART_STAND_BACK if clip == &"Cart_Push" else 0.0)
-	model.body.position.z = lerpf(model.body.position.z, stand_back, 1.0 - exp(-8.0 * delta)) if line.playing \
-		else stand_back
+	var drop := model.sit_drop if seated else 0.0
+	if seated:
+		# Face the desk while sitting, whatever way he walked in.
+		var desk := line.layout.handler_desk_furniture() - line.layout.handler_desk()
+		model.view.rotation.y = lerp_angle(model.view.rotation.y, atan2(desk.x, desk.z), turn)
+	var ease := 1.0 - exp(-8.0 * delta)
+	model.body.position.z = lerpf(model.body.position.z, stand_back, ease) if line.playing else stand_back
+	model.body.position.y = lerpf(model.body.position.y, drop, ease) if line.playing else drop
 	model.sack.visible = carrying
 
 
@@ -271,6 +281,8 @@ func _build_worker(id: StringName, platform: bool, handler: bool = false) -> voi
 	model.player = _find_node(rig, "AnimationPlayer") as AnimationPlayer
 	model.player.get_animation(&"PickUp_Table").loop_mode = Animation.LOOP_LINEAR
 	var skeleton := _find_node(rig, "Skeleton3D") as Skeleton3D
+	if handler:
+		model.sit_drop = _add_sit_clip(model.player, skeleton, rig)
 	for child in skeleton.get_children():
 		if child is MeshInstance3D:
 			_tint_worker(child, vest)
@@ -289,6 +301,87 @@ func _build_worker(id: StringName, platform: bool, handler: bool = false) -> voi
 	_apply_pose(model.player)
 	model.clip = &"Idle"
 	_crew[id] = model
+
+
+## True while the handler waits at his desk: idle, standing still on the desk spot.
+func _at_desk(worker: Operator, layout: Line.Layout, moving: bool) -> bool:
+	if moving or worker.state != Operator.State.IDLE or not layout.has_handler_desk():
+		return false
+	var desk := layout.handler_desk()
+	return Vector2(worker.position.x - desk.x, worker.position.z - desk.z).length() < 0.3
+
+
+## The worker models have no seated clip, so build one from the skeleton's rest (T) pose: thighs
+## forward, shins down, a slight lean, upper arms down and forearms forward to the keyboard.
+## Bone directions come from the rest pose itself (foot to ball is forward, pelvis to head is up),
+## so this does not depend on the rig's axes. Returns how far the body must drop to sit on a
+## 0.5 m seat. The clip is shared by every instance of the same model.
+func _add_sit_clip(player: AnimationPlayer, skeleton: Skeleton3D, rig: Node3D) -> float:
+	var bone := func(title: String) -> int: return skeleton.find_bone(title)
+	var rest: Array[Transform3D] = []
+	for index in skeleton.get_bone_count():
+		rest.append(skeleton.get_bone_global_rest(index))
+	var up: Vector3 = (rest[bone.call("Head")].origin - rest[bone.call("pelvis")].origin).normalized()
+	var forward: Vector3 = rest[bone.call("ball_l")].origin - rest[bone.call("foot_l")].origin
+	forward = (forward - up * forward.dot(up)).normalized()
+	var down := -up
+	# Hip joints over the cushion (top at 0.5 m), measured from the ball of the foot on the floor.
+	var hip_height: float = (rest[bone.call("thigh_l")].origin - rest[bone.call("ball_l")].origin).dot(up)
+	var node: Node = skeleton
+	while node is Node3D:
+		hip_height *= (node as Node3D).transform.basis.get_scale().y
+		if node == rig:
+			break
+		node = node.get_parent()
+	var drop := 0.6 - hip_height
+	var library := player.get_animation_library(&"")
+	if library.has_animation(&"Sit"):
+		return drop
+	# Wanted direction of each bone towards its child, in skeleton space.
+	var aim := {
+		"thigh_l": [forward, "calf_l"], "thigh_r": [forward, "calf_r"],
+		"calf_l": [down, "foot_l"], "calf_r": [down, "foot_r"],
+		"spine_01": [(up + forward * 0.12).normalized(), "spine_02"],
+		"upperarm_l": [(down * 0.9 + forward * 0.45).normalized(), "lowerarm_l"],
+		"upperarm_r": [(down * 0.9 + forward * 0.45).normalized(), "lowerarm_r"],
+		"lowerarm_l": [(forward + down * 0.15).normalized(), "hand_l"],
+		"lowerarm_r": [(forward + down * 0.15).normalized(), "hand_r"],
+	}
+	var posed: Array[Transform3D] = []
+	posed.resize(rest.size())
+	var prefix := ""
+	var idle := player.get_animation(&"Idle")
+	for track in idle.get_track_count():
+		var path := idle.track_get_path(track)
+		if path.get_subname_count() > 0:
+			prefix = str(path).get_slice(":", 0)
+			break
+	var clip := Animation.new()
+	clip.length = 1.0
+	clip.loop_mode = Animation.LOOP_LINEAR
+	# Bones are stored parent before child, so each parent is posed before its children.
+	for index in rest.size():
+		var parent := skeleton.get_bone_parent(index)
+		var local := skeleton.get_bone_rest(index)
+		var placed: Transform3D = (posed[parent] if parent >= 0 else Transform3D()) * local
+		var title := skeleton.get_bone_name(index)
+		if aim.has(title):
+			var child: int = bone.call(aim[title][1])
+			var along: Vector3 = (rest[child].origin - rest[index].origin).normalized()
+			var turn := Quaternion(along, aim[title][0])
+			placed.basis = Basis(turn) * rest[index].basis
+		posed[index] = placed
+		var parent_basis: Basis = posed[parent].basis if parent >= 0 else Basis()
+		var rotation := (parent_basis.inverse() * placed.basis).get_rotation_quaternion()
+		var track := clip.add_track(Animation.TYPE_ROTATION_3D)
+		clip.track_set_path(track, NodePath("%s:%s" % [prefix, title]))
+		clip.rotation_track_insert_key(track, 0.0, rotation)
+		if parent < 0 or title == "pelvis":
+			var moved := clip.add_track(Animation.TYPE_POSITION_3D)
+			clip.track_set_path(moved, NodePath("%s:%s" % [prefix, title]))
+			clip.position_track_insert_key(moved, 0.0, local.origin)
+	library.add_animation(&"Sit", clip)
+	return drop
 
 
 func _apply_pose(player: AnimationPlayer) -> void:

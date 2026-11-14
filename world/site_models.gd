@@ -96,6 +96,8 @@ func _handler_desk() -> void:
 	var at := _layout.grid.coordinates(_layout.handler_desk_furniture())
 	var prop := _prop(at, PI * 0.5)
 	_desk(prop, false)
+	# Swivel chair where he waits (Layout.handler_desk, 1.05 m out from the desk); he sits on it.
+	_chair(prop, Vector3(0, 0, 1.08), PI)
 	_kit.box(prop, Vector3(0.62, 0.45, -0.15), Vector3(0.22, 0.9, 0.5), _kit.paint(Color("#3a4248")))
 	var shelf := _prop(at + Vector2(-0.1, 1.3), PI * 0.5)
 	_kit.box(shelf, Vector3(0, 0.45, 0), Vector3(0.7, 0.9, 0.5), _kit.paint(Color("#9aa4a8")))
