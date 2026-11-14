@@ -67,6 +67,9 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - Stages run together: a stage with `start_kg` (scheduling.json) releases on a first lot of its manufactured input plus released upstream cover. `ERP.shortages`, `start_quantity`, `pending_output`, `outlook`; `Scheduling.overlaps/first_output/supply_late`. Reservations can exceed stock until upstream delivers. Extrusion and purchased inputs keep the full-quantity rule. Old saves have no `overlap` data and keep the old rule. Turn it off with `overlap.enabled`, `stage_overlap` in scenarios, or `set_stage_overlap`.
 - Run `tests/stage_overlap_test.gd` after touching release checks, reservations, planned intervals or MRP netting.
 
+## Crew pace (Nov 2026)
+- `floor_speed` and `platform_speed` (1.4 m/s) and the handler's `MATERIAL_HANDLER_SPEED` are unladen walking. `Operator.carry_pace/cart_pace/jack_pace` scale them by the load (production_line `_advance_platform/_advance_floor`, `ERP.supply_tick`). Old saves with the untouched 2.4/1.8 defaults are migrated once (`save_game._migrate_walking_pace`, marker `pace`). Run `tests/worker_pace_test.gd` after touching crew movement.
+
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.
 - The simulation is fully deterministic: no breakdowns, random cycle times or supplier variability yet. The owner plans to use it for experiments, so any randomness should be seeded and optional.

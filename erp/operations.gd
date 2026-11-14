@@ -13,7 +13,8 @@ const OPEN := ["Created", "Released", "In Progress"]
 const LINE := "LINE-01"
 const MATERIAL_HANDLER_ID := &"SupplyShuttle" # Stable ID in existing saves.
 const MATERIAL_HANDLER_TITLE := "Material handler"
-const MATERIAL_HANDLER_SPEED := 2.4
+## Normal unladen walking pace of the material handler; a loaded pallet jack is slower.
+const MATERIAL_HANDLER_SPEED := 1.4
 
 var explicit_planning := true
 var auto_release := false
@@ -717,7 +718,10 @@ func initialize_supply(layout) -> void:
 
 
 func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
-	material_handler.advance(seconds, MATERIAL_HANDLER_SPEED)
+	var pace := 1.0
+	if material_handler.state == Operator.State.MOVING_PALLET_JACK and int(shipment.get("phase", -1)) >= 1:
+		pace = Operator.jack_pace(_shipment_kg())
+	material_handler.advance(seconds, MATERIAL_HANDLER_SPEED * pace)
 	if not material_handler.finished():
 		return
 	if shipment.is_empty():
@@ -772,6 +776,15 @@ func supply_tick(layout, seconds: float, sack: float, running: Array) -> void:
 			_release_manual_shipment()
 		shipment.clear()
 		material_handler.idle()
+
+
+## Mass on the pallet jack: the kilogram items of the current shipment.
+func _shipment_kg() -> float:
+	var total := 0.0
+	for code in shipment.get("items", {}):
+		if catalog.materials[code].unit == "kg":
+			total += float(shipment.items[code])
+	return total
 
 
 func _release_manual_shipment() -> void:

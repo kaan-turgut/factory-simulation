@@ -230,6 +230,10 @@ A saved simulation instance keeps its own floor plan. Instances made before the 
 | Packaging and pallets | Line 01 receives carts through **Packaging WIP** and feeds palletizing by conveyor. Line 02 sends boxed wafers to the same palletizing area by worker cart. |
 | Forklift and warehouse | The forklift reserves an open storage slot, drives to the pallet, picks it up, and unloads. The warehouse receipt completes the finished order. Full storage delays the order and may block packaging. |
 
+### Crew speed
+
+The crew speeds are normal unladen walking: **1.4 m/s** (5 km/h) for the floor crew, the platform crew and the material handler. Load slows people down by the mass they move, so a sack in both arms (25 kg) is about 1.1 m/s, a loaded wafer cart about 1.0 m/s and a loaded pallet jack about 0.85 m/s. The floor and platform speeds are still editable in the crew inspector, and the slowdown applies on top of them. A worker's stride animation follows the speed they actually move at. Saves from before this change that still have the old 2.4 and 1.8 m/s defaults are moved to 1.4 m/s once when loaded. The forklift is unchanged at 4.2 m/s.
+
 The default floor crew has four workers, two raw carts, and two cooked carts. Raw carts hold 50 kg and cooked carts hold 45 kg. Oven 01 starts at 75 kg and 36 seconds per batch. Oven 02 starts at 60 kg and 42 seconds per batch. The five classic wafer flavors use 100 g consumer packs, 50 packs per 5 kg shipping box, and eight boxes per 40 kg full pallet. Two coated carts start at 24 kg each, and Packaging WIP starts at 60 kg. Select **Packaging WIP** to change capacity, inspect its receiving dock, or open the **PACK-WIP** inventory in ChocoERP.
 
 Production rates use kilograms, pieces, or cartons per simulated hour, or timed batch cycles. The engine advances in fixed quarter-second ticks, including travel and handling. Ingredient supply comes from opening stock and purchasing. Coating adds the actual chocolate consumed. Any standard yield loss is recorded as scrap. The mass ledger includes material in sacks being carried, every buffer and cart, the oven, partial cartons, pallets on the floor and forklift, and dispatched stock.
@@ -319,6 +323,7 @@ godot --headless --path . --script res://tests/product_standards_test.gd
 godot --headless --path . --script res://tests/agent_api_test.gd
 godot --headless --path . --script res://tests/mrp_planning_test.gd
 godot --headless --path . --script res://tests/gum_line_test.gd
+godot --headless --path . --script res://tests/worker_pace_test.gd
 godot --headless --path . --script res://tests/raw_warehouse_test.gd
 godot --headless --path . --script res://tests/instances_test.gd
 godot --headless --path . --script res://tests/floor_plan_test.gd

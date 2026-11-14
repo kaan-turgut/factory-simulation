@@ -2,6 +2,8 @@ extends RefCounted
 ## Versioned native snapshot. Restores authoritative quantities and in-flight jobs without replay.
 
 const Line = preload("res://simulation/production_line.gd")
+## Version of the crew walking pace. 1: normal walking speeds with load-based slowdown.
+const WALK_PACE_VERSION := 1
 const PATH := "user://chocolate-works-erp.save"
 const VERSION := 10
 const SUPPORTED_VERSIONS := [1, 2, 3, 4, 5, 6, 7, 8, 9, VERSION]
@@ -69,7 +71,7 @@ static func snapshot(line: Line) -> Dictionary:
 	for field in ["extruder", "coater", "packer"]:
 		machines[field] = _fields(line.get(field), ["configured_rate", "actual_rate", "state", "total_output"])
 	var data := {
-		"version": VERSION, "size": line.layout.grid.size, "plan": plan, "settings": line.settings,
+		"version": VERSION, "pace": WALK_PACE_VERSION, "size": line.layout.grid.size, "plan": plan, "settings": line.settings,
 		"layout": line.layout.snapshot(), "execution": _execution(line),
 		"line": _fields(line, LINE_FIELDS), "stock": stock, "machines": machines,
 		"oven": _fields(line.oven, ["state", "remaining", "batches", "owner"]),
@@ -133,6 +135,7 @@ static func restore(data: Dictionary) -> Dictionary:
 	for key in data.settings:
 		if line.settings.has(key):
 			line.settings[key] = data.settings[key]
+	_migrate_walking_pace(line, data)
 	_set_fields(line, data.line, LINE_FIELDS)
 	for field in ["hopper", "cooked_input"]:
 		_set_fields(line.get(field), data.stock[field], STOCK_FIELDS)
@@ -327,6 +330,18 @@ static func _add_new_master_data(book: Line.ERP, expansion: Dictionary) -> void:
 	for code in new_materials:
 		if catalog.opening.has(code):
 			book._post(code, catalog.opening[code], "", "RM-WH", "Opening", "EXPANSION", "New product family opening stock")
+
+
+## Crew speeds used to default to 2.4 m/s (floor) and 1.8 m/s (platform), a jog. Saves from before
+## the realistic pace keep any value the owner chose, and only an untouched old default moves to
+## the new one. The marker stops a speed set on purpose from being reset on every load.
+static func _migrate_walking_pace(line: Line, data: Dictionary) -> void:
+	if int(data.get("pace", 0)) >= WALK_PACE_VERSION:
+		return
+	if is_equal_approx(float(line.settings[&"floor_speed"]), 2.4):
+		line.settings[&"floor_speed"] = 1.4
+	if is_equal_approx(float(line.settings[&"platform_speed"]), 1.8):
+		line.settings[&"platform_speed"] = 1.4
 
 
 static func _migrate_expansion(book: Line.ERP, expansion: Dictionary) -> void:

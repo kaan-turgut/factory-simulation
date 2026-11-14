@@ -1294,7 +1294,8 @@ func _packing_bay() -> int:
 func _advance_platform() -> void:
 	for index in platform_crew.size():
 		var worker := platform_crew[index]
-		worker.advance(STEP_SECONDS, settings[&"platform_speed"])
+		var pace := Operator.carry_pace(worker.cargo_kg) if worker.state == Operator.State.CARRYING else 1.0
+		worker.advance(STEP_SECONDS, settings[&"platform_speed"] * pace)
 		if not worker.finished():
 			continue
 		match worker.state:
@@ -1361,7 +1362,10 @@ func _remaining_dough(awaiting: float) -> float:
 
 func _advance_floor() -> void:
 	for worker in floor_crew:
-		worker.advance(STEP_SECONDS, settings[&"floor_speed"])
+		var pace := 1.0
+		if worker.state == Operator.State.PUSHING and floor_assignments.has(worker.id):
+			pace = Operator.cart_pace(floor_assignments[worker.id].cart.stock.quantity)
+		worker.advance(STEP_SECONDS, settings[&"floor_speed"] * pace)
 		if not floor_assignments.has(worker.id):
 			continue
 		var job := floor_assignments[worker.id]
