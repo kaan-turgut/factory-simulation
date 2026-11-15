@@ -18,8 +18,8 @@ const Instances = preload("res://erp/instances.gd")
 
 const SAMPLE_SECONDS := 1.0
 const MAX_ADVANCE := 7.0 * 86400.0
-const DEFAULT_STOPS := ["order_completed", "po_received", "demand_due_unmet"]
-const EVENT_KINDS := ["order_released", "order_started", "order_completed", "po_received", "demand_met", "demand_due_unmet"]
+const DEFAULT_STOPS := ["order_completed", "po_received", "po_late", "demand_due_unmet"]
+const EVENT_KINDS := ["order_released", "order_started", "order_completed", "po_received", "po_late", "demand_met", "demand_due_unmet"]
 
 var line: Line
 var plan := Plan.new()
@@ -38,6 +38,7 @@ var _job := {}
 var _snapshots := {}
 var _order_status := {}
 var _po_status := {}
+var _po_late := {}
 var _demand_flagged := {}
 
 ## Argument specs read "[optional ]<string|number|int|bool|array>[: note]"; the MCP bridge builds schemas from them.
@@ -84,6 +85,9 @@ var COMMANDS := {
 	"create_demand": {"description": "Add a customer demand.", "args": {"code": "string: finished good code", "boxes": "int", "due": "number: seconds"}},
 	"set_stage_overlap": {"description": "Turn stage overlap on or off. On: a stage releases once a first lot of each manufactured input is in stock and released upstream orders cover the rest, so stages run together like a line. Off: it waits for its whole input. Only stages with a start_kg in the scheduling data overlap.",
 		"args": {"enabled": "bool"}},
+	"set_supply_risk": {"description": "Late supplier deliveries. Each new purchase order is late with this probability; lateness ~ Normal(mean, sd) in lead times (floored at 0), arrival = created + (1 + lateness) x lead. The supplier announces it at created + U(0, reveal_max) x lead; until then the PO shows its normal due time. Draws depend on seed and PO number, so runs repeat. Applies to POs placed afterwards.",
+		"args": {"enabled": "optional bool", "probability": "optional number: 0-1", "lateness_mean": "optional number: lead times",
+			"lateness_sd": "optional number: lead times", "reveal_max": "optional number: 0-1, share of lead time", "seed": "optional int"}},
 	"set_auto_release": {"description": "Release planned orders automatically once their components are in stock.", "args": {"enabled": "bool"}},
 	"advance": {"description": "Run the simulation for a number of seconds. Returns the events that happened.", "args": {"seconds": "number"}},
 	"run_until": {"description": "Run until one of the stop events happens or max_seconds pass.",
@@ -199,6 +203,16 @@ func load_scenario_data(data: Dictionary) -> Dictionary:
 			line.erp.catalog.storage_capacity["RM-WH"].positions = positions
 	if data.has("stage_overlap"):
 		_set_overlap(bool(data.stage_overlap))
+	if data.has("process_time_buffer"):
+		var buffer: Variant = data.process_time_buffer
+		if (buffer is float or buffer is int) and float(buffer) >= 0.0 and float(buffer) <= 2.0:
+			line.erp.catalog.scheduling.process_time_buffer = float(buffer)
+		else:
+			problems.append("process_time_buffer: expected a number from 0 to 2.")
+	if data.get("supply_risk") is Dictionary:
+		var message := line.erp.set_supply_risk(data.supply_risk)
+		if not message.is_empty():
+			problems.append("supply_risk: " + message)
 	var planning: Dictionary = data.get("planning", {})
 	for code in planning:
 		var message: String = line.erp.catalog.set_planning(String(code), planning[code])
@@ -243,6 +257,8 @@ func _cmd_status(_args: Dictionary) -> Dictionary:
 		"mode": "live" if live else "headless", "playing": line.playing, "speed": line.multiplier,
 		"orders_by_status": counts, "open_purchase_orders": open_po, "auto_release": line.erp.auto_release,
 		"stage_overlap": Schedule.overlap_enabled(line.erp.catalog),
+		"process_time_buffer": float(line.erp.catalog.scheduling.get("process_time_buffer", 0.0)),
+		"supply_risk": line.erp.supply_risk.duplicate(),
 		"raw_warehouse": _raw_warehouse(),
 		"active_work_centers": running, "orders_with_delay_or_warning": delayed,
 		"demands": _demand_summary(), "finished_boxes": _finished_boxes()}
@@ -336,8 +352,10 @@ func _cmd_stock(args: Dictionary) -> Dictionary:
 		if po.status != "Received":
 			if not incoming.has(po.code):
 				incoming[po.code] = []
-			incoming[po.code].append({"po": po.id, "qty": _t(po.qty - po.received), "due": _t(po.due),
-				"at_dock": _t(po.get("at_dock", 0.0))})
+			var row := {"po": po.id, "qty": _t(po.qty - po.received), "due": _t(po.due), "at_dock": _t(po.get("at_dock", 0.0))}
+			if po.has("late_notice"):
+				row.original_due = _t(po.original_due)
+			incoming[po.code].append(row)
 	var fg: Dictionary = line.erp_fg()
 	var rows := []
 	for code in book.catalog.materials:
@@ -575,6 +593,10 @@ func _set_overlap(enabled: bool) -> void:
 	line.erp.changed()
 
 
+func _cmd_set_supply_risk(args: Dictionary) -> Dictionary:
+	return _acted("set_supply_risk", args, line.erp.set_supply_risk(args), {"supply_risk": line.erp.supply_risk.duplicate()})
+
+
 func _cmd_set_auto_release(args: Dictionary) -> Dictionary:
 	line.erp.auto_release = bool(args.get("enabled", false))
 	return _acted("set_auto_release", args, "", {"auto_release": line.erp.auto_release})
@@ -635,6 +657,10 @@ func _detect_events() -> Array:
 			if po.status == "Received":
 				found.append({"time": _t(now), "kind": "po_received", "po": po.id, "code": po.code, "qty": _t(po.qty)})
 			_po_status[po.id] = po.status
+		if po.has("late_notice") and not _po_late.has(po.id):
+			_po_late[po.id] = true
+			found.append({"time": _t(now), "kind": "po_late", "po": po.id, "code": po.code,
+				"original_due": _t(po.original_due), "new_due": _t(po.due)})
 	for row in _demand_rows():
 		if row.met and not demand_met_at.has(row.id):
 			demand_met_at[row.id] = now
@@ -648,12 +674,15 @@ func _detect_events() -> Array:
 func _remember_statuses() -> void:
 	_order_status.clear()
 	_po_status.clear()
+	_po_late.clear()
 	if line == null or line.erp == null:
 		return
 	for order in line.erp.orders.values():
 		_order_status[order.id] = order.status
 	for po in line.erp.purchases.values():
 		_po_status[po.id] = po.status
+		if po.has("late_notice"):
+			_po_late[po.id] = true
 
 
 # --- Live time ---------------------------------------------------------------

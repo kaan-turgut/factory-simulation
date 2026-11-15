@@ -40,6 +40,7 @@ var _build_button: Button
 var build_panel: Control
 var _build_active := false
 var _laptop: Button
+var _bottom: Control
 
 
 func _ready() -> void:
@@ -142,14 +143,14 @@ func _build_overview() -> void:
 	badge.add_theme_stylebox_override("panel", Style.box(Color("#20423f"), Color("#3f7469"), 8, 8))
 	heading.add_child(badge)
 	badge.add_child(_label("02", 19, Style.ACCENT, true))
-	heading.add_child(_label("Chocolate Works", 28, Style.TEXT, true))
-	heading.add_child(_label("  /  WAFER FACTORY", 13, Style.DIM, true))
-	_instance_label = _label("", 13, Style.ACCENT, true)
+	heading.add_child(_floating(_label("Chocolate Works", 28, Style.TEXT, true)))
+	heading.add_child(_floating(_label("  /  WAFER FACTORY", 13, Style.MUTED, true)))
+	_instance_label = _floating(_label("", 13, Style.ACCENT, true))
 	heading.add_child(_instance_label)
 	_spacer(heading)
-	_crew_status = _label("", 13, Style.MUTED)
+	_crew_status = _floating(_label("", 13, Style.TEXT))
 	heading.add_child(_crew_status)
-	_mode = _label("", 13, Style.TEXT, true)
+	_mode = _floating(_label("", 13, Style.TEXT, true))
 	heading.add_child(_mode)
 
 	var cards := _row(8)
@@ -217,6 +218,7 @@ func _card(
 
 func _build_controls() -> void:
 	var bottom := VBoxContainer.new()
+	_bottom = bottom
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bottom.add_theme_constant_override("separation", 8)
 	_root.add_child(bottom)
@@ -227,12 +229,12 @@ func _build_controls() -> void:
 	bottom.offset_top = -18
 	bottom.offset_bottom = -18
 
-	_hint = _label("Select equipment or crew to inspect it. Press Play to start the simulation.", 15, Style.TEXT)
+	_hint = _floating(_label("Select equipment or crew to inspect it. Press Play to start the simulation.", 15, Style.TEXT))
 	var tips := _row(16)
 	bottom.add_child(tips)
 	tips.add_child(_hint)
 	_spacer(tips)
-	_cursor = _label("", 14, Color.WHITE, true)
+	_cursor = _floating(_label("", 14, Color.WHITE, true))
 	tips.add_child(_cursor)
 	var shell := PanelContainer.new()
 	shell.add_theme_stylebox_override("panel", Style.box(Style.SURFACE, Style.BORDER, 10, 9))
@@ -294,6 +296,7 @@ func _build_inspector() -> void:
 	inspector.offset_right = -22
 	inspector.offset_top = 181
 	inspector.offset_bottom = 181
+	inspector.bottom_limit = func() -> float: return _bottom.get_global_rect().position.y - 10.0
 	inspector.configure(_bold)
 	inspector.erp_requested.connect(func(page: int, filter: String) -> void: erp_requested.emit(page, filter))
 	inspector.placement_requested.connect(func() -> void: placement_requested.emit())
@@ -319,6 +322,13 @@ func _label(copy: String, size: int, color: Color, bold: bool = false) -> Label:
 	label.add_theme_color_override("font_color", color)
 	if bold:
 		label.add_theme_font_override("font", _bold)
+	return label
+
+
+## Labels drawn straight over the 3D view (sky, grass, concrete) get a dark outline so they stay legible.
+func _floating(label: Label) -> Label:
+	label.add_theme_color_override("font_outline_color", Color("#0b1720e6"))
+	label.add_theme_constant_override("outline_size", 6 if label.get_theme_font_size("font_size") >= 20 else 5)
 	return label
 
 

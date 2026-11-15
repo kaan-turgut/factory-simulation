@@ -67,6 +67,9 @@ func _ready() -> void:
 	line = Line.new(Layout.new(building_cells))
 	if erp_enabled:
 		line.enable_erp(explicit_planning)
+		if not _instance_id.is_empty() and opening_new:
+			# Each new instance gets its own supplier luck; unsaved runs and tests keep the fixed seed.
+			line.erp.supply_risk.seed = randi()
 		if not _instance_id.is_empty() and not opening_new:
 			var saved := Instances.load_line(_instance_id)
 			if saved.error.is_empty():

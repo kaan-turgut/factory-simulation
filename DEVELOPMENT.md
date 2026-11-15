@@ -32,6 +32,8 @@ The capacity comes from a full-rate day. Equal boxes per SKU within each family 
 
 ## Stage overlap
 
+Planned durations come from `Scheduling.duration`: stage handling, setup, and the rate standard's machine time multiplied by `Scheduling.process_factor` (1 + `process_time_buffer`). The buffer only affects planning; execution follows the equipment.
+
 `scheduling.json` carries `overlap` (`enabled`, `first_lot_kg`) and a `start_kg` on each stage that can start on part of a manufactured input. `Scheduling.overlaps(catalog, stage, input)` is true when overlap is on, the stage has a start quantity and the input is made in house. Purchased inputs and extrusion, which shares its crew with batter prep, keep the full-availability rule.
 
 `ERP.shortages(order)` is the release rule. An overlapping input needs `start_quantity` in stock (`component_available`) and an outlook of at least the full need, where `outlook = accessible stock - all reservations + pending_output`, and `pending_output` is the unreceived target of released and running orders of that material. Release then reserves the full quantity, so reservations may exceed stock until the upstream stage delivers, and records `order.incoming`. Stage execution already read live stock, so a released stage simply waits for input carts. `transition` refuses to cancel a released upstream order while reservations exceed stock plus other pending output.

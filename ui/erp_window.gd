@@ -494,7 +494,7 @@ func _dashboard() -> void:
 		pending_po += int(po.status != "Received")
 	for pair in [
 		["Active orders", " / ".join(active) if not active.is_empty() else "—"],
-		["Today's production", _qty(b.today_kg()) + " kg received"],
+		["Finished goods today", _qty(b.today_kg()) + " kg palletized"],
 		["Open orders / purchases", "%d orders / %d purchase orders" % [open_orders, pending_po]],
 		["Material shortages", ", ".join(PackedStringArray(shortages.keys())) if not shortages.is_empty() else "—"],
 		["Raw material warehouse", _raw_summary()],
@@ -950,11 +950,14 @@ func _procurement() -> void:
 			status = "At dock · %s" % _qty(waiting)
 		var detail := "%s · %s · %s per %s · %d pallet%s" % [po.id, b.catalog.suppliers[po.supplier].name, _qty(po.price),
 			b.catalog.materials[po.code].unit, b.catalog.positions(po.code, po.qty), "" if b.catalog.positions(po.code, po.qty) == 1 else "s"]
+		if po.has("late_notice"):
+			status = "Received late" if po.status == "Received" else "Late · " + status
+			detail += "\nSupplier announced at %s: delivery moves from %s to %s" % [Book.date(po.late_notice), Book.date(po.original_due), Book.date(po.due)]
 		if float(po.get("dock_seconds", 0.0)) > 0.0:
 			detail += "\nWaited %s sim min at the dock for warehouse space" % _qty(po.dock_seconds / 60.0)
 		var row := _row(root, [po.id, po.supplier, po.code, _qty(po.qty), _qty(po.received), Book.date(po.due), status],
 			{"key": po.id, "detail": detail})
-		if row != null and waiting > Book.EPS:
+		if row != null and (waiting > Book.EPS or (po.has("late_notice") and po.status != "Received")):
 			row.set_custom_color(6, Color("#a14532"))
 
 

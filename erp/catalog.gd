@@ -277,6 +277,9 @@ func _validate_scheduling() -> String:
 					or not Master.number(window[1], float(window[0]) + 1, 86400):
 				return "scheduling.json: calendar intervals must be ordered, disjoint and within a day."
 			previous = window[1]
+	var buffer: Variant = scheduling.get("process_time_buffer", 0.0)
+	if not Master.number(buffer) or float(buffer) < 0.0 or float(buffer) > 2.0:
+		return "scheduling.json: process_time_buffer must be a number from 0 to 2."
 	for stage in scheduling.stages:
 		if not PARAMETERS.has(stage):
 			return "scheduling.json: unknown stage " + str(stage)

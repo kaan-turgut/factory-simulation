@@ -23,7 +23,7 @@ const ERP_FIELDS := ["balances", "orders", "purchases", "demands", "reservations
 	"history", "day_output", "pending_events", "now", "sequence", "active_id", "last_product", "feeder_id", "pack_id",
 	"coat_setup_seconds", "pack_setup_seconds", "coat_remaining", "pack_remaining", "shipment", "manual_shipments",
 	"_next_sample", "_next_flush", "utilization", "delay_seconds", "explicit_planning", "planning_conversions", "auto_release",
-	"planned_orders", "planned_sequence"]
+	"planned_orders", "planned_sequence", "supply_risk"]
 
 
 static func save(line: Line, path: String = PATH) -> String:
@@ -231,6 +231,9 @@ static func restore(data: Dictionary) -> Dictionary:
 	elif not old:
 		_add_new_master_data(line.erp, expansion)
 	line.erp.catalog.backfill_storage(expansion.materials, expansion.storage_capacity)
+	if not line.erp.catalog.scheduling.has("process_time_buffer"):
+		# Saves from before the planning buffer plan with it from now on; their existing orders keep their dates.
+		line.erp.catalog.scheduling.process_time_buffer = float(expansion.scheduling.get("process_time_buffer", 0.0))
 	if data.version < 7 and line.settings[&"floor_count"] == 2 and line.floor_crew.size() == 2:
 		line._add_floor_crew(default_floor_count)
 		line.settings[&"floor_count"] = float(line.floor_crew.size())

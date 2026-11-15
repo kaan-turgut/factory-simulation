@@ -105,8 +105,9 @@ func _setup_and_batches() -> void:
 	var vanilla := book.create_order("CREAM-VAN", 10, nut.finish, 1)
 	var plain: Dictionary = book.orders[vanilla.id]
 	var handling: float = book.catalog.scheduling.stages.cream.handling_seconds
-	_check(nut.estimate == handling + 2 * (255 + 4 + 4), "80 kg hazelnut cream books two batches with cycle and handling")
-	_check(plain.route.operations[0].setup_seconds == 900 and plain.estimate == handling + 240 + 8 + 900,
+	var buffer: float = book.catalog.Scheduling.process_factor(book.catalog)
+	_check(nut.estimate == ceilf(handling + 2 * (255 + 4 + 4) * buffer), "80 kg hazelnut cream books two buffered batches with cycle and handling")
+	_check(plain.route.operations[0].setup_seconds == 900 and plain.estimate == ceilf(handling + (240 + 8) * buffer + 900),
 		"Planned hazelnut-to-vanilla transition reserves extra cleaning")
 	var block := book.create_order("BLOCK-HAZ", 10, 0, 1)
 	book._post("BAKED-01", 7, "", "SFG-WH", "Opening", "", "Test stock")

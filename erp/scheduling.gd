@@ -133,8 +133,15 @@ static func duration(catalog, recipe_data: Dictionary, operation: Dictionary) ->
 	if standard.model == "batch":
 		var batches: int = catalog.Standards.batch_count(standard, recipe_data.target)
 		handling += batches * float(stage.get("batch_handling_seconds", 0.0))
-	return ceilf(handling + catalog.Standards.processing_seconds(standard, recipe_data.spec, recipe_data.target)
+	return ceilf(handling + catalog.Standards.processing_seconds(standard, recipe_data.spec, recipe_data.target) * process_factor(catalog)
 		+ float(operation.get("setup_seconds", standard.setup_seconds)))
+
+
+## Planned machine time = standard rate time x (1 + process_time_buffer). The buffer keeps ERP plans
+## conservative: execution adds cart handling, feeding and starvation that the rate standards leave out.
+## It applies to planning only (MRP lead times, planned intervals, first-lot timing), never to execution.
+static func process_factor(catalog) -> float:
+	return 1.0 + maxf(0.0, float(catalog.scheduling.get("process_time_buffer", 0.0)))
 
 
 static func setup_for(book, code: String, op: Dictionary, start: float, ignore: String = "") -> float:

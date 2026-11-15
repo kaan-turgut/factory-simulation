@@ -236,8 +236,19 @@ func _resources() -> void:
 	var c := _order(line, "BAKED-01", 0.5, start, "BAKED-01/WC-OVN-01")
 	_check(a.start == b.start and c.start == a.finish, "Parallel ovens can overlap while one oven is scheduled finitely")
 	var bake_work: Dictionary = book.catalog.scheduling.stages.bake
-	_check(a.estimate == bake_work.handling_seconds + 2 * (a.standard.cycle_seconds + a.standard.loading_seconds
-		+ a.standard.unloading_seconds + bake_work.batch_handling_seconds), "Oven duration includes two cycles and both batches' handling")
+	var buffer: float = book.catalog.Scheduling.process_factor(book.catalog)
+	_check(a.estimate == ceilf(bake_work.handling_seconds + 2 * bake_work.batch_handling_seconds + 2 * (a.standard.cycle_seconds
+		+ a.standard.loading_seconds + a.standard.unloading_seconds) * buffer), "Oven duration includes two buffered cycles and both batches' handling")
+	_check(is_equal_approx(buffer, 1.3), "Master data plans machine time with a 30% buffer")
+	var Plan = book.catalog.Scheduling
+	var buffered: float = Plan.assignment(book, "COATED-1001", 80.0, start, "").duration
+	book.catalog.scheduling.process_time_buffer = 0.0
+	var bare: float = Plan.assignment(book, "COATED-1001", 80.0, start, "").duration
+	book.catalog.scheduling.process_time_buffer = buffer - 1.0
+	var coat_work: Dictionary = book.catalog.scheduling.stages.coat
+	var machine := bare - float(coat_work.handling_seconds) - float(coat_work.get("handling_seconds_per_kg", 0.0)) * 80.0
+	_check(bare < buffered and absf(buffered - bare - machine * (buffer - 1.0)) <= 1.0,
+		"The buffer stretches only machine time, not handling or setup (bare %.0f s, buffered %.0f s)" % [bare, buffered])
 	_check("conflict" in book.reschedule(c.id, a.start), "Reject drag into occupied interval")
 	_check(not book.reschedule(c.id, a.start, "BAKED-01/WC-COT-01").is_empty(), "Reject incompatible machine")
 	_check(not book.create_order("COATED-1005", 2.0, start, 5, "COATED-1005/WC-COT-02").error.is_empty(), "Reject a coater incompatible with strawberry")

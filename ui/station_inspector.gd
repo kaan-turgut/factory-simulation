@@ -68,6 +68,10 @@ var _shipping: HBoxContainer
 var _ship_one: Button
 var _ship_all: Button
 var _feedback: Label
+var _scroll: ScrollContainer
+var _stack: VBoxContainer
+## Returns the lowest canvas y the panel may reach (the top of the bottom bar). Tall readouts scroll.
+var bottom_limit: Callable
 
 
 func configure(bold: Font) -> void:
@@ -76,9 +80,16 @@ func configure(bold: Font) -> void:
 	shell.shadow_color = Color("#08141c99")
 	shell.shadow_size = 8
 	add_theme_stylebox_override("panel", shell)
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
 	var stack := VBoxContainer.new()
+	_stack = stack
 	stack.add_theme_constant_override("separation", 8)
-	add_child(stack)
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(stack)
+	stack.minimum_size_changed.connect(_fit)
+	get_viewport().size_changed.connect(_fit)
 
 	var top := HBoxContainer.new()
 	stack.add_child(top)
@@ -116,6 +127,7 @@ func configure(bold: Font) -> void:
 	_feedback = _label("", 13, Style.ACCENT)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(_feedback)
+	_feedback.hide()
 	hide()
 
 
@@ -130,6 +142,7 @@ func select(id: StringName, line: Line) -> void:
 	_shipping.visible = id == &"Warehouse"
 	_erp_link.visible = line.erp != null and id in [&"Warehouse", &"RawWarehouse", &"SFGWarehouse", &"PackagingWIP"]
 	_feedback.text = ""
+	_feedback.hide()
 	for row in _settings.get_children():
 		_settings.remove_child(row)
 		row.queue_free()
@@ -142,6 +155,20 @@ func select(id: StringName, line: Line) -> void:
 			continue
 		_add_setting(key, line.settings[key])
 	refresh(line)
+
+
+## Grow with the content, but stop above the bottom bar and scroll the rest.
+func _fit() -> void:
+	if _scroll == null or not is_inside_tree():
+		return
+	var content := _stack.get_combined_minimum_size().y
+	var room := content
+	if bottom_limit.is_valid():
+		var frame := get_theme_stylebox("panel").get_minimum_size().y
+		room = minf(content, float(bottom_limit.call()) - get_global_rect().position.y - frame)
+	room = maxf(room, minf(content, 160.0))
+	if not is_equal_approx(_scroll.custom_minimum_size.y, room):
+		_scroll.custom_minimum_size.y = room
 
 
 func set_layout_info(copy: String, description: String, movable: bool, available: bool, placing: bool) -> void:
@@ -157,6 +184,7 @@ func set_layout_info(copy: String, description: String, movable: bool, available
 
 func feedback(message: String) -> void:
 	_feedback.text = message
+	_feedback.visible = not message.is_empty()
 
 
 func sync_setting(key: StringName, value: float) -> void:
@@ -346,6 +374,8 @@ func _add_setting(key: StringName, value: float, custom: Array = []) -> void:
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.focus_mode = Control.FOCUS_NONE
+	# The wheel scrolls the panel; it must never nudge a setting the pointer happens to pass over.
+	slider.scrollable = false
 	fields.add_child(slider)
 	var spin := SpinBox.new()
 	spin.name = key

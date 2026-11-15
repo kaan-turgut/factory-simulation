@@ -33,6 +33,7 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 - `erp/stage_mrp.gd` holds explicit-stage MRP: lot sizing (EX/FX/PB, min/max/rounding), safety time, exception messages and the coverage summary. Planned orders persist in `book.planned_orders` (`PLO-…`, `planned_sequence`); unfirmed ones are regenerated each run and keep their number by planning key, firmed ones are fixed supply. `erp/mrp.gd` adds `find`, `convert_all`, `firm` and `change`. The legacy combined-route path in `mrp.gd` is unchanged.
 - Material settings: optional `planning` object in `materials.json`, read through `catalog.planning(code)`, validated by `catalog.set_planning`. Finished goods must stay lot-for-lot (demand linking assumes one order per demand).
 - Run `tests/mrp_planning_test.gd` after touching MRP, planned orders or material planning settings.
+- Planned durations = handling + setup + rate-standard machine time x (1 + `process_time_buffer`) from `scheduling.json` (0.3; `Scheduling.process_factor`). Planning only, never execution. Old saves get the key on load (`save_game`). Scenario key `process_time_buffer`. Measured on three 16-box demands: 0 % → 7–16 min late, 20 % → 4–10 min late, 40 % → about on time, 60 % → all early.
 - Known gap (phase 2): MRP plans with unlimited capacity while conversion schedules finitely, so converted orders can land later than MRP assumed. Exceptions report it; nothing levels it yet.
 
 ## Chewing gum (Nov 2026)
@@ -75,9 +76,14 @@ Read `AGENTS.md` first: it holds the project rules (deterministic fixed-step sim
 ## Material handler desk (Nov 2026)
 - In plans with a high-bay raw warehouse the handler waits at a computer desk against the warehouse's west wall (`Layout.has_handler_desk/handler_desk/handler_jack_spot`), not at the dock. He walks to the parked pallet jack, works, parks it again and walks back (`ERP._handler_home`); `supply_route` joins the desk pocket to the dock. A swivel chair stands on his desk spot (`site_models._handler_desk`); while he is idle there `logistics_view` plays a `Sit` clip that `_add_sit_clip` builds at load from the skeleton's rest pose (the worker GLBs have no seated clip), drops the body onto the seat and turns him to the desk. The jack is a top-level node in `logistics_view` that follows him only while he works with it. Tests that expect an immediate pickup must give him time to walk from the desk.
 
+## Late supplier deliveries (Nov 2026)
+- `ERP.supply_risk` (saved, default on): each PO draws at creation (`_draw_delivery_risk`) late with p = 0.25, lateness ~ N(1, 1) floored at 0, late date = created + (1 + lateness) x lead, notice = created + U(0, 0.8) x lead. The RNG is seeded per PO from `hash([seed, po.id])`, so draws do not depend on call order and what-if branches share them.
+- The outcome stays hidden in `po.risk`; everything plans with `po.due` until `_reveal_delivery_risk` (in `clock`) moves `due` and sets `original_due` and `late_notice`. Never read `po.risk` in planning, UI or the agent before it is revealed.
+- New instances get `seed = randi()` (`scenes/factory.gd`); unsaved runs and tests keep seed 1. Tests that need on-time receipts set `supply_risk.enabled = false`. Agent: `set_supply_risk`, scenario key `supply_risk`, event `po_late`. Run `tests/supply_risk_test.gd` after touching purchasing or receipts.
+
 ## Things to know
 - `simulation/production_line.gd` (~1,800 lines) mixes three execution modes (legacy sandbox, combined routes, explicit stages) kept for save compatibility and regressions. Change it carefully.
-- The simulation is fully deterministic: no breakdowns, random cycle times or supplier variability yet. The owner plans to use it for experiments, so any randomness should be seeded and optional.
+- The simulation is deterministic apart from seeded, optional late supplier deliveries (below); no breakdowns or random cycle times yet. The owner plans to use it for experiments, so any randomness must be seeded and optional.
 - Demo timings are much faster than real life (short bakes, 60–90 s supplier lead times).
 - About 22 existing GDScript warnings (variable shadowing, unused parameters) come from ERP/UI scripts and predate the visual work.
 - Commit a checkpoint before large changes.

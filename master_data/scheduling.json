@@ -6,6 +6,7 @@
     ]
   ],
   "work_center_calendars": {},
+  "process_time_buffer": 0.3,
   "overlap": {
     "enabled": true,
     "first_lot_kg": 75

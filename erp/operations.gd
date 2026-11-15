@@ -55,6 +55,11 @@ var _auto_release_checked := -1
 var utilization := {"Extruder": 0.0, "Coater": 0.0, "Coater02": 0.0, "Packer": 0.0}
 var delay_seconds := 0.0
 var warning := ""
+## Late supplier deliveries. Each PO draws, when it is created, whether it will be late, by how much
+## and when the supplier announces it. Draws come from a generator seeded by `seed` and the PO number,
+## so a run repeats exactly and what-if branches see the same supplier behaviour for the same PO.
+var supply_risk := {"enabled": true, "probability": 0.25, "lateness_mean": 1.0, "lateness_sd": 1.0,
+	"reveal_max": 0.8, "seed": 1}
 
 
 func _init() -> void:
@@ -482,11 +487,64 @@ func purchase(supplier_id: String, code: String, qty: float) -> Dictionary:
 			or supplier.is_empty() or code not in supplier.codes or qty + EPS < supplier.minimum:
 		return {"error": "Check supplier, material, base unit and minimum order quantity."}
 	var id := _id("PO")
+	var lead := maxf(supplier.lead, catalog.materials[code].lead)
 	purchases[id] = {"id": id, "supplier": supplier_id, "code": code, "qty": qty, "received": 0.0,
-		"due": now + maxf(supplier.lead, catalog.materials[code].lead), "status": "Open",
-		"price": supplier.price}
+		"due": now + lead, "status": "Open", "price": supplier.price, "created": now, "lead": lead}
+	_draw_delivery_risk(purchases[id])
 	changed()
 	return {"error": "", "id": id}
+
+
+## Decide at PO creation whether the delivery will be late, the new arrival and when that becomes known.
+## Arrival = created + (1 + lateness) x lead, lateness ~ Normal(mean, sd) floored at 0 so a late
+## delivery never comes early. Notice = created + U(0, reveal_max) x lead. The outcome stays hidden in
+## `po.risk` (planning, MRP and the agent see only `due`) until the notice time.
+func _draw_delivery_risk(po: Dictionary) -> void:
+	if not bool(supply_risk.get("enabled", false)):
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([int(supply_risk.get("seed", 1)), String(po.id)])
+	# Always draw all three numbers so each draw keeps its meaning whatever the probability is.
+	var late := rng.randf() < float(supply_risk.get("probability", 0.25))
+	var lateness := maxf(0.0, rng.randfn(float(supply_risk.get("lateness_mean", 1.0)), float(supply_risk.get("lateness_sd", 1.0))))
+	var notice := rng.randf_range(0.0, float(supply_risk.get("reveal_max", 0.8)))
+	po.risk = {"late": late, "lateness": lateness, "late_due": float(po.created) + (1.0 + lateness) * float(po.lead),
+		"reveal_at": float(po.created) + notice * float(po.lead), "revealed": false}
+
+
+## Change the late-delivery settings from a partial dictionary. Applies to purchase orders placed afterwards.
+func set_supply_risk(changes: Dictionary) -> String:
+	var next := supply_risk.duplicate()
+	for key in changes:
+		if not next.has(key):
+			return "Unknown supply risk setting %s." % key
+		next[key] = changes[key]
+	if not next.enabled is bool:
+		return "enabled must be true or false."
+	for key in ["probability", "lateness_mean", "lateness_sd", "reveal_max", "seed"]:
+		if not (next[key] is float or next[key] is int) or not is_finite(float(next[key])):
+			return "%s must be a number." % key
+	if float(next.probability) < 0.0 or float(next.probability) > 1.0 or float(next.reveal_max) < 0.0 \
+			or float(next.reveal_max) > 1.0 or float(next.lateness_sd) < 0.0:
+		return "probability and reveal_max must be within 0-1 and lateness_sd nonnegative."
+	next.seed = int(next.seed)
+	supply_risk = next
+	changed()
+	return ""
+
+
+## Announce a late delivery at its notice time: the PO's expected arrival moves to the late date.
+func _reveal_delivery_risk(po: Dictionary) -> void:
+	var risk: Variant = po.get("risk")
+	if not risk is Dictionary or risk.revealed or now + EPS < float(risk.reveal_at):
+		return
+	risk.revealed = true
+	if not risk.late or float(risk.late_due) <= float(po.due) + EPS:
+		return
+	po.original_due = po.due
+	po.due = risk.late_due
+	po.late_notice = now
+	changed()
 
 
 func receive(id: String, qty: float) -> String:
@@ -553,6 +611,8 @@ func clock(seconds: float) -> void:
 	# Check scheduled receipts and optional release once per simulated second.
 	if fposmod(seconds, 1.0) < EPS:
 		for po in purchases.values():
+			if po.status != "Received" and po.has("risk"):
+				_reveal_delivery_risk(po)
 			if po.status != "Received" and po.due <= now:
 				receive(po.id, po.qty - po.received)
 				if po.status != "Received":
